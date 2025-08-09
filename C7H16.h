@@ -8,7 +8,6 @@
 
 ///////
 
-#include <X11/extensions/Xrender.h>
 #define C7H16
 
 #include "../H/H.h"
