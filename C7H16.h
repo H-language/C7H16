@@ -8,6 +8,7 @@
 
 ///////
 
+#include <X11/extensions/Xrender.h>
 #define C7H16
 
 #include "../H/H.h"
@@ -55,10 +56,15 @@ object( window )
 	//
 	#if OS_LINUX
 		GC gc;
+		Picture pic;
+		Picture pic_target;
+		Pixmap pixmap;
+		XTransform transform;
 	#endif
 	//
 	canvas buffer;
 	n2x2 size_target;
+	n2x2 size_max;
 	r8 scale;
 	//
 	flag visible;
@@ -72,22 +78,71 @@ object( window )
 global perm window alive_windows[ 32 ];
 global perm n1 alive_windows_count = 0;
 
+object_fn( window, set_scale, const r8 scale )
+{
+	this->scale = scale;
+
+	#if OS_LINUX
+		this->transform.matrix[ 0 ][ 0 ] = XDoubleToFixed( 1.0 / this->scale );
+		this->transform.matrix[ 1 ][ 1 ] = XDoubleToFixed( 1.0 / this->scale );
+		this->transform.matrix[ 2 ][ 2 ] = XDoubleToFixed( 1.0 );
+	#endif
+}
+
+object_fn( window, update_scale )
+{
+	if( this->size_max.w > 0 or this->size_max.h > 0 )
+	{
+		window_set_scale( this, r8_max3( 1.0, r8( this->size_target.w ) / r8( this->size_max.w ), r8( this->size_target.h ) / r8( this->size_max.h ) ) );
+	}
+}
+
+object_fn( window, set_size_max, const n2 width, const n2 height )
+{
+	this->size_max.w = width;
+	this->size_max.h = height;
+
+	window_update_scale( this );
+}
+
 object_fn( window, resize, const n2 width, const n2 height )
 {
 	out_if( this is nothing );
 	if_any( width <= 1, height <= 1 ) out;
-	if_all( this->buffer.size.w is width, this->buffer.size.h is height ) out;
+
+	this->size_target.w = width;
+	this->size_target.h = height;
+
+	window_update_scale( this );
+
+	temp i4 scale_trunc = i4( this->scale );
+	if( scale_trunc < 1 )
+	{
+		scale_trunc = 1;
+	}
+
+	temp n2 w_scaled = ( this->size_target.w + scale_trunc - 1 ) / scale_trunc;
+	temp n2 h_scaled = ( this->size_target.h + scale_trunc - 1 ) / scale_trunc;
+
+	if_all( this->buffer.size.w is w_scaled, this->buffer.size.h is h_scaled ) out;
 	//
-	canvas_resize( ref_of( this->buffer ), width, height );
+	canvas_resize( ref_of( this->buffer ), w_scaled, h_scaled );
 	//
 	#if OS_LINUX
 		this->image->data = to( byte ref, this->buffer.pixels );
-		this->image->width = width;
-		this->image->height = height;
-		this->image->bytes_per_line = width * 4;
+		this->image->width = w_scaled;
+		this->image->height = h_scaled;
+		this->image->bytes_per_line = w_scaled * 4;
+
+		XFreePixmap( this->display, this->pixmap );
+		this->pixmap = XCreatePixmap( this->display, this->handle, w_scaled, h_scaled, DefaultDepth( this->display, DefaultScreen( this->display ) ) );
+
+		XRenderFreePicture( this->display, this->pic );
+		this->pic = XRenderCreatePicture( this->display, this->pixmap, XRenderFindVisualFormat( this->display, DefaultVisual( this->display, DefaultScreen( this->display ) ) ), 0, 0 );
+		XRenderSetPictureTransform( this->display, this->pic, ref_of( this->transform ) );
 	#elif OS_WINDOWS
-		this->image.bmiHeader.biWidth = width;
-		this->image.bmiHeader.biHeight = -height;
+		this->image.bmiHeader.biWidth = w_scaled;
+		this->image.bmiHeader.biHeight = -h_scaled;
 	#endif
 }
 
@@ -99,12 +154,16 @@ object_fn( window, render )
 	n4 size = AREA( this->buffer.size );
 	temp pixel ref p = this->buffer.pixels;
 
-	while( size-- ) val_of( p++ ) = red; //make_pixel( to( byte, rand() ), to( byte, rand() ), to( byte, rand() ), 0xff );
+	while( size-- ) val_of( p++ ) = make_pixel( to( byte, rand() ), to( byte, rand() ), to( byte, rand() ), 0xff ); //red;
+
+	temp i4 scale = to( i4, this->scale );
+	if( scale < 1 ) scale = 1;
 
 	#if OS_LINUX
-		XPutImage( this->display, this->handle, this->gc, this->image, 0, 0, 0, 0, this->buffer.size.w, this->buffer.size.h );
+		XPutImage( this->display, this->pixmap, this->gc, this->image, 0, 0, 0, 0, this->buffer.size.w, this->buffer.size.h );
+		XRenderComposite( this->display, PictOpSrc, this->pic, None, this->pic_target, 0, 0, 0, 0, 0, 0, this->buffer.size.w * scale, this->buffer.size.h * scale );
 	#elif OS_WINDOWS
-		StretchDIBits( this->display, 0, 0, this->buffer.size.w, this->buffer.size.h, 0, 0, this->buffer.size.w, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
+		StretchDIBits( this->display, 0, 0, this->buffer.size.w * scale, this->buffer.size.h * scale, 0, 0, this->buffer.size.w, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
 	#endif
 }
 
@@ -131,16 +190,16 @@ group( window_event_type, n2 )
 		{
 			#if OS_LINUX
 				skip_if( w->can_resize is no );
-				w->size_target.w = e->xconfigure.width;
-				w->size_target.h = e->xconfigure.height;
+				temp n2 width = e->xconfigure.width;
+				temp n2 height = e->xconfigure.height;
 			#elif OS_WINDOWS
-				w->size_target.w = LOWORD( lp );
-				w->size_target.h = HIWORD( lp );
+				temp n2 width = LOWORD( lp );
+				temp n2 height = HIWORD( lp );
 			#endif
 
 			w->can_resize = no;
 
-			window_resize( w, w->size_target.w, w->size_target.h );
+			window_resize( w, width, height );
 			window_render( w );
 
 			skip;
@@ -188,6 +247,7 @@ embed window new_window( const n2 width, const n2 height )
 {
 	temp const window out_window = new_object( window );
 
+	out_window->scale = 1.0;
 	out_window->size_target.w = width;
 	out_window->size_target.h = height;
 	out_window->buffer = make_canvas( width, height );
@@ -210,6 +270,13 @@ embed window new_window( const n2 width, const n2 height )
 
 		out_window->image = XCreateImage( out_window->display, DefaultVisual( out_window->display, screen ), DefaultDepth( out_window->display, screen ), ZPixmap, 0, to( byte ref, out_window->buffer.pixels ), width, height, 32, 0 );
 		out_window->gc = XCreateGC( out_window->display, out_window->handle, 0, 0 );
+
+		out_window->pixmap = XCreatePixmap( out_window->display, out_window->handle, width, height, DefaultDepth( out_window->display, screen ) );
+		XRenderPictFormat *fmt = XRenderFindVisualFormat( out_window->display, DefaultVisual( out_window->display, screen ) );
+		out_window->pic = XRenderCreatePicture( out_window->display, out_window->pixmap, fmt, 0, 0 );
+		out_window->pic_target = XRenderCreatePicture( out_window->display, out_window->handle, fmt, 0, 0 );
+
+		XRenderSetPictureFilter( out_window->display, out_window->pic, "nearest", 0, 0 );
 	#elif OS_WINDOWS
 		WNDCLASS wc = { 0 };
 		wc.lpfnWndProc = to( type_of( wc.lpfnWndProc ), window_process_event );
