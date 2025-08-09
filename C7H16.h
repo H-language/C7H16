@@ -269,12 +269,12 @@ object_fn( window, hide )
 
 object_fn( window, process )
 {
-	if(this->tick is 1)
+	++this->tick;
+	if( this->tick is 1 )
 	{
-		window_show(this);
+		window_show( this );
 		out;
 	}
-	++this->tick;
 
 	//
 
