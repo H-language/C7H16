@@ -99,10 +99,13 @@ object_fn( window, update_scale )
 
 object_fn( window, set_size_max, const n2 width, const n2 height )
 {
-	this->size_max.w = width;
-	this->size_max.h = height;
+	if( this->size_max.w isnt width or this->size_max.h isnt height )
+	{
+		this->size_max.w = width;
+		this->size_max.h = height;
 
-	window_update_scale( this );
+		window_update_scale( this );
+	}
 }
 
 object_fn( window, resize, const n2 width, const n2 height )
@@ -110,12 +113,15 @@ object_fn( window, resize, const n2 width, const n2 height )
 	out_if( this is nothing );
 	if_any( width <= 1, height <= 1 ) out;
 
-	this->size_target.w = width;
-	this->size_target.h = height;
+	if( this->size_target.w isnt width or this->size_target.h isnt height )
+	{
+		this->size_target.w = width;
+		this->size_target.h = height;
 
-	window_update_scale( this );
+		window_update_scale( this );
+	}
 
-	temp i4 scale_trunc = i4( this->scale );
+	temp n2 scale_trunc = n2( this->scale );
 	if( scale_trunc < 1 )
 	{
 		scale_trunc = 1;
@@ -154,16 +160,29 @@ object_fn( window, render )
 	n4 size = AREA( this->buffer.size );
 	temp pixel ref p = this->buffer.pixels;
 
-	while( size-- ) val_of( p++ ) = make_pixel( to( byte, rand() ), to( byte, rand() ), to( byte, rand() ), 0xff ); //red;
-
-	temp i4 scale = to( i4, this->scale );
-	if( scale < 1 ) scale = 1;
+	while( size-- ) val_of( p++ ) = make_pixel( to( byte, rand() ), to( byte, rand() ), to( byte, rand() ), 0xff );
 
 	#if OS_LINUX
-		XPutImage( this->display, this->pixmap, this->gc, this->image, 0, 0, 0, 0, this->buffer.size.w, this->buffer.size.h );
-		XRenderComposite( this->display, PictOpSrc, this->pic, None, this->pic_target, 0, 0, 0, 0, 0, 0, this->buffer.size.w * scale, this->buffer.size.h * scale );
+		if( this->scale > 1.0 )
+		{
+			XPutImage( this->display, this->pixmap, this->gc, this->image, 0, 0, 0, 0, this->buffer.size.w, this->buffer.size.h );
+			XRenderComposite( this->display, PictOpSrc, this->pic, None, this->pic_target, 0, 0, 0, 0, 0, 0, this->size_target.w, this->size_target.h );
+		}
+		else
+		{
+			XPutImage( this->display, this->handle, this->gc, this->image, 0, 0, 0, 0, this->buffer.size.w, this->buffer.size.h );
+		}
+		XFlush( this->display );
 	#elif OS_WINDOWS
-		StretchDIBits( this->display, 0, 0, this->buffer.size.w * scale, this->buffer.size.h * scale, 0, 0, this->buffer.size.w, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
+		if( this->scale > 1.0 )
+		{
+			SetStretchBltMode( this->display, COLORONCOLOR );
+			StretchDIBits( this->display, 0, 0, this->size_target.w, this->size_target.h, 0, 0, this->buffer.size.w, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
+		}
+		else
+		{
+			SetDIBitsToDevice( this->display, 0, 0, this->buffer.size.w, this->buffer.size.h, 0, 0, this->buffer.size.w, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS );
+		}
 	#endif
 }
 
