@@ -63,7 +63,7 @@ object( window )
 	//
 	canvas buffer;
 	n2x2 size_target;
-	n2x2 size_max;
+	n2x2 buffer_max;
 	r8 scale;
 	//
 	flag visible;
@@ -90,18 +90,18 @@ object_fn( window, set_scale, const r8 scale )
 
 object_fn( window, update_scale )
 {
-	if( this->size_max.w > 0 or this->size_max.h > 0 )
+	if( this->buffer_max.w > 0 or this->buffer_max.h > 0 )
 	{
-		window_set_scale( this, r8_max3( 1.0, r8( this->size_target.w ) / r8( this->size_max.w ), r8( this->size_target.h ) / r8( this->size_max.h ) ) );
+		window_set_scale( this, r8_max3( 1.0, r8( this->size_target.w ) / r8( this->buffer_max.w ), r8( this->size_target.h ) / r8( this->buffer_max.h ) ) );
 	}
 }
 
-object_fn( window, set_size_max, const n2 width, const n2 height )
+object_fn( window, set_buffer_max, const n2 width, const n2 height )
 {
-	if( this->size_max.w isnt width or this->size_max.h isnt height )
+	if( this->buffer_max.w isnt width or this->buffer_max.h isnt height )
 	{
-		this->size_max.w = width;
-		this->size_max.h = height;
+		this->buffer_max.w = width;
+		this->buffer_max.h = height;
 
 		window_update_scale( this );
 	}
@@ -126,28 +126,28 @@ object_fn( window, resize, const n2 width, const n2 height )
 		scale_trunc = 1;
 	}
 
-	temp n2 w_scaled = ( this->size_target.w + scale_trunc - 1 ) / scale_trunc;
-	temp n2 h_scaled = ( this->size_target.h + scale_trunc - 1 ) / scale_trunc;
+	temp n2 buffer_w = ( this->size_target.w + scale_trunc - 1 ) / scale_trunc;
+	temp n2 buffer_h = ( this->size_target.h + scale_trunc - 1 ) / scale_trunc;
 
-	if_all( this->buffer.size.w is w_scaled, this->buffer.size.h is h_scaled ) out;
+	if_all( this->buffer.size.w is buffer_w, this->buffer.size.h is buffer_h ) out;
 	//
-	canvas_resize( ref_of( this->buffer ), w_scaled, h_scaled );
+	canvas_resize( ref_of( this->buffer ), buffer_w, buffer_h );
 	//
 	#if OS_LINUX
 		this->image->data = to( byte ref, this->buffer.pixels );
-		this->image->width = w_scaled;
-		this->image->height = h_scaled;
-		this->image->bytes_per_line = w_scaled * 4;
+		this->image->width = this->buffer.size.w;
+		this->image->height = this->buffer.size.h;
+		this->image->bytes_per_line = this->buffer.size.w * 4;
 
 		XFreePixmap( this->display, this->pixmap );
-		this->pixmap = XCreatePixmap( this->display, this->handle, w_scaled, h_scaled, DefaultDepth( this->display, DefaultScreen( this->display ) ) );
+		this->pixmap = XCreatePixmap( this->display, this->handle, this->buffer.size.w, this->buffer.size.h, DefaultDepth( this->display, DefaultScreen( this->display ) ) );
 
 		XRenderFreePicture( this->display, this->pic );
 		this->pic = XRenderCreatePicture( this->display, this->pixmap, XRenderFindVisualFormat( this->display, DefaultVisual( this->display, DefaultScreen( this->display ) ) ), 0, 0 );
 		XRenderSetPictureTransform( this->display, this->pic, ref_of( this->transform ) );
 	#elif OS_WINDOWS
-		this->image.bmiHeader.biWidth = w_scaled;
-		this->image.bmiHeader.biHeight = -h_scaled;
+		this->image.bmiHeader.biWidth = this->buffer.size.w;
+		this->image.bmiHeader.biHeight = -this->buffer.size.h;
 	#endif
 }
 
@@ -156,31 +156,37 @@ object_fn( window, render )
 	if_any( this->buffer.size.w <= 1, this->buffer.size.h <= 1 ) out;
 	//
 	temp const pixel red = make_pixel( 0x77, 0, 0x22, 0xff );
-	n4 size = AREA( this->buffer.size );
+	temp n4 size = AREA( this->buffer.size );
 	temp pixel ref p = this->buffer.pixels;
 
 	while( size-- ) val_of( p++ ) = make_pixel( to( byte, rand() ), to( byte, rand() ), to( byte, rand() ), 0xff );
+
+	temp const i4 scale_int = i4( this->scale );
+	temp const i4 scaled_width = this->buffer.size.w * scale_int;
+	temp const i4 scaled_height = this->buffer.size.h * scale_int;
+	temp const i4 x = ( this->size_target.w - scaled_width ) / 2;
+	temp const i4 y = ( this->size_target.h - scaled_height ) / 2;
 
 	#if OS_LINUX
 		if( this->scale > 1.0 )
 		{
 			XPutImage( this->display, this->pixmap, this->gc, this->image, 0, 0, 0, 0, this->buffer.size.w, this->buffer.size.h );
-			XRenderComposite( this->display, PictOpSrc, this->pic, None, this->pic_target, 0, 0, 0, 0, 0, 0, this->size_target.w, this->size_target.h );
+			XRenderComposite( this->display, PictOpSrc, this->pic, None, this->pic_target, 0, 0, 0, 0, x, y, scaled_width, scaled_height );
 		}
 		else
 		{
-			XPutImage( this->display, this->handle, this->gc, this->image, 0, 0, 0, 0, this->buffer.size.w, this->buffer.size.h );
+			XPutImage( this->display, this->handle, this->gc, this->image, 0, 0, x, y, this->buffer.size.w, this->buffer.size.h );
 		}
 		XFlush( this->display );
 	#elif OS_WINDOWS
 		if( this->scale > 1.0 )
 		{
 			SetStretchBltMode( this->display, COLORONCOLOR );
-			StretchDIBits( this->display, 0, 0, this->size_target.w, this->size_target.h, 0, 0, this->buffer.size.w, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
+			StretchDIBits( this->display, x, y, scaled_width, scaled_height, 0, 0, this->buffer.size.w, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
 		}
 		else
 		{
-			SetDIBitsToDevice( this->display, 0, 0, this->buffer.size.w, this->buffer.size.h, 0, 0, 0, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS );
+			SetDIBitsToDevice( this->display, x, y, this->buffer.size.w, this->buffer.size.h, 0, 0, 0, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS );
 		}
 	#endif
 }
@@ -248,7 +254,7 @@ group( window_event_type, n2 )
 				PostQuitMessage( 0 );
 			#endif
 
-			out 0;
+			out no;
 		}
 
 		other skip;
@@ -257,7 +263,7 @@ group( window_event_type, n2 )
 	#if OS_WINDOWS
 		out DefWindowProc( h, event, wp, lp );
 	#elif OS_LINUX
-		out 1;
+		out yes;
 	#endif
 }
 
