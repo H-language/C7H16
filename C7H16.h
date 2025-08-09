@@ -290,7 +290,7 @@ embed window new_window( const n2 width, const n2 height )
 		out_window->gc = XCreateGC( out_window->display, out_window->handle, 0, 0 );
 
 		out_window->pixmap = XCreatePixmap( out_window->display, out_window->handle, width, height, DefaultDepth( out_window->display, screen ) );
-		XRenderPictFormat *fmt = XRenderFindVisualFormat( out_window->display, DefaultVisual( out_window->display, screen ) );
+		XRenderPictFormat ref fmt = XRenderFindVisualFormat( out_window->display, DefaultVisual( out_window->display, screen ) );
 		out_window->pic = XRenderCreatePicture( out_window->display, out_window->pixmap, fmt, 0, 0 );
 		out_window->pic_target = XRenderCreatePicture( out_window->display, out_window->handle, fmt, 0, 0 );
 
@@ -303,7 +303,7 @@ embed window new_window( const n2 width, const n2 height )
 		RegisterClass( ref_of( wc ) );
 
 		RECT rect = { 0, 0, width, height };
-		AdjustWindowRect( &rect, WS_OVERLAPPEDWINDOW, FALSE );
+		AdjustWindowRect( ref_of( rect ), WS_OVERLAPPEDWINDOW, FALSE );
 
 		out_window->handle = CreateWindow( name, name, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top, nothing, nothing, GetModuleHandle( nothing ), nothing );
 
