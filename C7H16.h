@@ -180,7 +180,7 @@ object_fn( window, render )
 		}
 		else
 		{
-			SetDIBitsToDevice( this->display, 0, 0, this->buffer.size.w, this->buffer.size.h, 0, 0, this->buffer.size.w, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS );
+			SetDIBitsToDevice( this->display, 0, 0, this->buffer.size.w, this->buffer.size.h, 0, 0, 0, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS );
 		}
 	#endif
 }
