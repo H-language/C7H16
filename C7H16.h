@@ -64,7 +64,7 @@ object( window )
 	canvas buffer;
 	n2x2 size_target;
 	n2x2 buffer_max;
-	r8 scale;
+	n2 scale;
 	//
 	flag visible;
 	flag can_resize;
@@ -74,17 +74,20 @@ object( window )
 	n8 tick;
 };
 
+global perm window current_window = nothing;
+
 global perm window alive_windows[ 32 ];
 global perm n1 alive_windows_count = 0;
 
 object_fn( window, set_scale, const r8 scale )
 {
-	this->scale = scale;
+	out_if_nothing( this );
+
+	this->scale = n2_max( scale, 1 );
 
 	#if OS_LINUX
-		this->transform.matrix[ 0 ][ 0 ] = XDoubleToFixed( 1.0 / this->scale );
-		this->transform.matrix[ 1 ][ 1 ] = XDoubleToFixed( 1.0 / this->scale );
-		this->transform.matrix[ 2 ][ 2 ] = XDoubleToFixed( 1.0 );
+		this->transform.matrix[ 0 ][ 0 ] = XDoubleToFixed( 1.0 / r8( this->scale ) );
+		this->transform.matrix[ 1 ][ 1 ] = XDoubleToFixed( 1.0 / r8( this->scale ) );
 	#endif
 }
 
@@ -98,6 +101,8 @@ object_fn( window, update_scale )
 
 object_fn( window, set_buffer_max, const n2 width, const n2 height )
 {
+	out_if_nothing( this );
+
 	if( this->buffer_max.w isnt width or this->buffer_max.h isnt height )
 	{
 		this->buffer_max.w = width;
@@ -109,8 +114,7 @@ object_fn( window, set_buffer_max, const n2 width, const n2 height )
 
 object_fn( window, resize, const n2 width, const n2 height )
 {
-	out_if( this is nothing );
-	if_any( width <= 1, height <= 1 ) out;
+	out_if_any( this is nothing, width <= 1, height <= 1 );
 
 	if( this->size_target.w isnt width or this->size_target.h isnt height )
 	{
@@ -120,16 +124,10 @@ object_fn( window, resize, const n2 width, const n2 height )
 		window_update_scale( this );
 	}
 
-	temp n2 scale_trunc = n2( this->scale );
-	if( scale_trunc < 1 )
-	{
-		scale_trunc = 1;
-	}
+	temp n2 buffer_w = ( this->size_target.w + this->scale - 1 ) / this->scale;
+	temp n2 buffer_h = ( this->size_target.h + this->scale - 1 ) / this->scale;
 
-	temp n2 buffer_w = ( this->size_target.w + scale_trunc - 1 ) / scale_trunc;
-	temp n2 buffer_h = ( this->size_target.h + scale_trunc - 1 ) / scale_trunc;
-
-	if_all( this->buffer.size.w is buffer_w, this->buffer.size.h is buffer_h ) out;
+	out_if( this->buffer.size.w is buffer_w and this->buffer.size.h is buffer_h );
 	//
 	canvas_resize( ref_of( this->buffer ), buffer_w, buffer_h );
 	//
@@ -153,7 +151,7 @@ object_fn( window, resize, const n2 width, const n2 height )
 
 object_fn( window, render )
 {
-	if_any( this->buffer.size.w <= 1, this->buffer.size.h <= 1 ) out;
+	out_if_any( this is nothing, this->buffer.size.w <= 1, this->buffer.size.h <= 1 );
 	//
 	temp const pixel red = make_pixel( 0x77, 0, 0x22, 0xff );
 	temp n4 size = AREA( this->buffer.size );
@@ -161,14 +159,13 @@ object_fn( window, render )
 
 	while( size-- ) val_of( p++ ) = make_pixel( to( byte, rand() ), to( byte, rand() ), to( byte, rand() ), 0xff );
 
-	temp const i4 scale_int = i4( this->scale );
-	temp const i4 scaled_width = this->buffer.size.w * scale_int;
-	temp const i4 scaled_height = this->buffer.size.h * scale_int;
-	temp const i4 x = ( this->size_target.w - scaled_width ) / 2;
-	temp const i4 y = ( this->size_target.h - scaled_height ) / 2;
+	temp const n2 scaled_width = this->buffer.size.w * this->scale;
+	temp const n2 scaled_height = this->buffer.size.h * this->scale;
+	temp const i4 x = ( i4( this->size_target.w ) - i4( scaled_width ) ) / 2;
+	temp const i4 y = ( i4( this->size_target.h ) - i4( scaled_height ) ) / 2;
 
 	#if OS_LINUX
-		if( this->scale > 1.0 )
+		if( this->scale > 1 )
 		{
 			XPutImage( this->display, this->pixmap, this->gc, this->image, 0, 0, 0, 0, this->buffer.size.w, this->buffer.size.h );
 			XRenderComposite( this->display, PictOpSrc, this->pic, None, this->pic_target, 0, 0, 0, 0, x, y, scaled_width, scaled_height );
@@ -179,7 +176,7 @@ object_fn( window, render )
 		}
 		XFlush( this->display );
 	#elif OS_WINDOWS
-		if( this->scale > 1.0 )
+		if( this->scale > 1 )
 		{
 			SetStretchBltMode( this->display, COLORONCOLOR );
 			StretchDIBits( this->display, x, y, scaled_width, scaled_height, 0, 0, this->buffer.size.w, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
@@ -199,7 +196,7 @@ group( window_event_type, n2 )
 };
 
 #if OS_LINUX
-	embed flag window_process_event( const window w, const window_event_type event, const os_event ref e )
+	embed out_state window_process_event( const window w, const window_event_type event, const os_event ref e )
 #elif OS_WINDOWS
 	embed LRESULT CALLBACK window_process_event( const os_handle h, const window_event_type event, const WPARAM wp, const LPARAM lp )
 #endif
@@ -208,22 +205,21 @@ group( window_event_type, n2 )
 		temp window w = to( window, GetWindowLongPtr( h, GWLP_USERDATA ) );
 	#endif
 	//
+	out_if_nothing( w ) failure;
+	//
 	with( event )
 	{
 		when( window_event_resize )
 		{
 			#if OS_LINUX
 				skip_if( w->can_resize is no );
-				temp n2 width = e->xconfigure.width;
-				temp n2 height = e->xconfigure.height;
+				window_resize( w, e->xconfigure.width, e->xconfigure.height );
 			#elif OS_WINDOWS
-				temp n2 width = LOWORD( lp );
-				temp n2 height = HIWORD( lp );
+				window_resize( w, LOWORD( lp ), HIWORD( lp ) );
 			#endif
 
 			w->can_resize = no;
 
-			window_resize( w, width, height );
 			window_render( w );
 
 			skip;
@@ -254,7 +250,7 @@ group( window_event_type, n2 )
 				PostQuitMessage( 0 );
 			#endif
 
-			out no;
+			out success;
 		}
 
 		other skip;
@@ -263,7 +259,7 @@ group( window_event_type, n2 )
 	#if OS_WINDOWS
 		out DefWindowProc( h, event, wp, lp );
 	#elif OS_LINUX
-		out yes;
+		out success;
 	#endif
 }
 
@@ -271,7 +267,7 @@ embed window new_window( const n2 width, const n2 height )
 {
 	temp const window out_window = new_object( window );
 
-	out_window->scale = 1.0;
+	out_window->scale = 1;
 	out_window->size_target.w = width;
 	out_window->size_target.h = height;
 	out_window->buffer = make_canvas( width, height );
@@ -301,6 +297,8 @@ embed window new_window( const n2 width, const n2 height )
 		out_window->pic_target = XRenderCreatePicture( out_window->display, out_window->handle, fmt, 0, 0 );
 
 		XRenderSetPictureFilter( out_window->display, out_window->pic, "nearest", 0, 0 );
+
+		out_window->transform.matrix[ 2 ][ 2 ] = XDoubleToFixed( 1.0 );
 	#elif OS_WINDOWS
 		WNDCLASS wc = { 0 };
 		wc.lpfnWndProc = to( type_of( wc.lpfnWndProc ), window_process_event );
@@ -324,9 +322,10 @@ embed window new_window( const n2 width, const n2 height )
 		SetWindowLongPtr( out_window->handle, GWLP_USERDATA, to( LONG_PTR, out_window ) );
 	#endif
 	//
-	alive_windows[ alive_windows_count++ ] = out_window;
+	current_window = out_window;
+	alive_windows[ alive_windows_count++ ] = current_window;
 	//
-	out out_window;
+	out current_window;
 }
 
 object_fn( window, show )
@@ -433,11 +432,12 @@ fn _C7H16_close()
 #undef start
 #define start\
 	fn _C7H16_main();\
-	i4 main( i4 input_count, byte ref ref input_bytes )\
+	_main_fn\
 	{\
 		_C7H16_init();\
 		_C7H16_main();\
 		_C7H16_loop();\
 		_C7H16_close();\
+		out success;\
 	}\
 	fn _C7H16_main()
