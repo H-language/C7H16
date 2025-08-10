@@ -42,6 +42,21 @@ fn canvas_resize( canvas const_ref c, const n2 width, const n2 height )
 
 ///////
 
+group( anchor )
+{
+	anchor_top_left,
+	anchor_top_center,
+	anchor_top_right,
+	anchor_middle_left,
+	anchor_middle_center,
+	anchor_middle_right,
+	anchor_bottom_left,
+	anchor_bottom_center,
+	anchor_bottom_right
+};
+
+///////
+
 type_from( PICK( OS_LINUX, Window, HWND ) ) os_handle;
 type_from( PICK( OS_LINUX, Display ref, HDC ) ) os_display;
 type_from( PICK( OS_LINUX, XImage ref, BITMAPINFO ) ) os_image;
@@ -65,11 +80,18 @@ object( window )
 	n2x2 size_target;
 	n2x2 buffer_max;
 	n2 scale;
+	anchor buffer_anchor;
 	//
 	flag visible;
 	flag can_resize;
 	flag refresh;
 	flag close;
+	//
+	window_fn start_fn;
+	window_fn tick_fn;
+	window_fn resize_fn;
+	window_fn draw_fn;
+	window_fn input_fn;
 	//
 	n8 tick;
 };
@@ -78,6 +100,36 @@ global perm window current_window = nothing;
 
 global perm window alive_windows[ 32 ];
 global perm n1 alive_windows_count = 0;
+
+object_fn( window, set_start_fn, const window_fn start_fn )
+{
+	out_if_nothing( this );
+	this->start_fn = start_fn;
+}
+
+object_fn( window, set_tick_fn, const window_fn tick_fn )
+{
+	out_if_nothing( this );
+	this->tick_fn = tick_fn;
+}
+
+object_fn( window, set_resize_fn, const window_fn resize_fn )
+{
+	out_if_nothing( this );
+	this->resize_fn = resize_fn;
+}
+
+object_fn( window, set_draw_fn, const window_fn draw_fn )
+{
+	out_if_nothing( this );
+	this->draw_fn = draw_fn;
+}
+
+object_fn( window, set_input_fn, const window_fn input_fn )
+{
+	out_if_nothing( this );
+	this->input_fn = input_fn;
+}
 
 object_fn( window, set_scale, const r8 scale )
 {
@@ -147,22 +199,77 @@ object_fn( window, resize, const n2 width, const n2 height )
 		this->image.bmiHeader.biWidth = this->buffer.size.w;
 		this->image.bmiHeader.biHeight = -this->buffer.size.h;
 	#endif
+	//
+	call( this, resize_fn );
 }
 
-object_fn( window, render )
+object_fn( window, refresh )
 {
 	out_if_any( this is nothing, this->buffer.size.w <= 1, this->buffer.size.h <= 1 );
 	//
-	temp const pixel red = make_pixel( 0x77, 0, 0x22, 0xff );
-	temp n4 size = AREA( this->buffer.size );
-	temp pixel ref p = this->buffer.pixels;
-
-	while( size-- ) val_of( p++ ) = make_pixel( to( byte, rand() ), to( byte, rand() ), to( byte, rand() ), 0xff );
-
 	temp const n2 scaled_width = this->buffer.size.w * this->scale;
 	temp const n2 scaled_height = this->buffer.size.h * this->scale;
-	temp const i4 x = ( i4( this->size_target.w ) - i4( scaled_width ) ) / 2;
-	temp const i4 y = ( i4( this->size_target.h ) - i4( scaled_height ) ) / 2;
+
+	temp const i4 overflow_w = i4( this->size_target.w ) - i4( scaled_width );
+	temp const i4 overflow_h = i4( this->size_target.h ) - i4( scaled_height );
+
+	temp i4 x = 0;
+	temp i4 y = 0;
+
+	with( this->buffer_anchor )
+	{
+		when( anchor_top_center )
+		{
+			x = overflow_w / 2;
+			skip;
+		}
+
+		when( anchor_top_right )
+		{
+			x = overflow_w;
+			skip;
+		}
+
+		when( anchor_middle_left )
+		{
+			y = overflow_h / 2;
+			skip;
+		}
+
+		when( anchor_middle_center )
+		{
+			x = overflow_w / 2;
+			y = overflow_h / 2;
+			skip;
+		}
+
+		when( anchor_middle_right )
+		{
+			x = overflow_w;
+			y = overflow_h / 2;
+			skip;
+		}
+
+		when( anchor_bottom_left )
+		{
+			y = overflow_h;
+			skip;
+		}
+
+		when( anchor_bottom_center )
+		{
+			x = overflow_w / 2;
+			y = overflow_h;
+			skip;
+		}
+
+		when( anchor_bottom_right )
+		{
+			x = overflow_w;
+			y = overflow_h;
+			skip;
+		}
+	}
 
 	#if OS_LINUX
 		if( this->scale > 1 )
@@ -191,7 +298,7 @@ object_fn( window, render )
 group( window_event_type, n2 )
 {
 	window_event_resize = PICK( OS_LINUX, ConfigureNotify, WM_SIZE ),
-	window_event_paint = PICK( OS_LINUX, Expose, WM_PAINT ),
+	window_event_refresh = PICK( OS_LINUX, Expose, WM_PAINT ),
 	window_event_close = PICK( OS_LINUX, ClientMessage, WM_DESTROY )
 };
 
@@ -219,27 +326,13 @@ group( window_event_type, n2 )
 			#endif
 
 			w->can_resize = no;
+		} // fall through
 
-			window_render( w );
-
-			skip;
-		}
-
-		when( window_event_paint )
+		when( window_event_refresh )
 		{
-			#if OS_WINDOWS
-				PAINTSTRUCT ps;
-				BeginPaint( h, ref_of( ps ) );
-			#endif
+			call( w, draw_fn );
 
-			if( w->can_resize is yes )
-			{
-				window_render( w );
-			}
-
-			#if OS_WINDOWS
-				EndPaint( h, ref_of( ps ) );
-			#endif
+			window_refresh( w );
 
 			skip;
 		}
@@ -271,6 +364,8 @@ embed window new_window( const n2 width, const n2 height )
 	out_window->size_target.w = width;
 	out_window->size_target.h = height;
 	out_window->buffer = make_canvas( width, height );
+	out_window->can_resize = yes;
+	out_window->buffer_anchor = anchor_middle_center;
 
 	byte ref name = "test";
 
@@ -361,6 +456,11 @@ object_fn( window, process )
 {
 	++this->tick;
 	if( this->tick is 1 )
+	{
+		call( this, start_fn );
+		out;
+	}
+	else if( this->tick is 2 )
 	{
 		window_show( this );
 		out;
