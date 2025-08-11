@@ -353,6 +353,8 @@ object_fn( window, paint )
 
 	this->can_paint = no;
 
+	call( this, draw_fn );
+
 	temp const n2 scaled_width = this->buffer.size.w * this->scale;
 	temp const n2 scaled_height = this->buffer.size.h * this->scale;
 
@@ -521,8 +523,6 @@ group( window_event_type, n2 )
 
 		when( window_event_refresh )
 		{
-			call( w, draw_fn );
-
 			window_paint( w );
 
 			skip;
