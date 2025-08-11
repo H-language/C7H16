@@ -16,7 +16,7 @@
 
 type_from( n1x4 ) pixel;
 
-#define make_pixel( R, G, B, A ) make( pixel, .r = B, .g = G, .b = R, .a = A )
+#define pixel( R, G, B, A ) make( pixel, .r = B, .g = G, .b = R, .a = A )
 
 //
 
@@ -28,9 +28,11 @@ type( canvas )
 	n2x2 size;
 };
 
-#define _make_canvas( W, H ) make( canvas, .pixels = to( pixel ref, new_ref( pixel, W * H ) ), .size = make( n2x2, .w = W, .h = H ) )
-#define _eval_make_canvas( WIDTH_HEIGHT... ) _make_canvas( WIDTH_HEIGHT )
-#define make_canvas( WIDTH_HEIGHT... ) _eval_make_canvas( DEFAULTS( ( 1, 1 ), WIDTH_HEIGHT ) )
+global perm canvas ref current_canvas_ref = nothing;
+
+#define _canvas( W, H ) make( canvas, .pixels = to( pixel ref, new_ref( pixel, W * H ) ), .size = make( n2x2, .w = W, .h = H ) )
+#define _eval_canvas( WIDTH_HEIGHT... ) _canvas( WIDTH_HEIGHT )
+#define canvas( WIDTH_HEIGHT... ) _eval_canvas( DEFAULTS( ( 1, 1 ), WIDTH_HEIGHT ) )
 
 fn canvas_resize( canvas const_ref c, const n2 width, const n2 height )
 {
@@ -39,6 +41,92 @@ fn canvas_resize( canvas const_ref c, const n2 width, const n2 height )
 	c->size.w = width;
 	c->size.h = height;
 }
+
+fn canvas_fill( canvas const_ref c, const pixel color )
+{
+	if_all( color.r is color.g, color.g is color.b, color.b is color.a )
+	{
+		bytes_fill( c->pixels, color.r, i4( c->size.w ) * i4( c->size.h ) * 4 );
+	}
+	else
+	{
+		iter( i, i4( c->size.w ) * i4( c->size.h ) )
+		{
+			c->pixels[ i ] = color;
+		}
+	}
+}
+
+fn canvas_clear( canvas const_ref c )
+{
+	bytes_clear( c->pixels, i4( c->size.w ) * i4( c->size.h ) * 4 );
+}
+
+//
+
+#define _if_canvas_pixel_safe( CANVAS, X, Y ) if( point_in_size( X, Y, CANVAS.size.w, CANVAS.size.h ) )
+#define _canvas_get_pixel_index( CANVAS, INDEX ) CANVAS.pixels[ ( INDEX ) ]
+
+#define canvas_get_pixel_row( CANVAS, X, ROW ) _canvas_get_pixel_index( CANVAS, i4( X ) + ( ROW ) )
+#define canvas_get_pixel( CANVAS, X, Y ) canvas_get_pixel_row( CANVAS, X, i4( Y ) * i4( CANVAS.size.w ) )
+#define canvas_get_pixel_safe( CANVAS, X, Y ) _if_canvas_pixel_safe( CANVAS, X, Y ) canvas_get_pixel( CANVAS, X, Y )
+
+#define get_pixel( X, Y ) canvas_get_pixel( current_canvas_ref, X, Y )
+#define get_pixel_safe( X, Y ) canvas_get_pixel_safe( current_canvas_ref, X, Y )
+
+//
+
+#define _canvas_draw_pixel_index( CANVAS, INDEX, PIXEL ) ( _canvas_get_pixel_index( CANVAS, INDEX ) ) = ( PIXEL )
+
+#define canvas_draw_pixel_row( CANVAS, X, ROW, PIXEL ) ( canvas_get_pixel_row( CANVAS, X, ROW ) ) = ( PIXEL )
+#define canvas_draw_pixel( CANVAS, X, Y, PIXEL ) ( canvas_get_pixel( CANVAS, X, Y ) ) = ( PIXEL )
+#define canvas_draw_pixel_safe( CANVAS, X, Y, PIXEL ) canvas_get_pixel_safe( CANVAS, X, Y ) = ( PIXEL )
+
+#define draw_pixel( X, Y, PIXEL ) canvas_draw_pixel( val_of( current_canvas_ref ), X, Y, PIXEL )
+#define draw_pixel_safe( X, Y, PIXEL ) canvas_draw_pixel_safe( val_of( current_canvas_ref ), X, Y, PIXEL )
+
+///////
+
+#define fn_line( Ax, Ay, Bx, By, CODE )\
+	START_DEF\
+	{\
+		temp i2 _x = Ax;\
+		temp i2 _y = Ay;\
+		temp i2 _x2 = Bx;\
+		temp i2 _y2 = By;\
+		temp i2 dx = i2_abs( _x2 - _x );\
+		temp i2 sx = pick( _x < _x2, 1, -1 );\
+		temp i2 dy = -i2_abs( _y2 - _y );\
+		temp i2 sy = pick( _y < _y2, 1, -1 );\
+		temp i2 err = dx + dy;\
+		temp i2 e2;\
+		loop\
+		{\
+			skip_if( _x is _x2 and _y is _y2 );\
+			CODE;\
+			e2 = err << 1;\
+			if( e2 >= dy )\
+			{\
+				skip_if( _x is _x2 );\
+				err += dy;\
+				_x += sx;\
+			}\
+			if( e2 <= dx )\
+			{\
+				skip_if( _y is _y2 );\
+				err += dx;\
+				_y += sy;\
+			}\
+		}\
+	}\
+	END_DEF
+
+#define _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, SAFE... ) fn_line( Ax, Ay, Bx, By, canvas_draw_pixel##SAFE( CANVAS, _x, _y, PIXEL ) );
+#define canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL )
+#define canvas_draw_line_safe( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, _safe )
+
+#define draw_line( Ax, Ay, Bx, By, PIXEL ) canvas_draw_line( val_of( current_canvas_ref ), Ax, Ay, Bx, By, PIXEL )
+#define draw_line_safe( Ax, Ay, Bx, By, PIXEL ) canvas_draw_line_safe( val_of( current_canvas_ref ), Ax, Ay, Bx, By, PIXEL )
 
 ///////
 
@@ -83,7 +171,6 @@ object( window )
 	anchor buffer_anchor;
 	//
 	flag visible;
-	flag can_resize;
 	flag refresh;
 	flag close;
 	//
@@ -94,6 +181,18 @@ object( window )
 	window_fn input_fn;
 	//
 	n8 tick;
+	nano start_nano;
+	nano delta_nano;
+	nano past_nano;
+	nano target_frame_nano;
+	nano next_frame_nano;
+	nano last_frame_nano;
+	nano frame_count;
+	nano fps_time;
+	//
+	r8 fps_target;
+	r8 total_time;
+	r8 delta_time;
 };
 
 global perm window current_window = nothing;
@@ -205,8 +304,10 @@ object_fn( window, resize, const n2 width, const n2 height )
 
 object_fn( window, refresh )
 {
-	out_if_any( this is nothing, this->buffer.size.w <= 1, this->buffer.size.h <= 1 );
-	//
+	out_if_any( this is nothing, this->refresh is no, this->buffer.size.w <= 1, this->buffer.size.h <= 1 );
+
+	this->refresh = no;
+
 	temp const n2 scaled_width = this->buffer.size.w * this->scale;
 	temp const n2 scaled_height = this->buffer.size.h * this->scale;
 
@@ -281,7 +382,7 @@ object_fn( window, refresh )
 		{
 			XPutImage( this->display, this->handle, this->gc, this->image, 0, 0, x, y, this->buffer.size.w, this->buffer.size.h );
 		}
-		XFlush( this->display );
+		XSync( this->display, no );
 	#elif OS_WINDOWS
 		if( this->scale > 1 )
 		{
@@ -312,20 +413,17 @@ group( window_event_type, n2 )
 		temp window w = to( window, GetWindowLongPtr( h, GWLP_USERDATA ) );
 	#endif
 	//
-	out_if_nothing( w ) failure;
+	jump_if_nothing( w ) exit_events;
 	//
 	with( event )
 	{
 		when( window_event_resize )
 		{
 			#if OS_LINUX
-				skip_if( w->can_resize is no );
 				window_resize( w, e->xconfigure.width, e->xconfigure.height );
 			#elif OS_WINDOWS
 				window_resize( w, LOWORD( lp ), HIWORD( lp ) );
 			#endif
-
-			w->can_resize = no;
 		} // fall through
 
 		when( window_event_refresh )
@@ -349,6 +447,7 @@ group( window_event_type, n2 )
 		other skip;
 	}
 	//
+	exit_events:
 	#if OS_WINDOWS
 		out DefWindowProc( h, event, wp, lp );
 	#elif OS_LINUX
@@ -363,8 +462,7 @@ embed window new_window( const n2 width, const n2 height )
 	out_window->scale = 1;
 	out_window->size_target.w = width;
 	out_window->size_target.h = height;
-	out_window->buffer = make_canvas( width, height );
-	out_window->can_resize = yes;
+	out_window->buffer = canvas( width, height );
 	out_window->buffer_anchor = anchor_middle_center;
 
 	byte ref name = "test";
@@ -376,11 +474,6 @@ embed window new_window( const n2 width, const n2 height )
 		out_window->handle = XCreateSimpleWindow( out_window->display, RootWindow( out_window->display, screen ), 0, 0, width, height, 0, 0, 0 );
 
 		XSetWindowBackgroundPixmap( out_window->display, out_window->handle, None );
-		XSetWindowAttributes attr;
-		attr.backing_store = Always;
-		attr.bit_gravity = NorthWestGravity;
-		XChangeWindowAttributes( out_window->display, out_window->handle, CWBackingStore | CWBitGravity, ref_of( attr ) );
-
 		XSelectInput( out_window->display, out_window->handle, ExposureMask | StructureNotifyMask );
 
 		out_window->image = XCreateImage( out_window->display, DefaultVisual( out_window->display, screen ), DefaultDepth( out_window->display, screen ), ZPixmap, 0, to( byte ref, out_window->buffer.pixels ), width, height, 32, 0 );
@@ -429,7 +522,7 @@ object_fn( window, show )
 
 	#if OS_LINUX
 		XMapRaised( this->display, this->handle );
-		XFlush( this->display );
+		XSync( this->display, no );
 	#elif OS_WINDOWS
 		ShowWindow( this->handle, SW_SHOWNOACTIVATE );
 		SetForegroundWindow( this->handle );
@@ -455,8 +548,12 @@ object_fn( window, hide )
 object_fn( window, process )
 {
 	++this->tick;
+
 	if( this->tick is 1 )
 	{
+		this->fps_target = 1;
+		this->target_frame_nano = to( nano, r8( nano_per_sec ) / this->fps_target );
+
 		call( this, start_fn );
 		out;
 	}
@@ -465,12 +562,13 @@ object_fn( window, process )
 		window_show( this );
 		out;
 	}
+	else if( this->tick is 3 )
+	{
+		this->start_nano = get_nano();
+		this->past_nano = this->start_nano;
+	}
 
-	//
-
-	this->can_resize = yes;
-
-	//
+	this->refresh = yes;
 
 	os_event e;
 
@@ -489,6 +587,24 @@ object_fn( window, process )
 		#endif
 		out_if( this->close is yes );
 	}
+
+	call( this, tick_fn );
+
+	//
+
+	temp const nano target_end_nano = this->start_nano + ( ( this->tick - 2 ) * this->target_frame_nano );
+	temp nano now_nano = get_nano();
+
+	if( target_end_nano > now_nano )
+	{
+		nano_sleep( n8_clamp( target_end_nano - now_nano, 1, this->target_frame_nano ) );
+	}
+
+	now_nano = get_nano();
+	this->delta_time = r8( now_nano - this->past_nano ) / r8( nano_per_sec );
+	this->past_nano = now_nano;
+
+	printf( "frame %lld\n", this->tick - 3 );
 }
 
 ///////
