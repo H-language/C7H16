@@ -448,7 +448,6 @@ object_fn( window, update_tick )
 	this->total_time += this->delta_time;
 	this->past_nano = now;
 	++this->tick;
-	this->can_paint = yes;
 	call( this, tick_fn );
 }
 
@@ -496,15 +495,28 @@ group( window_event_type, n2 )
 				KillTimer( h, 1 );
 				skip;
 			}
+
+			when( WM_ERASEBKGND ) out yes;
+			when( WM_SETCURSOR )
+			{
+				if( LOWORD( lp ) is HTCLIENT )
+				{
+					SetCursor( LoadCursor( NULL, IDC_ARROW ) );
+					out yes;
+				}
+				skip;
+			}
 		#endif
 
 		when( window_event_resize )
 		{
-			#if OS_LINUX
-				_window_resize( w, e->xconfigure.width, e->xconfigure.height );
-			#elif OS_WINDOWS
+			#if OS_WINDOWS
 				_window_resize( w, LOWORD( lp ), HIWORD( lp ) );
+			#elif OS_LINUX
+				_window_resize( w, e->xconfigure.width, e->xconfigure.height );
+				if( w->tick > 2 )
 			#endif
+			w->can_paint = yes;
 		} // fall through
 
 		when( window_event_refresh )
@@ -638,7 +650,6 @@ object_fn( window, process )
 	}
 	else if( this->tick is 1 )
 	{
-		window_clear_events( this );
 		window_show( this );
 	}
 
@@ -671,6 +682,7 @@ object_fn( window, process )
 
 object_fn( window, refresh )
 {
+	this->can_paint = yes;
 	#if OS_LINUX
 		XClearArea( this->display, this->handle, 0, 0, 0, 0, yes );
 		XSync( this->display, no );
@@ -684,9 +696,6 @@ object_fn( window, refresh )
 
 fn _C7H16_init()
 {
-	#if OS_WINDOWS
-		//timeBeginPeriod( 1 );
-	#endif
 	//SET_OS_KEYMAP();
 	//window_list = new_list(window);
 }
@@ -713,9 +722,7 @@ fn _C7H16_loop()
 
 fn _C7H16_close()
 {
-	#if OS_WINDOWS
-		//timeEndPeriod( 1 );
-	#endif
+	//
 }
 
 #undef start
