@@ -171,7 +171,7 @@ object( window )
 	anchor buffer_anchor;
 	//
 	flag visible;
-	flag refresh;
+	flag can_paint;
 	flag close;
 	//
 	window_fn start_fn;
@@ -182,13 +182,8 @@ object( window )
 	//
 	n8 tick;
 	nano start_nano;
-	nano delta_nano;
 	nano past_nano;
 	nano target_frame_nano;
-	nano next_frame_nano;
-	nano last_frame_nano;
-	nano frame_count;
-	nano fps_time;
 	//
 	r8 fps_target;
 	r8 total_time;
@@ -230,6 +225,40 @@ object_fn( window, set_input_fn, const window_fn input_fn )
 	this->input_fn = input_fn;
 }
 
+object_fn( window, clear_events )
+{
+	out_if( this is nothing );
+
+	#if OS_LINUX
+		Window root = DefaultRootWindow( this->display );
+		XEvent release_event = { 0 };
+		release_event.type = ButtonRelease;
+		release_event.xbutton.display = this->display;
+		release_event.xbutton.window = root;
+		release_event.xbutton.root = root;
+		release_event.xbutton.button = Button1;
+		release_event.xbutton.time = CurrentTime;
+		release_event.xbutton.same_screen = True;
+
+		XSendEvent( this->display, root, False, SubstructureNotifyMask | SubstructureRedirectMask, ref_of( release_event ) );
+		XFlush( this->display );
+
+		XEvent e;
+		while( XCheckWindowEvent( this->display, this->handle, ~ 0, ref_of( e ) ) )
+		{
+			//
+		}
+	#elif OS_WINDOWS
+		ReleaseCapture();
+
+		MSG msg;
+		while( PeekMessage( ref_of( msg ), this->handle, 0, 0, PM_REMOVE ) )
+		{
+			//
+		}
+	#endif
+}
+
 object_fn( window, set_scale, const r8 scale )
 {
 	out_if_nothing( this );
@@ -263,7 +292,7 @@ object_fn( window, set_buffer_max, const n2 width, const n2 height )
 	}
 }
 
-object_fn( window, resize, const n2 width, const n2 height )
+fn _window_resize( const window this, const n2 width, const n2 height )
 {
 	out_if_any( this is nothing, width <= 1, height <= 1 );
 
@@ -302,11 +331,27 @@ object_fn( window, resize, const n2 width, const n2 height )
 	call( this, resize_fn );
 }
 
-object_fn( window, refresh )
+object_fn( window, resize, const n2 width, const n2 height )
 {
-	out_if_any( this is nothing, this->refresh is no, this->buffer.size.w <= 1, this->buffer.size.h <= 1 );
+	out_if_any( this is nothing, width <= 1, height <= 1 );
 
-	this->refresh = no;
+	window_clear_events( this );
+
+	_window_resize( this, width, height );
+
+	#if OS_LINUX
+		XResizeWindow( this->display, this->handle, width, height );
+		XFlush( this->display );
+	#elif OS_WINDOWS
+		SetWindowPos( this->handle, NULL, 0, 0, width, height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE );
+	#endif
+}
+
+object_fn( window, paint )
+{
+	out_if_any( this is nothing, this->can_paint is no, this->buffer.size.w <= 1, this->buffer.size.h <= 1 );
+
+	this->can_paint = no;
 
 	temp const n2 scaled_width = this->buffer.size.w * this->scale;
 	temp const n2 scaled_height = this->buffer.size.h * this->scale;
@@ -396,6 +441,17 @@ object_fn( window, refresh )
 	#endif
 }
 
+object_fn( window, update_tick )
+{
+	temp nano now = get_nano();
+	this->delta_time = r8( now - this->past_nano ) / r8( nano_per_sec );
+	this->total_time += this->delta_time;
+	this->past_nano = now;
+	++this->tick;
+	this->can_paint = yes;
+	call( this, tick_fn );
+}
+
 group( window_event_type, n2 )
 {
 	window_event_resize = PICK( OS_LINUX, ConfigureNotify, WM_SIZE ),
@@ -417,12 +473,37 @@ group( window_event_type, n2 )
 	//
 	with( event )
 	{
+
+		#if OS_WINDOWS
+			when( WM_ENTERSIZEMOVE )
+			{
+				SetTimer( h, 1, w->target_frame_nano / 1000000, nothing );
+				jump wm_timer;
+			}
+
+			when( WM_TIMER )
+			{
+				if( wp is 1 )
+				{
+					wm_timer:
+					window_update_tick( w );
+				}
+				skip;
+			}
+
+			when( WM_EXITSIZEMOVE )
+			{
+				KillTimer( h, 1 );
+				skip;
+			}
+		#endif
+
 		when( window_event_resize )
 		{
 			#if OS_LINUX
-				window_resize( w, e->xconfigure.width, e->xconfigure.height );
+				_window_resize( w, e->xconfigure.width, e->xconfigure.height );
 			#elif OS_WINDOWS
-				window_resize( w, LOWORD( lp ), HIWORD( lp ) );
+				_window_resize( w, LOWORD( lp ), HIWORD( lp ) );
 			#endif
 		} // fall through
 
@@ -430,7 +511,7 @@ group( window_event_type, n2 )
 		{
 			call( w, draw_fn );
 
-			window_refresh( w );
+			window_paint( w );
 
 			skip;
 		}
@@ -547,64 +628,56 @@ object_fn( window, hide )
 
 object_fn( window, process )
 {
-	++this->tick;
-
-	if( this->tick is 1 )
+	if( this->tick is 0 )
 	{
-		this->fps_target = 1;
+		this->fps_target = 60;
 		this->target_frame_nano = to( nano, r8( nano_per_sec ) / this->fps_target );
-
-		call( this, start_fn );
-		out;
-	}
-	else if( this->tick is 2 )
-	{
-		window_show( this );
-		out;
-	}
-	else if( this->tick is 3 )
-	{
 		this->start_nano = get_nano();
 		this->past_nano = this->start_nano;
+		call( this, start_fn );
 	}
-
-	this->refresh = yes;
+	else if( this->tick is 1 )
+	{
+		window_clear_events( this );
+		window_show( this );
+	}
 
 	os_event e;
-
 	#if OS_LINUX
 		while( XPending( this->display ) )
-	#elif OS_WINDOWS
-		while( PeekMessage( ref_of( e ), 0, 0, 0, PM_REMOVE ) )
-	#endif
-	{
-		#if OS_LINUX
+		{
 			XNextEvent( this->display, ref_of( e ) );
 			window_process_event( this, e.type, ref_of( e ) );
-		#elif OS_WINDOWS
+		}
+	#elif OS_WINDOWS
+		while( PeekMessage( ref_of( e ), 0, 0, 0, PM_REMOVE ) )
+		{
 			TranslateMessage( ref_of( e ) );
 			DispatchMessage( ref_of( e ) );
-		#endif
-		out_if( this->close is yes );
-	}
+		}
+	#endif
 
-	call( this, tick_fn );
+	out_if( this->close is yes );
 
-	//
+	window_update_tick( this );
 
-	temp const nano target_end_nano = this->start_nano + ( ( this->tick - 2 ) * this->target_frame_nano );
-	temp nano now_nano = get_nano();
-
-	if( target_end_nano > now_nano )
+	temp const nano target_end = this->start_nano + ( this->tick * this->target_frame_nano );
+	temp const nano now = get_nano();
+	if( target_end > now )
 	{
-		nano_sleep( n8_clamp( target_end_nano - now_nano, 1, this->target_frame_nano ) );
+		nano_sleep( target_end - now );
 	}
+}
 
-	now_nano = get_nano();
-	this->delta_time = r8( now_nano - this->past_nano ) / r8( nano_per_sec );
-	this->past_nano = now_nano;
-
-	printf( "frame %lld\n", this->tick - 3 );
+object_fn( window, refresh )
+{
+	#if OS_LINUX
+		XClearArea( this->display, this->handle, 0, 0, 0, 0, yes );
+		XSync( this->display, no );
+	#elif OS_WINDOWS
+		InvalidateRect( this->handle, nothing, no );
+		UpdateWindow( this->handle );
+	#endif
 }
 
 ///////
