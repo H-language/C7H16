@@ -162,6 +162,9 @@ object( window )
 		Picture pic_target;
 		Pixmap pixmap;
 		XTransform transform;
+	#elif OS_WINDOWS
+		flag wm_timer;
+		flag wm_resize;
 	#endif
 	//
 	canvas buffer;
@@ -171,7 +174,7 @@ object( window )
 	anchor buffer_anchor;
 	//
 	flag visible;
-	flag can_paint;
+	flag refresh;
 	flag close;
 	//
 	window_fn start_fn;
@@ -292,17 +295,18 @@ object_fn( window, set_buffer_max, const n2 width, const n2 height )
 	}
 }
 
-fn _window_resize( const window this, const n2 width, const n2 height )
+fn _window_set_size( const window this, const n2 width, const n2 height )
 {
-	out_if_any( this is nothing, width <= 1, height <= 1 );
+	out_if( this->size_target.w is width and this->size_target.h is height );
+	this->size_target.w = width;
+	this->size_target.h = height;
 
-	if( this->size_target.w isnt width or this->size_target.h isnt height )
-	{
-		this->size_target.w = width;
-		this->size_target.h = height;
+	window_update_scale( this );
+}
 
-		window_update_scale( this );
-	}
+fn _window_resize( const window this )
+{
+	out_if_any( this is nothing, this->size_target.w <= 1, this->size_target.h <= 1 );
 
 	temp n2 buffer_w = ( this->size_target.w + this->scale - 1 ) / this->scale;
 	temp n2 buffer_h = ( this->size_target.h + this->scale - 1 ) / this->scale;
@@ -337,7 +341,8 @@ object_fn( window, resize, const n2 width, const n2 height )
 
 	window_clear_events( this );
 
-	_window_resize( this, width, height );
+	_window_set_size( this, width, height );
+	_window_resize( this );
 
 	#if OS_LINUX
 		XResizeWindow( this->display, this->handle, width, height );
@@ -347,110 +352,118 @@ object_fn( window, resize, const n2 width, const n2 height )
 	#endif
 }
 
-object_fn( window, paint )
+fn _window_update( const window this )
 {
-	out_if_any( this is nothing, this->can_paint is no, this->buffer.size.w <= 1, this->buffer.size.h <= 1 );
+	out_if_any( this is nothing, this->buffer.size.w <= 1, this->buffer.size.h <= 1 );
 
-	this->can_paint = no;
-
-	call( this, draw_fn );
-
-	temp const n2 scaled_width = this->buffer.size.w * this->scale;
-	temp const n2 scaled_height = this->buffer.size.h * this->scale;
-
-	temp const i4 overflow_w = i4( this->size_target.w ) - i4( scaled_width );
-	temp const i4 overflow_h = i4( this->size_target.h ) - i4( scaled_height );
-
-	temp i4 x = 0;
-	temp i4 y = 0;
-
-	with( this->buffer_anchor )
-	{
-		when( anchor_top_center )
-		{
-			x = overflow_w / 2;
-			skip;
-		}
-
-		when( anchor_top_right )
-		{
-			x = overflow_w;
-			skip;
-		}
-
-		when( anchor_middle_left )
-		{
-			y = overflow_h / 2;
-			skip;
-		}
-
-		when( anchor_middle_center )
-		{
-			x = overflow_w / 2;
-			y = overflow_h / 2;
-			skip;
-		}
-
-		when( anchor_middle_right )
-		{
-			x = overflow_w;
-			y = overflow_h / 2;
-			skip;
-		}
-
-		when( anchor_bottom_left )
-		{
-			y = overflow_h;
-			skip;
-		}
-
-		when( anchor_bottom_center )
-		{
-			x = overflow_w / 2;
-			y = overflow_h;
-			skip;
-		}
-
-		when( anchor_bottom_right )
-		{
-			x = overflow_w;
-			y = overflow_h;
-			skip;
-		}
-	}
-
-	#if OS_LINUX
-		if( this->scale > 1 )
-		{
-			XPutImage( this->display, this->pixmap, this->gc, this->image, 0, 0, 0, 0, this->buffer.size.w, this->buffer.size.h );
-			XRenderComposite( this->display, PictOpSrc, this->pic, None, this->pic_target, 0, 0, 0, 0, x, y, scaled_width, scaled_height );
-		}
-		else
-		{
-			XPutImage( this->display, this->handle, this->gc, this->image, 0, 0, x, y, this->buffer.size.w, this->buffer.size.h );
-		}
-		XSync( this->display, no );
-	#elif OS_WINDOWS
-		if( this->scale > 1 )
-		{
-			SetStretchBltMode( this->display, COLORONCOLOR );
-			StretchDIBits( this->display, x, y, scaled_width, scaled_height, 0, 0, this->buffer.size.w, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
-		}
-		else
-		{
-			SetDIBitsToDevice( this->display, x, y, this->buffer.size.w, this->buffer.size.h, 0, 0, 0, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS );
-		}
-	#endif
-}
-
-object_fn( window, update_tick )
-{
 	temp nano now = get_nano();
 	this->delta_time = r8( now - this->past_nano ) / r8( nano_per_sec );
 	this->total_time += this->delta_time;
 	this->past_nano = now;
 	++this->tick;
 	call( this, tick_fn );
+
+	if( this->refresh )
+	{
+		this->refresh = no;
+		call( this, draw_fn );
+
+		temp const n2 scaled_width = this->buffer.size.w * this->scale;
+		temp const n2 scaled_height = this->buffer.size.h * this->scale;
+
+		temp const i4 overflow_w = i4( this->size_target.w ) - i4( scaled_width );
+		temp const i4 overflow_h = i4( this->size_target.h ) - i4( scaled_height );
+
+		temp i4 x = 0;
+		temp i4 y = 0;
+
+		with( this->buffer_anchor )
+		{
+			when( anchor_top_center )
+			{
+				x = overflow_w / 2;
+				skip;
+			}
+
+			when( anchor_top_right )
+			{
+				x = overflow_w;
+				skip;
+			}
+
+			when( anchor_middle_left )
+			{
+				y = overflow_h / 2;
+				skip;
+			}
+
+			when( anchor_middle_center )
+			{
+				x = overflow_w / 2;
+				y = overflow_h / 2;
+				skip;
+			}
+
+			when( anchor_middle_right )
+			{
+				x = overflow_w;
+				y = overflow_h / 2;
+				skip;
+			}
+
+			when( anchor_bottom_left )
+			{
+				y = overflow_h;
+				skip;
+			}
+
+			when( anchor_bottom_center )
+			{
+				x = overflow_w / 2;
+				y = overflow_h;
+				skip;
+			}
+
+			when( anchor_bottom_right )
+			{
+				x = overflow_w;
+				y = overflow_h;
+				skip;
+			}
+		}
+
+		#if OS_LINUX
+			if( this->scale > 1 )
+			{
+				XPutImage( this->display, this->pixmap, this->gc, this->image, 0, 0, 0, 0, this->buffer.size.w, this->buffer.size.h );
+				XRenderComposite( this->display, PictOpSrc, this->pic, None, this->pic_target, 0, 0, 0, 0, x, y, scaled_width, scaled_height );
+			}
+			else
+			{
+				XPutImage( this->display, this->handle, this->gc, this->image, 0, 0, x, y, this->buffer.size.w, this->buffer.size.h );
+			}
+			XSync( this->display, no );
+		#elif OS_WINDOWS
+			if( this->scale > 1 )
+			{
+				SetStretchBltMode( this->display, COLORONCOLOR );
+				StretchDIBits( this->display, x, y, scaled_width, scaled_height, 0, 0, this->buffer.size.w, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
+			}
+			else
+			{
+				SetDIBitsToDevice( this->display, x, y, this->buffer.size.w, this->buffer.size.h, 0, 0, 0, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS );
+			}
+		#endif
+	}
+	//
+
+	temp const nano target_end = this->start_nano + ( this->tick * this->target_frame_nano );
+	now = get_nano();
+
+	if( target_end > now )
+	{
+		nano_sleep( target_end - now );
+	}
 }
 
 group( window_event_type, n2 )
@@ -474,27 +487,34 @@ group( window_event_type, n2 )
 	//
 	with( event )
 	{
-
 		#if OS_WINDOWS
 			when( WM_ENTERSIZEMOVE )
 			{
-				SetTimer( h, 1, w->target_frame_nano / 1000000, nothing );
-				jump wm_timer;
-			}
-
-			when( WM_TIMER )
-			{
-				if( wp is 1 )
-				{
-					wm_timer:
-					window_update_tick( w );
-				}
+				w->wm_timer = yes;
+				SetTimer( h, 1, 0, nothing );
 				skip;
 			}
 
 			when( WM_EXITSIZEMOVE )
 			{
 				KillTimer( h, 1 );
+				w->wm_resize = no;
+				w->wm_timer = no;
+				skip;
+			}
+
+			when( WM_TIMER )
+			{
+				if( wp is 1 )
+				{
+					if( w->wm_resize is yes )
+					{
+						_window_resize( w );
+						w->wm_resize = no;
+					}
+
+					_window_update( w );
+				}
 				skip;
 			}
 
@@ -512,19 +532,24 @@ group( window_event_type, n2 )
 
 		when( window_event_resize )
 		{
+			w->refresh = yes;
 			#if OS_WINDOWS
-				_window_resize( w, LOWORD( lp ), HIWORD( lp ) );
+				w->wm_resize = yes;
+				_window_set_size( w, LOWORD( lp ), HIWORD( lp ) );
+				if( w->wm_timer is no )
+				{
+					_window_resize( w );
+				}
 			#elif OS_LINUX
-				_window_resize( w, e->xconfigure.width, e->xconfigure.height );
-				if( w->tick > 2 )
+				_window_set_size( w, e->xconfigure.width, e->xconfigure.height );
+				_window_resize( w );
 			#endif
-			w->can_paint = yes;
-		} // fall through
+			skip;
+		}
 
 		when( window_event_refresh )
 		{
-			window_paint( w );
-
+			w->refresh = yes;
 			skip;
 		}
 
@@ -585,6 +610,7 @@ embed window new_window( const n2 width, const n2 height )
 		wc.lpfnWndProc = to( type_of( wc.lpfnWndProc ), window_process_event );
 		wc.hInstance = GetModuleHandle( nothing );
 		wc.lpszClassName = name;
+		wc.hbrBackground = nothing;
 		RegisterClass( ref_of( wc ) );
 
 		RECT rect = { 0, 0, width, height };
@@ -617,9 +643,9 @@ object_fn( window, show )
 		XMapRaised( this->display, this->handle );
 		XSync( this->display, no );
 	#elif OS_WINDOWS
-		ShowWindow( this->handle, SW_SHOWNOACTIVATE );
-		SetForegroundWindow( this->handle );
 		SetFocus( this->handle );
+		SetForegroundWindow( this->handle );
+		ShowWindow( this->handle, SW_SHOWNOACTIVATE );
 	#endif
 
 	this->visible = yes;
@@ -638,6 +664,28 @@ object_fn( window, hide )
 	this->visible = no;
 }
 
+object_fn( window, center )
+{
+	out_if_nothing( this );
+
+	#if OS_LINUX
+		XMoveWindow( this->display, this->handle, ( DisplayWidth( this->display, DefaultScreen( this->display ) ) - this->size_target.w ) / 2, ( DisplayHeight( this->display, DefaultScreen( this->display ) ) - this->size_target.h ) / 2 );
+		XSync( this->display, no );
+	#elif OS_WINDOWS
+		SetWindowPos( this->handle, NULL, ( GetSystemMetrics( SM_CXSCREEN ) - this->size_target.w ) / 2, ( GetSystemMetrics( SM_CYSCREEN ) - this->size_target.h ) / 2, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE );
+	#endif
+}
+
+object_fn( window, refresh )
+{
+	#if OS_LINUX
+		XClearArea( this->display, this->handle, 0, 0, 0, 0, yes );
+		XSync( this->display, no );
+	#elif OS_WINDOWS
+		InvalidateRect( this->handle, nothing, no );
+	#endif
+}
+
 object_fn( window, process )
 {
 	if( this->tick is 0 )
@@ -650,6 +698,8 @@ object_fn( window, process )
 	}
 	else if( this->tick is 1 )
 	{
+		this->refresh = yes;
+		window_center( this );
 		window_show( this );
 	}
 
@@ -670,26 +720,8 @@ object_fn( window, process )
 
 	out_if( this->close is yes );
 
-	window_update_tick( this );
+	_window_update( this );
 
-	temp const nano target_end = this->start_nano + ( this->tick * this->target_frame_nano );
-	temp const nano now = get_nano();
-	if( target_end > now )
-	{
-		nano_sleep( target_end - now );
-	}
-}
-
-object_fn( window, refresh )
-{
-	this->can_paint = yes;
-	#if OS_LINUX
-		XClearArea( this->display, this->handle, 0, 0, 0, 0, yes );
-		XSync( this->display, no );
-	#elif OS_WINDOWS
-		InvalidateRect( this->handle, nothing, no );
-		UpdateWindow( this->handle );
-	#endif
 }
 
 ///////
@@ -736,4 +768,4 @@ fn _C7H16_close()
 		_C7H16_close();\
 		out success;\
 	}\
-	fn _C7H16_main()
+	fn _C7H16_main()\
