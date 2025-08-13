@@ -807,7 +807,7 @@ group( input_type )
 	input_left,
 	input_right,
 
-	input_grave,
+	input_backtick,
 	input_minus,
 	input_equals,
 	input_leftbracket,
@@ -825,40 +825,232 @@ group( input_type )
 	input_count
 };
 
-global perm byte OS_INPUT[ 256 ];
-
-fn _C7H16_set_keymap()
+embed const byte const_ref _C7H16_input_map()
 {
 	#if OS_LINUX
-		#define XK_COMPRESS( xk ) ( ( ( xk ) ^ ( ( xk ) >> 8 ) ) & 0xFF )
+		#define XK_COMPRESS( XK ) ( XK & 0x1ff )
+		perm const byte INPUT_MAP[] =
+			{
+				[ XK_a ] = input_a,
+				[ XK_b ] = input_b,
+				[ XK_c ] = input_c,
+				[ XK_d ] = input_d,
+				[ XK_e ] = input_e,
+				[ XK_f ] = input_f,
+				[ XK_g ] = input_g,
+				[ XK_h ] = input_h,
+				[ XK_i ] = input_i,
+				[ XK_j ] = input_j,
+				[ XK_k ] = input_k,
+				[ XK_l ] = input_l,
+				[ XK_m ] = input_m,
+				[ XK_n ] = input_n,
+				[ XK_o ] = input_o,
+				[ XK_p ] = input_p,
+				[ XK_q ] = input_q,
+				[ XK_r ] = input_r,
+				[ XK_s ] = input_s,
+				[ XK_t ] = input_t,
+				[ XK_u ] = input_u,
+				[ XK_v ] = input_v,
+				[ XK_w ] = input_w,
+				[ XK_x ] = input_x,
+				[ XK_y ] = input_y,
+				[ XK_z ] = input_z,
 
-		range( c, 'a', 'z' )
+				[ XK_0 ] = input_0,
+				[ XK_1 ] = input_1,
+				[ XK_2 ] = input_2,
+				[ XK_3 ] = input_3,
+				[ XK_4 ] = input_4,
+				[ XK_5 ] = input_5,
+				[ XK_6 ] = input_6,
+				[ XK_7 ] = input_7,
+				[ XK_8 ] = input_8,
+				[ XK_9 ] = input_9,
+
+				[ XK_space ] = input_space,
+				[ XK_grave ] = input_backtick,
+				[ XK_minus ] = input_minus,
+				[ XK_equal ] = input_equals,
+				[ XK_bracketleft ] = input_leftbracket,
+				[ XK_bracketright ] = input_rightbracket,
+				[ XK_backslash ] = input_backslash,
+				[ XK_semicolon ] = input_semicolon,
+				[ XK_apostrophe ] = input_apostrophe,
+				[ XK_comma ] = input_comma,
+				[ XK_period ] = input_period,
+				[ XK_slash ] = input_slash,
+
+				[ XK_COMPRESS( XK_F1 ) ] = input_f1,
+				[ XK_COMPRESS( XK_F2 ) ] = input_f2,
+				[ XK_COMPRESS( XK_F3 ) ] = input_f3,
+				[ XK_COMPRESS( XK_F4 ) ] = input_f4,
+				[ XK_COMPRESS( XK_F5 ) ] = input_f5,
+				[ XK_COMPRESS( XK_F6 ) ] = input_f6,
+				[ XK_COMPRESS( XK_F7 ) ] = input_f7,
+				[ XK_COMPRESS( XK_F8 ) ] = input_f8,
+				[ XK_COMPRESS( XK_F9 ) ] = input_f9,
+				[ XK_COMPRESS( XK_F10 ) ] = input_f10,
+				[ XK_COMPRESS( XK_F11 ) ] = input_f11,
+				[ XK_COMPRESS( XK_F12 ) ] = input_f12,
+
+				[ XK_COMPRESS( XK_BackSpace ) ] = input_backspace,
+				[ XK_COMPRESS( XK_Tab ) ] = input_tab,
+				[ XK_COMPRESS( XK_Return ) ] = input_enter,
+				[ XK_COMPRESS( XK_Escape ) ] = input_escape,
+				[ XK_COMPRESS( XK_Delete ) ] = input_delete,
+				[ XK_COMPRESS( XK_Insert ) ] = input_insert,
+
+				[ XK_COMPRESS( XK_Home ) ] = input_home,
+				[ XK_COMPRESS( XK_End ) ] = input_end,
+				[ XK_COMPRESS( XK_Page_Up ) ] = input_pageup,
+				[ XK_COMPRESS( XK_Page_Down ) ] = input_pagedown,
+				[ XK_COMPRESS( XK_Left ) ] = input_left,
+				[ XK_COMPRESS( XK_Up ) ] = input_up,
+				[ XK_COMPRESS( XK_Right ) ] = input_right,
+				[ XK_COMPRESS( XK_Down ) ] = input_down,
+
+				[ XK_COMPRESS( XK_Shift_L ) ] = input_shift,
+				[ XK_COMPRESS( XK_Shift_R ) ] = input_shift,
+				[ XK_COMPRESS( XK_Control_L ) ] = input_ctrl,
+				[ XK_COMPRESS( XK_Control_R ) ] = input_ctrl,
+				[ XK_COMPRESS( XK_Caps_Lock ) ] = input_capslock,
+				[ XK_COMPRESS( XK_Alt_L ) ] = input_alt,
+				[ XK_COMPRESS( XK_Alt_R ) ] = input_alt,
+				[ XK_COMPRESS( XK_Super_L ) ] = input_super,
+				[ XK_COMPRESS( XK_Super_R ) ] = input_super,
+				[ XK_COMPRESS( XK_Menu ) ] = input_menu,
+			};
+	#elif OS_WINDOWS
+		perm const byte INPUT_MAP[] =
+			{
+				[ 'A' ] = input_a,
+				[ 'B' ] = input_b,
+				[ 'C' ] = input_c,
+				[ 'D' ] = input_d,
+				[ 'E' ] = input_e,
+				[ 'F' ] = input_f,
+				[ 'G' ] = input_g,
+				[ 'H' ] = input_h,
+				[ 'I' ] = input_i,
+				[ 'J' ] = input_j,
+				[ 'K' ] = input_k,
+				[ 'L' ] = input_l,
+				[ 'M' ] = input_m,
+				[ 'N' ] = input_n,
+				[ 'O' ] = input_o,
+				[ 'P' ] = input_p,
+				[ 'Q' ] = input_q,
+				[ 'R' ] = input_r,
+				[ 'S' ] = input_s,
+				[ 'T' ] = input_t,
+				[ 'U' ] = input_u,
+				[ 'V' ] = input_v,
+				[ 'W' ] = input_w,
+				[ 'X' ] = input_x,
+				[ 'Y' ] = input_y,
+				[ 'Z' ] = input_z,
+
+				[ '0' ] = input_0,
+				[ '1' ] = input_1,
+				[ '2' ] = input_2,
+				[ '3' ] = input_3,
+				[ '4' ] = input_4,
+				[ '5' ] = input_5,
+				[ '6' ] = input_6,
+				[ '7' ] = input_7,
+				[ '8' ] = input_8,
+				[ '9' ] = input_9,
+
+				[ VK_F1 ] = input_f1,
+				[ VK_F2 ] = input_f2,
+				[ VK_F3 ] = input_f3,
+				[ VK_F4 ] = input_f4,
+				[ VK_F5 ] = input_f5,
+				[ VK_F6 ] = input_f6,
+				[ VK_F7 ] = input_f7,
+				[ VK_F8 ] = input_f8,
+				[ VK_F9 ] = input_f9,
+				[ VK_F10 ] = input_f10,
+				[ VK_F11 ] = input_f11,
+				[ VK_F12 ] = input_f12,
+
+				[ VK_SPACE ] = input_space,
+				[ VK_ESCAPE ] = input_escape,
+				[ VK_TAB ] = input_tab,
+				[ VK_CAPITAL ] = input_capslock,
+				[ VK_SHIFT ] = input_shift,
+				[ VK_CONTROL ] = input_ctrl,
+				[ VK_MENU ] = input_alt,
+				[ VK_RETURN ] = input_enter,
+				[ VK_BACK ] = input_backspace,
+				[ VK_INSERT ] = input_insert,
+				[ VK_DELETE ] = input_delete,
+				[ VK_HOME ] = input_home,
+				[ VK_END ] = input_end,
+				[ VK_PRIOR ] = input_pageup,
+				[ VK_NEXT ] = input_pagedown,
+
+				[ VK_UP ] = input_up,
+				[ VK_DOWN ] = input_down,
+				[ VK_LEFT ] = input_left,
+				[ VK_RIGHT ] = input_right,
+
+				[ VK_OEM_3 ] = input_backtick,
+				[ VK_OEM_MINUS ] = input_minus,
+				[ VK_OEM_PLUS ] = input_equals,
+				[ VK_OEM_4 ] = input_leftbracket,
+				[ VK_OEM_6 ] = input_rightbracket,
+				[ VK_OEM_5 ] = input_backslash,
+				[ VK_OEM_1 ] = input_semicolon,
+				[ VK_OEM_7 ] = input_apostrophe,
+				[ VK_OEM_COMMA ] = input_comma,
+				[ VK_OEM_PERIOD ] = input_period,
+				[ VK_OEM_2 ] = input_slash,
+
+				[ VK_LWIN ] = input_super,
+				[ VK_RWIN ] = input_super,
+				[ VK_APPS ] = input_menu,
+			};
+	#endif
+
+	out to( const byte const_ref, ref_of( INPUT_MAP ) );
+}
+
+fn _C7H16_set_keymap2()
+{
+	/*
+	#if OS_LINUX
+		#define XK_COMPRESS( XK ) ( ( XK ^ ( XK >> 8 ) ) & 0xFF ) + 8
+
+		range( c, XK_a, XK_z )
 		{
-			OS_INPUT[ XK_COMPRESS( XK_a + c - 'a' ) ] = ( c - 'a' ) + input_a;
+			OS_INPUT[ c ] = ( c - XK_a ) + input_a;
+		}
+		//
+		range( c, XK_0, XK_9 )
+		{
+			OS_INPUT[ c ] = ( c - XK_0 ) + input_0;
 		}
 
-		range( c, '0', '9' )
+		range( c, XK_F1, XK_F12 )
 		{
-			OS_INPUT[ XK_COMPRESS( XK_0 + c - '0' ) ] = ( c - '0' ) + input_0;
+			OS_INPUT[ XK_COMPRESS( c ) ] = ( c - XK_F1 ) + input_f1;
 		}
 
-		range( c, 0, 12 )
-		{
-			OS_INPUT[ XK_COMPRESS( XK_F1 + c ) ] = c + input_f1;
-		}
-
-		OS_INPUT[ XK_COMPRESS( XK_space ) ] = input_space;
-		OS_INPUT[ XK_COMPRESS( XK_grave ) ] = input_grave;
-		OS_INPUT[ XK_COMPRESS( XK_minus ) ] = input_minus;
-		OS_INPUT[ XK_COMPRESS( XK_equal ) ] = input_equals;
-		OS_INPUT[ XK_COMPRESS( XK_bracketleft ) ] = input_leftbracket;
-		OS_INPUT[ XK_COMPRESS( XK_bracketright ) ] = input_rightbracket;
-		OS_INPUT[ XK_COMPRESS( XK_backslash ) ] = input_backslash;
-		OS_INPUT[ XK_COMPRESS( XK_semicolon ) ] = input_semicolon;
-		OS_INPUT[ XK_COMPRESS( XK_apostrophe ) ] = input_apostrophe;
-		OS_INPUT[ XK_COMPRESS( XK_comma ) ] = input_comma;
-		OS_INPUT[ XK_COMPRESS( XK_period ) ] = input_period;
-		OS_INPUT[ XK_COMPRESS( XK_slash ) ] = input_slash;
+		OS_INPUT[ XK_space ] = input_space;
+		OS_INPUT[ XK_grave ] = input_backtick;
+		OS_INPUT[ XK_minus ] = input_minus;
+		OS_INPUT[ XK_equal ] = input_equals;
+		OS_INPUT[ XK_bracketleft ] = input_leftbracket;
+		OS_INPUT[ XK_bracketright ] = input_rightbracket;
+		OS_INPUT[ XK_backslash ] = input_backslash;
+		OS_INPUT[ XK_semicolon ] = input_semicolon;
+		OS_INPUT[ XK_apostrophe ] = input_apostrophe;
+		OS_INPUT[ XK_comma ] = input_comma;
+		OS_INPUT[ XK_period ] = input_period;
+		OS_INPUT[ XK_slash ] = input_slash;
 
 		OS_INPUT[ XK_COMPRESS( XK_BackSpace ) ] = input_backspace;
 		OS_INPUT[ XK_COMPRESS( XK_Tab ) ] = input_tab;
@@ -886,6 +1078,12 @@ fn _C7H16_set_keymap()
 		OS_INPUT[ XK_COMPRESS( XK_Super_L ) ] = input_super;
 		OS_INPUT[ XK_COMPRESS( XK_Super_R ) ] = input_super;
 		OS_INPUT[ XK_COMPRESS( XK_Menu ) ] = input_menu;
+
+		perm const byte INPUT[] =
+			{
+				[ XK_a ] = input_a,
+				[ XK_COMPRESS( XK_Menu ) ] = input_down
+			};
 	#elif OS_WINDOWS
 		range( c, 'A', 'Z' )
 		{
@@ -923,7 +1121,7 @@ fn _C7H16_set_keymap()
 		OS_INPUT[ VK_LEFT ] = input_left;
 		OS_INPUT[ VK_RIGHT ] = input_right;
 
-		OS_INPUT[ VK_OEM_3 ] = input_grave;
+		OS_INPUT[ VK_OEM_3 ] = input_backtick;
 		OS_INPUT[ VK_OEM_MINUS ] = input_minus;
 		OS_INPUT[ VK_OEM_PLUS ] = input_equals;
 		OS_INPUT[ VK_OEM_4 ] = input_leftbracket;
@@ -939,13 +1137,25 @@ fn _C7H16_set_keymap()
 		OS_INPUT[ VK_RWIN ] = input_super;
 		OS_INPUT[ VK_APPS ] = input_menu;
 	#endif
+
+	iter( k, 16 )
+	{
+		iter( l, 16 )
+		{
+			printf( "%d, ", OS_INPUT[ l + ( k * 16 ) ] );
+		}
+		print( "\n" );
+	}
+	print_newline();
+	*/
 }
 
 ///////
 
 fn _C7H16_init()
 {
-	_C7H16_set_keymap();
+	_C7H16_input_map();
+	//_C7H16_();
 	//SET_OS_INPUT();
 	//window_list = new_list(window);
 }
