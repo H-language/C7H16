@@ -8,6 +8,7 @@
 
 ///////
 
+#include <X11/XKBlib.h>
 #define C7H16
 
 #include "../H/H.h"
@@ -90,10 +91,10 @@ fn canvas_clear( canvas const_ref c )
 #define fn_line( Ax, Ay, Bx, By, CODE )\
 	START_DEF\
 	{\
-		temp i2 _x = Ax;\
-		temp i2 _y = Ay;\
-		temp i2 _x2 = Bx;\
-		temp i2 _y2 = By;\
+		temp i2 _x = i2(Ax);\
+		temp i2 _y = i2(Ay);\
+		temp i2 _x2 = i2(Bx);\
+		temp i2 _y2 = i2(By);\
 		temp i2 dx = i2_abs( _x2 - _x );\
 		temp i2 sx = pick( _x < _x2, 1, -1 );\
 		temp i2 dy = -i2_abs( _y2 - _y );\
@@ -191,12 +192,28 @@ object( window )
 	r8 fps_target;
 	r8 total_time;
 	r8 delta_time;
+	//
+	byte inputs[ PICK( OS_LINUX, 512, 256 ) ];
+	byte inputs_pressed[ 32 ];
+	n1 inputs_pressed_count;
+	byte inputs_released[ 32 ];
+	n1 inputs_released_count;
 };
 
 global perm window current_window = nothing;
 
 global perm window alive_windows[ 32 ];
 global perm n1 alive_windows_count = 0;
+
+global perm const byte ref OS_INPUT_MAP = nothing;
+
+#define INPUT_MASK_PRESSED 0x1
+#define INPUT_MASK_HELD 0x2
+#define INPUT_MASK_RELEASED 0x4
+
+#define key_pressed( KEY ) ( current_window->inputs[ input_##KEY ] &INPUT_MASK_PRESSED )
+#define key_held( KEY ) ( current_window->inputs[ input_##KEY ] &INPUT_MASK_HELD )
+#define key_released( KEY ) ( current_window->inputs[ input_##KEY ] &INPUT_MASK_RELEASED )
 
 object_fn( window, set_start_fn, const window_fn start_fn )
 {
@@ -455,6 +472,29 @@ fn _window_update( const window this )
 			}
 		#endif
 	}
+
+	//
+
+	if( this->inputs_pressed_count > 0 )
+	{
+		iter( input, this->inputs_pressed_count )
+		{
+			this->inputs[ this->inputs_pressed[ input ] ] = INPUT_MASK_HELD;
+			this->inputs_pressed[ input ] = 0;
+		}
+		this->inputs_pressed_count = 0;
+	}
+
+	if( this->inputs_released_count > 0 )
+	{
+		iter( input, this->inputs_released_count )
+		{
+			this->inputs[ this->inputs_released[ input ] ] = 0;
+			this->inputs_released[ input ] = 0;
+		}
+		this->inputs_released_count = 0;
+	}
+
 	//
 
 	temp const nano target_end = this->start_nano + ( this->tick * this->target_frame_nano );
@@ -470,7 +510,9 @@ group( window_event_type, n2 )
 {
 	window_event_resize = PICK( OS_LINUX, ConfigureNotify, WM_SIZE ),
 	window_event_refresh = PICK( OS_LINUX, Expose, WM_PAINT ),
-	window_event_close = PICK( OS_LINUX, ClientMessage, WM_DESTROY )
+	window_event_close = PICK( OS_LINUX, ClientMessage, WM_DESTROY ),
+	window_event_key_activate = PICK( OS_LINUX, KeyPress, WM_KEYDOWN ),
+	window_event_key_deactivate = PICK( OS_LINUX, KeyRelease, WM_KEYUP )
 };
 
 #if OS_LINUX
@@ -484,6 +526,8 @@ group( window_event_type, n2 )
 	#endif
 	//
 	jump_if_nothing( w ) exit_events;
+	//
+	temp flag is_input = no;
 	//
 	with( event )
 	{
@@ -553,6 +597,32 @@ group( window_event_type, n2 )
 			skip;
 		}
 
+		when( window_event_key_activate )
+		{
+			temp const byte key = OS_INPUT_MAP[ PICK( OS_LINUX, XkbKeycodeToKeysym( w->display, e->xkey.keycode, 0, 0 ) & 0x1FF, wp & 0xff ) ];
+			if( key isnt 0 and not(w->inputs[ key ] & INPUT_MASK_HELD) )
+			{
+				w->inputs[ key ] |= INPUT_MASK_PRESSED | INPUT_MASK_HELD;
+				w->inputs_pressed[ w->inputs_pressed_count++ ] = key;
+			}
+			//
+			is_input = yes;
+			skip;
+		}
+
+		when( window_event_key_deactivate )
+		{
+			temp const byte key = OS_INPUT_MAP[ PICK( OS_LINUX, XkbKeycodeToKeysym( w->display, e->xkey.keycode, 0, 0 ) & 0x1FF, wp & 0xff ) ];
+			if( key isnt 0 )
+			{
+				w->inputs[ key ] = INPUT_MASK_RELEASED;
+				w->inputs_released[ w->inputs_released_count++ ] = key;
+			}
+			//
+			is_input = yes;
+			skip;
+		}
+
 		when( window_event_close )
 		{
 			#if OS_WINDOWS
@@ -563,6 +633,11 @@ group( window_event_type, n2 )
 		}
 
 		other skip;
+	}
+	//
+	if( is_input is yes )
+	{
+		call( w, input_fn );
 	}
 	//
 	exit_events:
@@ -592,7 +667,8 @@ embed window new_window( const n2 width, const n2 height )
 		out_window->handle = XCreateSimpleWindow( out_window->display, RootWindow( out_window->display, screen ), 0, 0, width, height, 0, 0, 0 );
 
 		XSetWindowBackgroundPixmap( out_window->display, out_window->handle, None );
-		XSelectInput( out_window->display, out_window->handle, ExposureMask | StructureNotifyMask );
+		XSelectInput( out_window->display, out_window->handle, ExposureMask | StructureNotifyMask | KeyPressMask | KeyReleaseMask );
+		XkbSetDetectableAutoRepeat( out_window->display, yes, nothing );
 
 		out_window->image = XCreateImage( out_window->display, DefaultVisual( out_window->display, screen ), DefaultDepth( out_window->display, screen ), ZPixmap, 0, to( byte ref, out_window->buffer.pixels ), width, height, 32, 0 );
 		out_window->gc = XCreateGC( out_window->display, out_window->handle, 0, 0 );
@@ -688,9 +764,11 @@ object_fn( window, refresh )
 
 object_fn( window, process )
 {
+	current_canvas_ref = ref_of(this->buffer);
+
 	if( this->tick is 0 )
 	{
-		this->fps_target = 60;
+		this->fps_target = 120;
 		this->target_frame_nano = to( nano, r8( nano_per_sec ) / this->fps_target );
 		this->start_nano = get_nano();
 		this->past_nano = this->start_nano;
@@ -829,7 +907,7 @@ embed const byte const_ref _C7H16_input_map()
 {
 	#if OS_LINUX
 		#define XK_COMPRESS( XK ) ( XK & 0x1ff )
-		perm const byte INPUT_MAP[] =
+		perm const byte _INPUT_MAP[] =
 			{
 				[ XK_a ] = input_a,
 				[ XK_b ] = input_b,
@@ -923,7 +1001,7 @@ embed const byte const_ref _C7H16_input_map()
 				[ XK_COMPRESS( XK_Menu ) ] = input_menu,
 			};
 	#elif OS_WINDOWS
-		perm const byte INPUT_MAP[] =
+		perm const byte _INPUT_MAP[] =
 			{
 				[ 'A' ] = input_a,
 				[ 'B' ] = input_b,
@@ -1015,146 +1093,14 @@ embed const byte const_ref _C7H16_input_map()
 			};
 	#endif
 
-	out to( const byte const_ref, ref_of( INPUT_MAP ) );
-}
-
-fn _C7H16_set_keymap2()
-{
-	/*
-	#if OS_LINUX
-		#define XK_COMPRESS( XK ) ( ( XK ^ ( XK >> 8 ) ) & 0xFF ) + 8
-
-		range( c, XK_a, XK_z )
-		{
-			OS_INPUT[ c ] = ( c - XK_a ) + input_a;
-		}
-		//
-		range( c, XK_0, XK_9 )
-		{
-			OS_INPUT[ c ] = ( c - XK_0 ) + input_0;
-		}
-
-		range( c, XK_F1, XK_F12 )
-		{
-			OS_INPUT[ XK_COMPRESS( c ) ] = ( c - XK_F1 ) + input_f1;
-		}
-
-		OS_INPUT[ XK_space ] = input_space;
-		OS_INPUT[ XK_grave ] = input_backtick;
-		OS_INPUT[ XK_minus ] = input_minus;
-		OS_INPUT[ XK_equal ] = input_equals;
-		OS_INPUT[ XK_bracketleft ] = input_leftbracket;
-		OS_INPUT[ XK_bracketright ] = input_rightbracket;
-		OS_INPUT[ XK_backslash ] = input_backslash;
-		OS_INPUT[ XK_semicolon ] = input_semicolon;
-		OS_INPUT[ XK_apostrophe ] = input_apostrophe;
-		OS_INPUT[ XK_comma ] = input_comma;
-		OS_INPUT[ XK_period ] = input_period;
-		OS_INPUT[ XK_slash ] = input_slash;
-
-		OS_INPUT[ XK_COMPRESS( XK_BackSpace ) ] = input_backspace;
-		OS_INPUT[ XK_COMPRESS( XK_Tab ) ] = input_tab;
-		OS_INPUT[ XK_COMPRESS( XK_Return ) ] = input_enter;
-		OS_INPUT[ XK_COMPRESS( XK_Escape ) ] = input_escape;
-		OS_INPUT[ XK_COMPRESS( XK_Delete ) ] = input_delete;
-		OS_INPUT[ XK_COMPRESS( XK_Insert ) ] = input_insert;
-
-		OS_INPUT[ XK_COMPRESS( XK_Home ) ] = input_home;
-		OS_INPUT[ XK_COMPRESS( XK_End ) ] = input_end;
-		OS_INPUT[ XK_COMPRESS( XK_Page_Up ) ] = input_pageup;
-		OS_INPUT[ XK_COMPRESS( XK_Page_Down ) ] = input_pagedown;
-		OS_INPUT[ XK_COMPRESS( XK_Left ) ] = input_left;
-		OS_INPUT[ XK_COMPRESS( XK_Up ) ] = input_up;
-		OS_INPUT[ XK_COMPRESS( XK_Right ) ] = input_right;
-		OS_INPUT[ XK_COMPRESS( XK_Down ) ] = input_down;
-
-		OS_INPUT[ XK_COMPRESS( XK_Shift_L ) ] = input_shift;
-		OS_INPUT[ XK_COMPRESS( XK_Shift_R ) ] = input_shift;
-		OS_INPUT[ XK_COMPRESS( XK_Control_L ) ] = input_ctrl;
-		OS_INPUT[ XK_COMPRESS( XK_Control_R ) ] = input_ctrl;
-		OS_INPUT[ XK_COMPRESS( XK_Caps_Lock ) ] = input_capslock;
-		OS_INPUT[ XK_COMPRESS( XK_Alt_L ) ] = input_alt;
-		OS_INPUT[ XK_COMPRESS( XK_Alt_R ) ] = input_alt;
-		OS_INPUT[ XK_COMPRESS( XK_Super_L ) ] = input_super;
-		OS_INPUT[ XK_COMPRESS( XK_Super_R ) ] = input_super;
-		OS_INPUT[ XK_COMPRESS( XK_Menu ) ] = input_menu;
-
-		perm const byte INPUT[] =
-			{
-				[ XK_a ] = input_a,
-				[ XK_COMPRESS( XK_Menu ) ] = input_down
-			};
-	#elif OS_WINDOWS
-		range( c, 'A', 'Z' )
-		{
-			OS_INPUT[ c ] = ( c - 'A' ) + input_a;
-		}
-
-		range( c, '0', '9' )
-		{
-			OS_INPUT[ c ] = ( c - '0' ) + input_0;
-		}
-
-		range( c, 0, 12 )
-		{
-			OS_INPUT[ VK_F1 + c ] = c + input_f1;
-		}
-
-		OS_INPUT[ VK_SPACE ] = input_space;
-		OS_INPUT[ VK_ESCAPE ] = input_escape;
-		OS_INPUT[ VK_TAB ] = input_tab;
-		OS_INPUT[ VK_CAPITAL ] = input_capslock;
-		OS_INPUT[ VK_SHIFT ] = input_shift;
-		OS_INPUT[ VK_CONTROL ] = input_ctrl;
-		OS_INPUT[ VK_MENU ] = input_alt;
-		OS_INPUT[ VK_RETURN ] = input_enter;
-		OS_INPUT[ VK_BACK ] = input_backspace;
-		OS_INPUT[ VK_INSERT ] = input_insert;
-		OS_INPUT[ VK_DELETE ] = input_delete;
-		OS_INPUT[ VK_HOME ] = input_home;
-		OS_INPUT[ VK_END ] = input_end;
-		OS_INPUT[ VK_PRIOR ] = input_pageup;
-		OS_INPUT[ VK_NEXT ] = input_pagedown;
-
-		OS_INPUT[ VK_UP ] = input_up;
-		OS_INPUT[ VK_DOWN ] = input_down;
-		OS_INPUT[ VK_LEFT ] = input_left;
-		OS_INPUT[ VK_RIGHT ] = input_right;
-
-		OS_INPUT[ VK_OEM_3 ] = input_backtick;
-		OS_INPUT[ VK_OEM_MINUS ] = input_minus;
-		OS_INPUT[ VK_OEM_PLUS ] = input_equals;
-		OS_INPUT[ VK_OEM_4 ] = input_leftbracket;
-		OS_INPUT[ VK_OEM_6 ] = input_rightbracket;
-		OS_INPUT[ VK_OEM_5 ] = input_backslash;
-		OS_INPUT[ VK_OEM_1 ] = input_semicolon;
-		OS_INPUT[ VK_OEM_7 ] = input_apostrophe;
-		OS_INPUT[ VK_OEM_COMMA ] = input_comma;
-		OS_INPUT[ VK_OEM_PERIOD ] = input_period;
-		OS_INPUT[ VK_OEM_2 ] = input_slash;
-
-		OS_INPUT[ VK_LWIN ] = input_super;
-		OS_INPUT[ VK_RWIN ] = input_super;
-		OS_INPUT[ VK_APPS ] = input_menu;
-	#endif
-
-	iter( k, 16 )
-	{
-		iter( l, 16 )
-		{
-			printf( "%d, ", OS_INPUT[ l + ( k * 16 ) ] );
-		}
-		print( "\n" );
-	}
-	print_newline();
-	*/
+	out to( const byte const_ref, ref_of( _INPUT_MAP ) );
 }
 
 ///////
 
 fn _C7H16_init()
 {
-	_C7H16_input_map();
+	OS_INPUT_MAP = _C7H16_input_map();
 	//_C7H16_();
 	//SET_OS_INPUT();
 	//window_list = new_list(window);
