@@ -8,7 +8,6 @@
 
 ///////
 
-#include <X11/XKBlib.h>
 #define C7H16
 
 #include "../H/H.h"
@@ -91,10 +90,10 @@ fn canvas_clear( canvas const_ref c )
 #define fn_line( Ax, Ay, Bx, By, CODE )\
 	START_DEF\
 	{\
-		temp i2 _x = i2(Ax);\
-		temp i2 _y = i2(Ay);\
-		temp i2 _x2 = i2(Bx);\
-		temp i2 _y2 = i2(By);\
+		temp i2 _x = i2( Ax );\
+		temp i2 _y = i2( Ay );\
+		temp i2 _x2 = i2( Bx );\
+		temp i2 _y2 = i2( By );\
 		temp i2 dx = i2_abs( _x2 - _x );\
 		temp i2 sx = pick( _x < _x2, 1, -1 );\
 		temp i2 dy = -i2_abs( _y2 - _y );\
@@ -122,12 +121,19 @@ fn canvas_clear( canvas const_ref c )
 	}\
 	END_DEF
 
-#define _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, SAFE... ) fn_line( Ax, Ay, Bx, By, canvas_draw_pixel##SAFE( CANVAS, _x, _y, PIXEL ) );
+#define _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, SUFFIX... ) fn_line( Ax, Ay, Bx, By, canvas_draw_pixel##SUFFIX( CANVAS, _x, _y, PIXEL ) );
 #define canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL )
 #define canvas_draw_line_safe( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, _safe )
 
 #define draw_line( Ax, Ay, Bx, By, PIXEL ) canvas_draw_line( val_of( current_canvas_ref ), Ax, Ay, Bx, By, PIXEL )
 #define draw_line_safe( Ax, Ay, Bx, By, PIXEL ) canvas_draw_line_safe( val_of( current_canvas_ref ), Ax, Ay, Bx, By, PIXEL )
+
+//
+
+#define _wrap_coord( COORD, SIZE ) ( ( ( COORD ) + ( SIZE ) ) mod ( SIZE ) )
+#define canvas_draw_pixel_wrap( CANVAS, X, Y, PIXEL ) canvas_draw_pixel( CANVAS, _wrap_coord( i4( X ), i4( CANVAS.size.w ) ), _wrap_coord( i4( Y ), i4( CANVAS.size.h ) ), PIXEL )
+#define canvas_draw_line_wrap( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, _wrap )
+#define draw_line_wrap( Ax, Ay, Bx, By, PIXEL ) canvas_draw_line_wrap( val_of( current_canvas_ref ), Ax, Ay, Bx, By, PIXEL )
 
 ///////
 
@@ -600,7 +606,7 @@ group( window_event_type, n2 )
 		when( window_event_key_activate )
 		{
 			temp const byte key = OS_INPUT_MAP[ PICK( OS_LINUX, XkbKeycodeToKeysym( w->display, e->xkey.keycode, 0, 0 ) & 0x1FF, wp & 0xff ) ];
-			if( key isnt 0 and not(w->inputs[ key ] & INPUT_MASK_HELD) )
+			if( key isnt 0 and not( w->inputs[ key ] &INPUT_MASK_HELD ) )
 			{
 				w->inputs[ key ] |= INPUT_MASK_PRESSED | INPUT_MASK_HELD;
 				w->inputs_pressed[ w->inputs_pressed_count++ ] = key;
@@ -764,7 +770,7 @@ object_fn( window, refresh )
 
 object_fn( window, process )
 {
-	current_canvas_ref = ref_of(this->buffer);
+	current_canvas_ref = ref_of( this->buffer );
 
 	if( this->tick is 0 )
 	{
@@ -773,6 +779,7 @@ object_fn( window, process )
 		this->start_nano = get_nano();
 		this->past_nano = this->start_nano;
 		call( this, start_fn );
+		_window_resize( this );
 	}
 	else if( this->tick is 1 )
 	{
@@ -1094,6 +1101,305 @@ embed const byte const_ref _C7H16_input_map()
 	#endif
 
 	out to( const byte const_ref, ref_of( _INPUT_MAP ) );
+}
+
+///////
+
+group( audio_channel )
+{
+	audio_channel_mono = 1,
+	audio_channel_stereo = 2
+};
+
+type( audio )
+{
+	r4 ref data;
+	n4 frames;
+	audio_channel channel;
+};
+
+embed audio load_audio( const byte const_ref wav_path )
+{
+	temp audio out_audio = { 0 };
+	file f = map_file( wav_path );
+	out_if_nothing( f.mapped_bytes ) out_audio;
+	//
+	temp const n2 const_ref fmt = to( n2 ref, f.mapped_bytes + 20 );
+	temp const n2 audio_format = fmt[ 0 ];
+	temp const n2 channels = fmt[ 1 ];
+	temp const n4 sample_rate = val_of( to( n4 ref, f.mapped_bytes + 24 ) );
+	temp const n2 bits = val_of( to( n2 ref, f.mapped_bytes + 34 ) );
+
+	temp const byte ref ptr = f.mapped_bytes + 36;
+	temp n4 data_size = 0;
+	while( ptr < f.mapped_bytes + f.size )
+	{
+		if( bytes_compare( ptr, "data", 4 ) is 0 )
+		{
+			data_size = val_of( to( n4 ref, ptr + 4 ) );
+			ptr += 8;
+			skip;
+		}
+		ptr += 8 + val_of( to( n4 ref, ptr + 4 ) );
+	}
+
+	out_if( data_size is 0 ) out_audio;
+
+	temp const n4 samples = data_size / ( bits / 8 );
+	out_audio.frames = samples / channels;
+	out_audio.channel = to( audio_channel, channels );
+	out_audio.data = new_bytes( samples * 4 );
+
+	if( bits is 16 )
+	{
+		temp const i2 const_ref src = to( i2 const_ref, ptr );
+		iter( s, samples )
+		{
+			out_audio.data[ s ] = r4( src[ s ] ) / 32768.0;
+		}
+	}
+	else
+	{ // 8 bits
+		temp const n1 const_ref src = to( n1 const_ref, ptr );
+		iter( s, samples )
+		{
+			out_audio.data[ s ] = ( r4( src[ s ] ) - 128.0 ) / 128.0;
+		}
+	}
+
+	file_unmap( ref_of( f ) );
+
+	out out_audio;
+}
+
+fn delete_audio( audio ref a )
+{
+	delete_ref( a->data );
+}
+
+type( audio_instance )
+{
+	audio ref audio_ref;
+	flag playing;
+	n4 position;
+	r4 volume;
+	r4 pan;
+};
+
+#ifndef audio_max_instances
+	#define audio_max_instances 32
+#endif
+
+#if OS_WINDOWS
+	#if COMPILER_TCC
+		type( WAVEFORMATEX )
+		{
+			WORD wFormatTag,
+			nChannels;
+			DWORD nSamplesPerSec,
+			nAvgBytesPerSec;
+			WORD nBlockAlign,
+			wBitsPerSample;
+		};
+
+		type( WAVEHDR )
+		{
+			LPSTR lpData;
+			DWORD dwBufferLength,
+			dwBytesRecorded;
+			DWORD_PTR dwUser;
+			DWORD dwFlags,
+			dwLoops;
+			anon ref lpNext;
+			DWORD_PTR reserved;
+		};
+
+		type_from( anon ref ) HWAVEOUT;
+	#endif
+	//
+	perm n4( WINAPI ref waveOpen ) ( HWAVEOUT ref, n4, WAVEFORMATEX ref, DWORD_PTR, DWORD_PTR, DWORD );
+	perm n4( WINAPI ref waveClose ) ( HWAVEOUT );
+	perm n4( WINAPI ref waveWrite ) ( HWAVEOUT, WAVEHDR ref, n4 );
+	perm n4( WINAPI ref wavePrepare ) ( HWAVEOUT, WAVEHDR ref, n4 );
+	perm HMODULE winmm_dll = nothing;
+#endif
+
+type( audio_mixer )
+{
+	audio_instance instances[ audio_max_instances ];
+	anon ref device;
+	thread process;
+	thread_lock lock;
+	flag running;
+	//
+	#if OS_WINDOWS
+		anon ref hdr[ 2 ];
+	#endif
+};
+
+fn audio_mixer_process( audio_mixer ref m, i2 ref output, n4 samples )
+{
+	perm r4 buffer[ 8192 ];
+	perm n2 last_used = 0;
+
+	temp const n4 samples2 = samples << 1;
+
+	if( last_used isnt samples2 )
+	{
+		bytes_clear( buffer, pick( last_used > samples2, last_used, samples2 ) * size_of( r4 ) );
+		last_used = samples2;
+	}
+	else
+	{
+		bytes_clear( buffer, samples2 * size_of( r4 ) );
+	}
+
+	iter( instance_id, audio_max_instances )
+	{
+		temp audio_instance const_ref i = ref_of( m->instances[ instance_id ] );
+		next_if( i->playing is no );
+		temp const i4 frames = pick( samples < ( i->audio_ref->frames - i->position ), samples, i->audio_ref->frames - i->position );
+		temp const r4 left_gain = i->volume * ( 1.0 - i->pan ) / 2.0;
+		temp const r4 right_gain = i->volume * ( 1.0 + i->pan ) / 2.0;
+
+		iter( f, frames )
+		{
+			temp const r4 const_ref p = ref_of( i->audio_ref->data[ ( i->position + f ) * n4( i->audio_ref->channel ) ] );
+			buffer[ f << 1 ] += p[ 0 ] * left_gain;
+			buffer[ ( f << 1 ) + 1 ] += p[ i->audio_ref->channel - 1 ] * right_gain;
+		}
+		if( ( i->position += frames ) >= i->audio_ref->frames ) i->playing = no;
+	}
+
+	iter( sample, samples2 )
+	{
+		temp const r4 s = buffer[ sample ];
+		output[ sample ] = pick( s > 1, max_i2, pick( s < -1, -max_i2, s * max_i2 ) );
+	}
+}
+
+embed anon ref audio_mixer_thread_fn( anon ref p )
+{
+	audio_mixer ref m = to( audio_mixer ref, p );
+	i2 buffer[ 4096 ];
+	while( m->running )
+	{
+		lock_thread( m->lock );
+		audio_mixer_process( m, buffer, 2048 );
+		unlock_thread( m->lock );
+		#if OS_LINUX
+			snd_pcm_writei( m->device, buffer, 2048 );
+		#elif OS_WINDOWS
+			WAVEHDR hdr = { to( byte ref, buffer ), 8192, 0, 0, 0, 0, 0, 0 };
+			wavePrepare( m->dev, ref_of( hdr ), size_of( WAVEHDR ) );
+			waveWrite( m->dev, ref_of( hdr ), size_of( WAVEHDR ) );
+			while( not( hdr.dwFlags & 1 ) ) Sleep( 1 );
+		#endif
+	}
+	return nothing;
+}
+
+embed out_state audio_mixer_start( audio_mixer ref m )
+{
+	bytes_clear( m, size_of( audio_mixer ) );
+	thread_add_lock( m->lock );
+
+	#if OS_LINUX
+		if( snd_pcm_open( to( snd_pcm_t ref ref, ref_of( m->device ) ), "default", 0, 0 ) < 0 )
+		{
+			out failure;
+		}
+		snd_pcm_set_params( m->device, 2, 3, 2, 44100, 1, 100000 );
+	#elif OS_WINDOWS
+		if_nothing( winmm_dll )
+		{
+			winmm_dll = LoadLibrary( "winmm.dll" );
+			if_nothing( winmm_dll ) return failure;
+			waveOpen = GetProcAddress( winmm_dll, "waveOutOpen" );
+			waveClose = GetProcAddress( winmm_dll, "waveOutClose" );
+			waveWrite = GetProcAddress( winmm_dll, "waveOutWrite" );
+			wavePrepare = GetProcAddress( winmm_dll, "waveOutPrepareHeader" );
+		}
+
+		WAVEFORMATEX fmt = { 1, 2, 44100, 176400, 4, 16 };
+		if( waveOpen( to( HWAVEOUT ref, ref_of( m->device ), -1, ref_of( fmt ), 0, 0, 0 ) ) )
+		{
+			out failure;
+		}
+
+		iter( i, 2 )
+		{
+			WAVEHDR ref h = new_ref( WAVEHDR );
+			h->lpData = new_bytes( 8192 );
+			h->dwBufferLength = 8192;
+			wavePrepare( m->dev, h, size_of( WAVEHDR ) );
+			m->hdr[ i ] = h;
+		}
+	#endif
+
+	m->running = yes;
+	m->process = new_cpu_thread( audio_mixer_thread_fn, m );
+	out success;
+}
+
+fn audio_mixer_stop( audio_mixer ref m )
+{
+	m->running = no;
+	thread_join( m->process );
+
+	#if OS_LINUX
+		snd_pcm_close( m->device );
+	#elif OS_WINDOWS
+		waveClose( m->dev );
+		iter( i, 2 )
+		{
+			WAVEHDR ref h = m->hdr[ i ];
+			if( h )
+			{
+				delete_ref( h->lpData );
+				delete_ref( h );
+			}
+		}
+	#endif
+
+	thread_remove_lock( m->lock );
+}
+
+type_from( i4 ) audio_id;
+
+embed audio_id audio_play( audio_mixer const_ref mixer, const audio const_ref a, const r4 volume, const r4 pan )
+{
+	lock_thread( mixer->lock );
+	iter( id, audio_max_instances )
+	{
+		next_if( mixer->instances[ id ] .playing is yes );
+		//
+		mixer->instances[ id ] = make( audio_instance, .audio_ref = a, .position = 0, .playing = yes, .volume = volume, .pan = pan );
+		unlock_thread( mixer->lock );
+		out id;
+	}
+	//
+	unlock_thread( mixer->lock );
+	out -1;
+}
+
+fn audio_stop( audio_mixer const_ref mixer, audio_id id )
+{
+	if(id >= 0 and id < audio_max_instances)
+	{
+		mixer->instances[ id ].playing = no;
+	}
+}
+
+fn audio_set( audio_mixer const_ref mixer, audio_id id, const r4 volume, const r4 pan )
+{
+	if_all(id >= 0, id < audio_max_instances, mixer->instances[id].playing is yes)
+	{
+		lock_thread(mixer->lock);
+		mixer->instances[ id ].volume = volume;
+		mixer->instances[ id ].pan = pan;
+		unlock_thread(mixer->lock);
+	}
 }
 
 ///////
