@@ -1231,12 +1231,13 @@ type( audio_mixer )
 {
 	audio_instance instances[ audio_max_instances ];
 	anon ref device;
-	thread process;
 	thread_lock lock;
 	flag running;
 	//
-	#if OS_WINDOWS
-		anon ref hdr[ 2 ];
+	#if OS_LINUX
+		thread process;
+	#elif OS_WINDOWS
+		WAVEHDR hdr[ 2 ];
 	#endif
 };
 
@@ -1281,62 +1282,47 @@ fn audio_mixer_process( audio_mixer ref m, i2 ref output, n4 samples )
 	}
 }
 
-embed anon ref audio_mixer_thread_fn( anon ref p )
+#if OS_LINUX
+	fn audio_mixer_thread_fn( anon ref p )
+#elif OS_WINDOWS
+	fn CALLBACK audio_mixer_thread_fn( HWAVEOUT h, UINT msg, DWORD_PTR i, DWORD_PTR p1, DWORD_PTR p2 )
+#endif
 {
-	audio_mixer ref m = to( audio_mixer ref, p );
-
-	#if OS_WINDOWS
-		i2 buffer1[ 4096 ];
-		i2 buffer2[ 4096 ];
-		WAVEHDR hdr1 = { to( byte ref, buffer1 ), 8192, 0, 0, 0, 0, 0, 0 };
-		WAVEHDR hdr2 = { to( byte ref, buffer2 ), 8192, 0, 0, 0, 0, 0, 0 };
-
-		lock_thread( m->lock );
-		audio_mixer_process( m, buffer1, 2048 );
-		unlock_thread( m->lock );
-		wavePrepare( m->device, ref_of( hdr1 ), size_of( WAVEHDR ) );
-		waveWrite( m->device, ref_of( hdr1 ), size_of( WAVEHDR ) );
-
-		i4 current_buffer = 2;
-	#else
+	#if OS_LINUX
+		audio_mixer ref m = to( audio_mixer ref, p );
 		i2 buffer[ 4096 ];
-	#endif
 
-	while( m->running )
-	{
-		#if OS_LINUX
+		while( m->running )
+		{
 			lock_thread( m->lock );
 			audio_mixer_process( m, buffer, 2048 );
 			unlock_thread( m->lock );
 			snd_pcm_writei( m->device, buffer, 2048 );
-		#elif OS_WINDOWS
-			i2 ref current_buf = ( current_buffer == 1 ) ? buffer1 : buffer2;
-			WAVEHDR ref current_hdr = ( current_buffer == 1 ) ? ref_of( hdr1 ) : ref_of( hdr2 );
-			WAVEHDR ref prev_hdr = ( current_buffer == 1 ) ? ref_of( hdr2 ) : ref_of( hdr1 );
+		}
+	#elif OS_WINDOWS
+		if( msg is 0x3BD )
+		{
+			audio_mixer ref m = to( audio_mixer ref, i );
+			WAVEHDR ref hdr = to( WAVEHDR ref, p1 );
 
-			lock_thread( m->lock );
-			audio_mixer_process( m, current_buf, 2048 );
-			unlock_thread( m->lock );
-
-			wavePrepare( m->device, current_hdr, size_of( WAVEHDR ) );
-			waveWrite( m->device, current_hdr, size_of( WAVEHDR ) );
-
-			if( ( prev_hdr->dwFlags & 1 ) is 0 )
+			if( m->running )
 			{
-				while( not( prev_hdr->dwFlags & 1 ) ) Sleep( 1 );
-				waveUnprepare( m->device, prev_hdr, size_of( WAVEHDR ) );
+				lock_thread( m->lock );
+				audio_mixer_process( m, to( i2 ref, hdr->lpData ), 2048 );
+				unlock_thread( m->lock );
+				waveWrite( m->device, hdr, size_of( WAVEHDR ) );
 			}
+		}
+	#endif
 
-			current_buffer = ( current_buffer is 1 ) ? 2 : 1;
-		#endif
-	}
-	out nothing;
+	out;
 }
 
 embed out_state audio_mixer_start( audio_mixer ref m )
 {
 	bytes_clear( m, size_of( audio_mixer ) );
 	thread_add_lock( m->lock );
+	m->running = yes;
 
 	#if OS_LINUX
 		if( snd_pcm_open( to( snd_pcm_t ref ref, ref_of( m->device ) ), "default", 0, 0 ) < 0 )
@@ -1344,11 +1330,14 @@ embed out_state audio_mixer_start( audio_mixer ref m )
 			out failure;
 		}
 		snd_pcm_set_params( m->device, 2, 3, 2, 44100, 1, 100000 );
+		m->process = new_cpu_thread( audio_mixer_thread_fn, m );
+
 	#elif OS_WINDOWS
 		if_nothing( winmm_dll )
 		{
 			winmm_dll = LoadLibrary( "winmm.dll" );
 			if_nothing( winmm_dll ) out failure;
+			//
 			waveOpen = to( type_of( waveOpen ), GetProcAddress( winmm_dll, "waveOutOpen" ) );
 			waveClose = to( type_of( waveClose ), GetProcAddress( winmm_dll, "waveOutClose" ) );
 			waveWrite = to( type_of( waveWrite ), GetProcAddress( winmm_dll, "waveOutWrite" ) );
@@ -1357,43 +1346,42 @@ embed out_state audio_mixer_start( audio_mixer ref m )
 		}
 
 		WAVEFORMATEX fmt = { 1, 2, 44100, 176400, 4, 16 };
-		if( waveOpen( to( HWAVEOUT ref, ref_of( m->device ) ), -1, ref_of( fmt ), 0, 0, 0 ) )
+		if( waveOpen( to( HWAVEOUT ref, ref_of( m->device ) ), -1, ref_of( fmt ), to( DWORD_PTR, audio_mixer_thread_fn ), to( DWORD_PTR, m ), 0x00030000 ) )
 		{
 			out failure;
 		}
 
 		iter( i, 2 )
 		{
-			WAVEHDR ref h = new_ref( WAVEHDR );
-			h->lpData = new_bytes( 8192 );
-			h->dwBufferLength = 8192;
-			wavePrepare( m->device, h, size_of( WAVEHDR ) );
-			m->hdr[ i ] = h;
+			m->hdr[ i ] .lpData = new_bytes( 8192 );
+			m->hdr[ i ] .dwBufferLength = 8192;
+			wavePrepare( m->device, ref_of( m->hdr[ i ] ), size_of( WAVEHDR ) );
+
+			lock_thread( m->lock );
+			audio_mixer_process( m, to( i2 ref, m->hdr[ i ] .lpData ), 2048 );
+			unlock_thread( m->lock );
+
+			waveWrite( m->device, ref_of( m->hdr[ i ] ), size_of( WAVEHDR ) );
 		}
 	#endif
 
-	m->running = yes;
-	m->process = new_cpu_thread( audio_mixer_thread_fn, m );
 	out success;
 }
 
 fn audio_mixer_stop( audio_mixer ref m )
 {
 	m->running = no;
-	thread_join( m->process );
 
 	#if OS_LINUX
+		wait_for_thread( m->process );
 		snd_pcm_close( m->device );
 	#elif OS_WINDOWS
+		Sleep( 100 );
 		waveClose( m->device );
 		iter( i, 2 )
 		{
-			WAVEHDR ref h = m->hdr[ i ];
-			if( h )
-			{
-				delete_ref( h->lpData );
-				delete_ref( h );
-			}
+			delete_ref( m->hdr[ i ].lpData );
+			waveUnprepare( m->device, ref_of( m->hdr[ i ] ), size_of( WAVEHDR ) );
 		}
 	#endif
 
