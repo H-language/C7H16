@@ -1608,7 +1608,7 @@ embed compressed_pixels canvas_to_compressed_pixels( const canvas const_ref in_c
 		if( n >= out_cpixels.palette_size and n < 32 )
 		{
 			if( out_cpixels.palette_size is 0 ) this_p.a = 0;
-			out_cpixels.palette[ out_cpixels.palette_size++ ] = pixel_to_color(this_p);
+			out_cpixels.palette[ out_cpixels.palette_size++ ] = pixel_to_color( this_p );
 		}
 		jump_if( ++p < p_end ) find_palette;
 	}
@@ -1740,7 +1740,7 @@ embed canvas compressed_pixels_to_canvas( const compressed_pixels const_ref in_c
 			temp pixel p;
 			while( i++ < run and pos < area )
 			{
-				p = color_to_pixel(in_cpixels->palette[ index ]);
+				p = color_to_pixel( in_cpixels->palette[ index ] );
 				if( p.a != 0 ) out_canvas.pixels[ pos ] = p;
 				++pos;
 			}
@@ -1751,7 +1751,7 @@ embed canvas compressed_pixels_to_canvas( const compressed_pixels const_ref in_c
 				i = 0;
 				while( i++ < run and pos < area )
 				{
-					p = color_to_pixel(in_cpixels->palette[ index ]);
+					p = color_to_pixel( in_cpixels->palette[ index ] );
 					if( p.a != 0 ) out_canvas.pixels[ pos ] = p;
 					++pos;
 				}
@@ -1764,7 +1764,7 @@ embed canvas compressed_pixels_to_canvas( const compressed_pixels const_ref in_c
 			temp n1 i = 0;
 			while( i++ < run and pos < area )
 			{
-				temp pixel p = color_to_pixel(in_cpixels->palette[ index ]);
+				temp pixel p = color_to_pixel( in_cpixels->palette[ index ] );
 				if( p.a != 0 ) out_canvas.pixels[ pos ] = p;
 				++pos;
 			}
@@ -1782,9 +1782,9 @@ fn compressed_pixels_to_file( const compressed_pixels cpixels, const byte const_
 	byte ref output = new_bytes( cpixels.data_size * 2 + 1024 );
 	byte ref r = output;
 
-	bytes_paste_move( "global const canvas ", r );
+	bytes_paste_move( "global perm canvas ", r );
 	bytes_paste_move( name, r );
-	bytes_paste_move( ";\nglobal const compressed_pixels cpixels_", r );
+	bytes_paste_move( ";\nglobal perm const compressed_pixels cpixels_", r );
 	bytes_paste_move( name, r );
 	bytes_paste_move( "={\"", r );
 
@@ -1806,33 +1806,51 @@ fn compressed_pixels_to_file( const compressed_pixels cpixels, const byte const_
 				}
 				skip;
 			}
+
+			when( 0x1A )
+			{
+				if_all( i + 1 < cpixels.data_size, cpixels.data[ i + 1 ] >= '0', cpixels.data[ i + 1 ] <= '7' )
+				{
+					bytes_paste_move( "\\032", r );
+				}
+				else
+				{
+					bytes_paste_move( "\\32", r );
+				}
+				skip;
+			}
+
 			when( '"' )
 			{
 				bytes_paste_move( "\\\"", r );
 				skip;
 			}
+
 			when( '\\' )
 			{
 				bytes_paste_move( "\\\\", r );
 				skip;
 			}
+
 			when( '\n' )
 			{
 				bytes_paste_move( "\\n", r );
 				skip;
 			}
+
 			when( '\r' )
 			{
 				bytes_paste_move( "\\r", r );
 				skip;
 			}
+
 			other
 			{
 				bytes_add( r, b );
 			}
 		}
 
-		if( ( (i + 1) mod 4000 ) is 0 and i + 1 < cpixels.data_size )
+		if( ( ( i + 1 ) mod 4000 ) is 0 and i + 1 < cpixels.data_size )
 		{
 			bytes_paste_move( "\"\n\"", r );
 		}
