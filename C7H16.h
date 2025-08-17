@@ -217,9 +217,9 @@ global perm const byte ref OS_INPUT_MAP = nothing;
 #define INPUT_MASK_HELD 0x2
 #define INPUT_MASK_RELEASED 0x4
 
-#define key_pressed( KEY ) ( current_window->inputs[ input_##KEY ] &INPUT_MASK_PRESSED )
-#define key_held( KEY ) ( current_window->inputs[ input_##KEY ] &INPUT_MASK_HELD )
-#define key_released( KEY ) ( current_window->inputs[ input_##KEY ] &INPUT_MASK_RELEASED )
+#define key_pressed( KEY ) ( current_window->inputs[ input_##KEY ] & INPUT_MASK_PRESSED )
+#define key_held( KEY ) ( current_window->inputs[ input_##KEY ] & INPUT_MASK_HELD )
+#define key_released( KEY ) ( current_window->inputs[ input_##KEY ] & INPUT_MASK_RELEASED )
 
 object_fn( window, set_start_fn, const window_fn start_fn )
 {
@@ -606,7 +606,7 @@ group( window_event_type, n2 )
 		when( window_event_key_activate )
 		{
 			temp const byte key = OS_INPUT_MAP[ PICK( OS_LINUX, XkbKeycodeToKeysym( w->display, e->xkey.keycode, 0, 0 ) & 0x1FF, wp & 0xff ) ];
-			if( key isnt 0 and not( w->inputs[ key ] &INPUT_MASK_HELD ) )
+			if( key isnt 0 and not( w->inputs[ key ] & INPUT_MASK_HELD ) )
 			{
 				w->inputs[ key ] |= INPUT_MASK_PRESSED | INPUT_MASK_HELD;
 				w->inputs_pressed[ w->inputs_pressed_count++ ] = key;
@@ -770,6 +770,7 @@ object_fn( window, refresh )
 
 object_fn( window, process )
 {
+	current_window = this;
 	current_canvas_ref = ref_of( this->buffer );
 
 	if( this->tick is 0 )
@@ -1353,12 +1354,12 @@ embed out_state audio_mixer_start( audio_mixer ref m )
 
 		iter( i, 2 )
 		{
-			m->hdr[ i ] .lpData = new_bytes( 8192 );
-			m->hdr[ i ] .dwBufferLength = 8192;
+			m->hdr[ i ].lpData = new_bytes( 8192 );
+			m->hdr[ i ].dwBufferLength = 8192;
 			wavePrepare( m->device, ref_of( m->hdr[ i ] ), size_of( WAVEHDR ) );
 
 			lock_thread( m->lock );
-			audio_mixer_process( m, to( i2 ref, m->hdr[ i ] .lpData ), 2048 );
+			audio_mixer_process( m, to( i2 ref, m->hdr[ i ].lpData ), 2048 );
 			unlock_thread( m->lock );
 
 			waveWrite( m->device, ref_of( m->hdr[ i ] ), size_of( WAVEHDR ) );
@@ -1395,7 +1396,7 @@ embed audio_id audio_play( audio_mixer const_ref mixer, const audio const_ref a,
 	lock_thread( mixer->lock );
 	iter( id, audio_max_instances )
 	{
-		next_if( mixer->instances[ id ] .playing is yes );
+		next_if( mixer->instances[ id ].playing is yes );
 		//
 		mixer->instances[ id ] = make( audio_instance, .audio_ref = a, .position = 0, .playing = yes, .volume = volume, .pan = pan );
 		unlock_thread( mixer->lock );
@@ -1410,19 +1411,330 @@ fn audio_stop( audio_mixer const_ref mixer, audio_id id )
 {
 	if( id >= 0 and id < audio_max_instances )
 	{
-		mixer->instances[ id ] .playing = no;
+		mixer->instances[ id ].playing = no;
 	}
 }
 
 fn audio_set( audio_mixer const_ref mixer, audio_id id, const r4 volume, const r4 pan )
 {
-	if_all( id >= 0, id < audio_max_instances, mixer->instances[ id ] .playing is yes )
+	if_all( id >= 0, id < audio_max_instances, mixer->instances[ id ].playing is yes )
 	{
 		lock_thread( mixer->lock );
-		mixer->instances[ id ] .volume = volume;
-		mixer->instances[ id ] .pan = pan;
+		mixer->instances[ id ].volume = volume;
+		mixer->instances[ id ].pan = pan;
 		unlock_thread( mixer->lock );
 	}
+}
+
+///////
+
+struct canvas bmp_to_canvas( byte ref bmp_bytes, n4 bmp_bytes_size )
+{
+	temp canvas c = { 0 };
+
+	temp const n2 type = val_of( to( n2 ref, bmp_bytes + 0x00 ) );
+	temp const n4 data_offset = val_of( to( n4 ref, bmp_bytes + 0x0A ) );
+	temp const i4 width = val_of( to( i4 ref, bmp_bytes + 0x12 ) );
+	temp const i4 height = val_of( to( i4 ref, bmp_bytes + 0x16 ) );
+	temp const n2 bit_count = val_of( to( n2 ref, bmp_bytes + 0x1C ) );
+	temp const n4 colors_used = val_of( to( n4 ref, bmp_bytes + 0x2E ) );
+
+	out_if( type isnt 0x4D42 ) c;
+	out_if( width <= 0 ) c;
+
+	c.size.w = width;
+	c.size.h = i4_abs( height );
+
+	temp const i4 row_size = ( ( width * bit_count + 31 ) / 32 ) * 4;
+	temp const n4 image_size = row_size * c.size.h;
+
+	out_if( data_offset + image_size > bmp_bytes_size ) c;
+
+	c.pixels = new_ref( pixel, x2_area( c.size ) );
+	temp const byte ref pixel_data = bmp_bytes + data_offset;
+
+	pixel palette[ 256 ] = { 0 };
+	if( bit_count <= 8 )
+	{
+		temp const n4 palette_size = pick( colors_used, colors_used, 1 << bit_count );
+		temp const byte ref palette_data = bmp_bytes + 54;
+
+		iter( i, palette_size )
+		{
+			temp const n4 pal_offset = i * 4;
+			palette[ i ].r = palette_data[ pal_offset ]; // BMP stores B first
+			palette[ i ].g = palette_data[ pal_offset + 1 ];
+			palette[ i ].b = palette_data[ pal_offset + 2 ]; // BMP stores R last
+			palette[ i ].a = 0xff;
+		}
+	}
+
+	iter( y, c.size.h )
+	{
+		temp const i4 src_y = pick( height > 0, c.size.h - 1 - y, y );
+		temp const byte ref row_data = pixel_data + ( src_y * row_size );
+
+		iter( x, c.size.w )
+		{
+			temp const i4 dst_index = y * c.size.w + x;
+
+			with( bit_count )
+			{
+				when( 1 )
+				{
+					temp const i4 byte_index = x / 8;
+					temp const i4 bit_index = 7 - ( x % 8 );
+					c.pixels[ dst_index ] = palette[ ( row_data[ byte_index ] >> bit_index ) & 1 ];
+					skip;
+				}
+
+				when( 4 )
+				{
+					temp const i4 byte_index = x / 2;
+					temp const n1 nibble = pick( x & 1, row_data[ byte_index ] & 0x0F, ( row_data[ byte_index ] >> 4 ) & 0x0F );
+					c.pixels[ dst_index ] = palette[ nibble ];
+					skip;
+				}
+
+				when( 8 )
+				{
+					c.pixels[ dst_index ] = palette[ row_data[ x ] ];
+					skip;
+				}
+
+				when( 24 )
+				{
+					temp const i4 pixel_offset = x * 3;
+					c.pixels[ dst_index ].r = row_data[ pixel_offset ]; // B in BMP
+					c.pixels[ dst_index ].g = row_data[ pixel_offset + 1 ];
+					c.pixels[ dst_index ].b = row_data[ pixel_offset + 2 ]; // R in BMP
+					c.pixels[ dst_index ].a = 0xff;
+					skip;
+				}
+
+				when( 32 )
+				{
+					temp const i4 pixel_offset = x * 4;
+					c.pixels[ dst_index ].r = row_data[ pixel_offset ]; // B in BMP
+					c.pixels[ dst_index ].g = row_data[ pixel_offset + 1 ];
+					c.pixels[ dst_index ].b = row_data[ pixel_offset + 2 ]; // R in BMP
+					c.pixels[ dst_index ].a = row_data[ pixel_offset + 3 ];
+					skip;
+				}
+
+				other
+				{
+					delete_ref( c.pixels );
+					out c;
+				}
+			}
+		}
+	}
+
+	out c;
+}
+
+///////
+
+type( compressed_pixels )
+{
+	byte ref data;
+	n4 data_size;
+	n2x2 size;
+	pixel palette[ 32 ];
+	n1 palette_size;
+	flag uses_lzss;
+	n4 pre_lzss_size;
+};
+
+embed compressed_pixels canvas_to_compressed_pixels( const canvas const_ref in_canvas )
+{
+	temp n4 area = x2_area( in_canvas->size );
+	compressed_pixels out_cpixels = { .data = new_bytes( area ), .size = in_canvas->size };
+	temp const pixel ref p = in_canvas->pixels;
+	temp const pixel const_ref p_end = p + area;
+
+	find_palette:
+	{
+		temp pixel color = val_of( p );
+		temp n1 n = 0;
+		check_palette:
+		{
+			if( n is 0 and out_cpixels.palette_size > 0 )
+			{
+				jump_if_all( color.r is out_cpixels.palette[ 0 ].r, color.g is out_cpixels.palette[ 0 ].g, color.b is out_cpixels.palette[ 0 ].b ) found_palette;
+			}
+			else jump_if_all( color.r is out_cpixels.palette[ n ].r, color.g is out_cpixels.palette[ n ].g, color.b is out_cpixels.palette[ n ].b, color.a is out_cpixels.palette[ n ].a ) found_palette;
+			jump_if( ++n < out_cpixels.palette_size ) check_palette;
+		}
+		found_palette:
+		if( n >= out_cpixels.palette_size and n < 32 )
+		{
+			if( out_cpixels.palette_size is 0 ) color.a = 0;
+			out_cpixels.palette[ out_cpixels.palette_size++ ] = color;
+		}
+		jump_if( ++p < p_end ) find_palette;
+	}
+
+	temp flag low_color = out_cpixels.palette_size <= 2;
+	temp n1 run_bits = pick( low_color, 3, ( 8 - n_to_bits( out_cpixels.palette_size ) ) );
+	temp n1 max_run = 1 << run_bits;
+	temp n4 data_size = 0;
+	p = in_canvas->pixels;
+
+	encode_pixels:
+	{
+		temp const pixel color = val_of( p );
+		temp n1 index = 0;
+		find_index:
+		{
+			if( index is 0 )
+			{
+				jump_if_all( color.r is out_cpixels.palette[ 0 ].r, color.g is out_cpixels.palette[ 0 ].g, color.b is out_cpixels.palette[ 0 ].b ) found_index;
+			}
+			else jump_if_all( color.r is out_cpixels.palette[ index ].r, color.g is out_cpixels.palette[ index ].g, color.b is out_cpixels.palette[ index ].b, color.a is out_cpixels.palette[ index ].a ) found_index;
+			++index;
+			jump find_index;
+		}
+		found_index:
+
+		temp n1 run = 1;
+		temp const pixel ref scan = p + 1;
+		while( scan < p_end and run < max_run )
+		{
+			temp const pixel scan_color = val_of( scan );
+			jump_if_not_all( scan_color.r is color.r, scan_color.g is color.g, scan_color.b is color.b, scan_color.a is color.a ) end_run;
+			++run;
+			++scan;
+		}
+		end_run:
+
+		if( low_color )
+		{
+			temp byte chunk1 = ( ( index & 1 ) << 3 ) | ( run - 1 );
+			p += run;
+			if( p < p_end )
+			{
+				temp const pixel color2 = val_of( p );
+				temp n1 index_low = 0;
+				find_index_low:
+				{
+					if( index_low is 0 )
+					{
+						jump_if_all( color2.r is out_cpixels.palette[ 0 ].r, color2.g is out_cpixels.palette[ 0 ].g, color2.b is out_cpixels.palette[ 0 ].b ) found_index_low;
+					}
+					else jump_if_all( color2.r is out_cpixels.palette[ index_low ].r, color2.g is out_cpixels.palette[ index_low ].g, color2.b is out_cpixels.palette[ index_low ].b, color2.a is out_cpixels.palette[ index_low ].a ) found_index_low;
+					++index_low;
+					jump find_index_low;
+				}
+				found_index_low:
+
+				temp n1 run_low = 1;
+				temp const pixel ref scan2 = p + 1;
+				while( scan2 < p_end and run_low < max_run )
+				{
+					temp const pixel scan_color2 = val_of( scan2 );
+					jump_if_not_all( scan_color2.r is color2.r, scan_color2.g is color2.g, scan_color2.b is color2.b, scan_color2.a is color2.a ) end_run_low;
+					++run_low;
+					++scan2;
+				}
+				end_run_low:
+
+				out_cpixels.data[ data_size++ ] = chunk1 | ( ( ( index_low & 1 ) << 3 ) | ( run_low - 1 ) ) << 4;
+				p += run_low;
+			}
+			else out_cpixels.data[ data_size++ ] = chunk1;
+		}
+		else
+		{
+			out_cpixels.data[ data_size++ ] = ( index << run_bits ) | ( run - 1 );
+			p += run;
+		}
+		jump_if( p < p_end ) encode_pixels;
+	}
+
+	temp byte ref lzss_bytes = new_bytes( ( ( data_size << 1 ) + data_size ) >> 1 );
+	temp n4 lzss_size = bytes_compress( out_cpixels.data, data_size, lzss_bytes );
+	if( lzss_size < data_size )
+	{
+		delete_ref( out_cpixels.data );
+		out_cpixels.data = bytes_resize( lzss_bytes, lzss_size );
+		out_cpixels.data_size = lzss_size;
+		out_cpixels.pre_lzss_size = data_size;
+		out_cpixels.uses_lzss = yes;
+	}
+	else
+	{
+		delete_ref( lzss_bytes );
+		out_cpixels.data = bytes_resize( out_cpixels.data, data_size );
+		out_cpixels.data_size = data_size;
+		out_cpixels.uses_lzss = no;
+	}
+	out out_cpixels;
+}
+
+embed canvas compressed_pixels_to_canvas( const compressed_pixels const_ref in_cpixels )
+{
+	temp byte ref data = in_cpixels->data;
+	temp n4 data_size = in_cpixels->data_size;
+	if( in_cpixels->uses_lzss )
+	{
+		data = new_bytes( in_cpixels->pre_lzss_size );
+		data_size = bytes_uncompress( in_cpixels->data, in_cpixels->data_size, data );
+	}
+
+	canvas out_canvas = canvas( in_cpixels->size.w, in_cpixels->size.h );
+	temp n4 area = in_cpixels->size.w * in_cpixels->size.h;
+	temp n4 pos = 0;
+	temp flag low_color = in_cpixels->palette_size <= 2;
+	temp n1 run_bits = pick( low_color, 3, ( 8 - n_to_bits( in_cpixels->palette_size ) ) );
+	temp n1 run_mask = ( 1 << run_bits ) - 1;
+	temp n1 index_mask = ( 1 << n_to_bits( in_cpixels->palette_size ) ) - 1;
+	temp n4 data_idx = 0;
+
+	while( data_idx < data_size and pos < area )
+	{
+		temp byte d = data[ data_idx++ ];
+		if( low_color )
+		{
+			temp n1 index = ( d >> 3 ) & 1;
+			temp n1 run = ( d & 0x07 ) + 1;
+			temp n1 i = 0;
+			temp pixel p;
+			while( i++ < run and pos < area )
+			{
+				p = in_cpixels->palette[ index ];
+				if( p.a != 0 ) out_canvas.pixels[ pos ] = p;
+				++pos;
+			}
+			if( pos < area )
+			{
+				index = ( d >> 7 ) & 1;
+				run = ( ( d >> 4 ) & 0x07 ) + 1;
+				i = 0;
+				while( i++ < run and pos < area )
+				{
+					p = in_cpixels->palette[ index ];
+					if( p.a != 0 ) out_canvas.pixels[ pos ] = p;
+					++pos;
+				}
+			}
+		}
+		else
+		{
+			temp n1 index = ( d >> run_bits ) & index_mask;
+			temp n1 run = ( d & run_mask ) + 1;
+			temp n1 i = 0;
+			while( i++ < run and pos < area )
+			{
+				temp pixel p = in_cpixels->palette[ index ];
+				if( p.a != 0 ) out_canvas.pixels[ pos ] = p;
+				++pos;
+			}
+		}
+	}
+	if( in_cpixels->uses_lzss ) delete_ref( data );
+	out out_canvas;
 }
 
 ///////
