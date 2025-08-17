@@ -14,9 +14,42 @@
 
 //
 
-type_from( n1x4 ) pixel;
+fusion( pixel )
+{
+	n4 bgra;
 
-#define pixel( R, G, B, A ) make( pixel, .r = B, .g = G, .b = R, .a = A )
+	variant
+	{
+		n1 b;
+		n1 g;
+		n1 r;
+		n1 a;
+	};
+};
+
+#define pixel( R, G, B, A ) make( pixel, .r = R, .g = G, .b = B, .a = A )
+
+//
+
+fusion( color )
+{
+	n4 rgba;
+
+	variant
+	{
+		n1 r;
+		n1 g;
+		n1 b;
+		n1 a;
+	};
+};
+
+#define color( R, G, B, A ) make( color, .r = R, .g = G, .b = B, .a = A )
+
+//
+
+#define color_to_pixel( COLOR ) pixel( COLOR.r, COLOR.g, COLOR.b, COLOR.a )
+#define pixel_to_color( PIXEL ) color( PIXEL.r, PIXEL.g, PIXEL.b, PIXEL.a )
 
 //
 
@@ -46,7 +79,7 @@ fn canvas_fill( canvas const_ref c, const pixel color )
 {
 	if_all( color.r is color.g, color.g is color.b, color.b is color.a )
 	{
-		bytes_fill( c->pixels, color.r, i4( c->size.w ) * i4( c->size.h ) * 4 );
+		bytes_fill( c->pixels, color.r, i4( c->size.w ) * i4( c->size.h ) << 2 );
 	}
 	else
 	{
@@ -59,7 +92,7 @@ fn canvas_fill( canvas const_ref c, const pixel color )
 
 fn canvas_clear( canvas const_ref c )
 {
-	bytes_clear( c->pixels, i4( c->size.w ) * i4( c->size.h ) * 4 );
+	bytes_clear( c->pixels, i4( c->size.w ) * i4( c->size.h ) << 2 );
 }
 
 //
@@ -305,19 +338,6 @@ object_fn( window, update_scale )
 	}
 }
 
-object_fn( window, set_buffer_max, const n2 width, const n2 height )
-{
-	out_if_nothing( this );
-
-	if( this->buffer_max.w isnt width or this->buffer_max.h isnt height )
-	{
-		this->buffer_max.w = width;
-		this->buffer_max.h = height;
-
-		window_update_scale( this );
-	}
-}
-
 fn _window_set_size( const window this, const n2 width, const n2 height )
 {
 	out_if( this->size_target.w is width and this->size_target.h is height );
@@ -342,7 +362,7 @@ fn _window_resize( const window this )
 		this->image->data = to( byte ref, this->buffer.pixels );
 		this->image->width = this->buffer.size.w;
 		this->image->height = this->buffer.size.h;
-		this->image->bytes_per_line = this->buffer.size.w * 4;
+		this->image->bytes_per_line = this->buffer.size.w << 2;
 
 		XFreePixmap( this->display, this->pixmap );
 		this->pixmap = XCreatePixmap( this->display, this->handle, this->buffer.size.w, this->buffer.size.h, DefaultDepth( this->display, DefaultScreen( this->display ) ) );
@@ -375,6 +395,21 @@ object_fn( window, resize, const n2 width, const n2 height )
 	#endif
 }
 
+object_fn( window, set_buffer_max, const n2 width, const n2 height )
+{
+	out_if_nothing( this );
+
+	if( this->buffer_max.w isnt width or this->buffer_max.h isnt height )
+	{
+		this->buffer_max.w = width;
+		this->buffer_max.h = height;
+
+		window_update_scale( this );
+	}
+
+	_window_resize( this );
+}
+
 fn _window_update( const window this )
 {
 	out_if_any( this is nothing, this->buffer.size.w <= 1, this->buffer.size.h <= 1 );
@@ -404,7 +439,7 @@ fn _window_update( const window this )
 		{
 			when( anchor_top_center )
 			{
-				x = overflow_w / 2;
+				x = overflow_w >> 1;
 				skip;
 			}
 
@@ -416,21 +451,21 @@ fn _window_update( const window this )
 
 			when( anchor_middle_left )
 			{
-				y = overflow_h / 2;
+				y = overflow_h >> 1;
 				skip;
 			}
 
 			when( anchor_middle_center )
 			{
-				x = overflow_w / 2;
-				y = overflow_h / 2;
+				x = overflow_w >> 1;
+				y = overflow_h >> 1;
 				skip;
 			}
 
 			when( anchor_middle_right )
 			{
 				x = overflow_w;
-				y = overflow_h / 2;
+				y = overflow_h >> 1;
 				skip;
 			}
 
@@ -442,7 +477,7 @@ fn _window_update( const window this )
 
 			when( anchor_bottom_center )
 			{
-				x = overflow_w / 2;
+				x = overflow_w >> 1;
 				y = overflow_h;
 				skip;
 			}
@@ -751,10 +786,10 @@ object_fn( window, center )
 	out_if_nothing( this );
 
 	#if OS_LINUX
-		XMoveWindow( this->display, this->handle, ( DisplayWidth( this->display, DefaultScreen( this->display ) ) - this->size_target.w ) / 2, ( DisplayHeight( this->display, DefaultScreen( this->display ) ) - this->size_target.h ) / 2 );
+		XMoveWindow( this->display, this->handle, ( DisplayWidth( this->display, DefaultScreen( this->display ) ) - this->size_target.w ) >> 1, ( DisplayHeight( this->display, DefaultScreen( this->display ) ) - this->size_target.h ) >> 1 );
 		XSync( this->display, no );
 	#elif OS_WINDOWS
-		SetWindowPos( this->handle, NULL, ( GetSystemMetrics( SM_CXSCREEN ) - this->size_target.w ) / 2, ( GetSystemMetrics( SM_CYSCREEN ) - this->size_target.h ) / 2, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE );
+		SetWindowPos( this->handle, NULL, ( GetSystemMetrics( SM_CXSCREEN ) - this->size_target.w ) >> 1, ( GetSystemMetrics( SM_CYSCREEN ) - this->size_target.h ) >> 1, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE );
 	#endif
 }
 
@@ -1131,29 +1166,29 @@ embed audio load_audio( const byte const_ref wav_path )
 	temp const n4 sample_rate = val_of( to( n4 ref, f.mapped_bytes + 24 ) );
 	temp const n2 bits = val_of( to( n2 ref, f.mapped_bytes + 34 ) );
 
-	temp const byte ref ptr = f.mapped_bytes + 36;
+	temp const byte ref r = f.mapped_bytes + 36;
 	temp n4 data_size = 0;
-	while( ptr < f.mapped_bytes + f.size )
+	while( r < f.mapped_bytes + f.size )
 	{
-		if( bytes_compare( ptr, "data", 4 ) is 0 )
+		if( bytes_compare( r, "data", 4 ) is 0 )
 		{
-			data_size = val_of( to( n4 ref, ptr + 4 ) );
-			ptr += 8;
+			data_size = val_of( to( n4 ref, r + 4 ) );
+			r += 8;
 			skip;
 		}
-		ptr += 8 + val_of( to( n4 ref, ptr + 4 ) );
+		r += 8 + val_of( to( n4 ref, r + 4 ) );
 	}
 
 	out_if( data_size is 0 ) out_audio;
 
-	temp const n4 samples = data_size / ( bits / 8 );
+	temp const n4 samples = data_size / ( bits >> 3 );
 	out_audio.frames = samples / channels;
 	out_audio.channel = to( audio_channel, channels );
-	out_audio.data = new_bytes( samples * 4 );
+	out_audio.data = new_bytes( samples << 2 );
 
 	if( bits is 16 )
 	{
-		temp const i2 const_ref src = to( i2 const_ref, ptr );
+		temp const i2 const_ref src = to( i2 const_ref, r );
 		iter( s, samples )
 		{
 			out_audio.data[ s ] = r4( src[ s ] ) / 32768.0;
@@ -1161,7 +1196,7 @@ embed audio load_audio( const byte const_ref wav_path )
 	}
 	else
 	{ // 8 bits
-		temp const n1 const_ref src = to( n1 const_ref, ptr );
+		temp const n1 const_ref src = to( n1 const_ref, r );
 		iter( s, samples )
 		{
 			out_audio.data[ s ] = ( r4( src[ s ] ) - 128.0 ) / 128.0;
@@ -1428,9 +1463,10 @@ fn audio_set( audio_mixer const_ref mixer, audio_id id, const r4 volume, const r
 
 ///////
 
-struct canvas bmp_to_canvas( byte ref bmp_bytes, n4 bmp_bytes_size )
+embed canvas bmp_to_canvas( byte ref bmp_bytes, n4 bmp_bytes_size )
 {
 	temp canvas c = { 0 };
+	out_if_nothing( bmp_bytes ) c;
 
 	temp const n2 type = val_of( to( n2 ref, bmp_bytes + 0x00 ) );
 	temp const n4 data_offset = val_of( to( n4 ref, bmp_bytes + 0x0A ) );
@@ -1445,15 +1481,15 @@ struct canvas bmp_to_canvas( byte ref bmp_bytes, n4 bmp_bytes_size )
 	c.size.w = width;
 	c.size.h = i4_abs( height );
 
-	temp const i4 row_size = ( ( width * bit_count + 31 ) / 32 ) * 4;
-	temp const n4 image_size = row_size * c.size.h;
+	temp const i8 row_size = ( ( width * bit_count + 31 ) / 32 ) << 2;
+	temp const n8 image_size = row_size * c.size.h;
 
 	out_if( data_offset + image_size > bmp_bytes_size ) c;
 
 	c.pixels = new_ref( pixel, x2_area( c.size ) );
 	temp const byte ref pixel_data = bmp_bytes + data_offset;
 
-	pixel palette[ 256 ] = { 0 };
+	color palette[ 256 ] = { 0 };
 	if( bit_count <= 8 )
 	{
 		temp const n4 palette_size = pick( colors_used, colors_used, 1 << bit_count );
@@ -1461,63 +1497,63 @@ struct canvas bmp_to_canvas( byte ref bmp_bytes, n4 bmp_bytes_size )
 
 		iter( i, palette_size )
 		{
-			temp const n4 pal_offset = i * 4;
-			palette[ i ].r = palette_data[ pal_offset ]; // BMP stores B first
+			temp const n4 pal_offset = i << 2;
+			palette[ i ].r = palette_data[ pal_offset + 2 ];
 			palette[ i ].g = palette_data[ pal_offset + 1 ];
-			palette[ i ].b = palette_data[ pal_offset + 2 ]; // BMP stores R last
+			palette[ i ].b = palette_data[ pal_offset ];
 			palette[ i ].a = 0xff;
 		}
 	}
 
 	iter( y, c.size.h )
 	{
-		temp const i4 src_y = pick( height > 0, c.size.h - 1 - y, y );
+		temp const i8 src_y = pick( height > 0, c.size.h - 1 - y, y );
 		temp const byte ref row_data = pixel_data + ( src_y * row_size );
 
 		iter( x, c.size.w )
 		{
-			temp const i4 dst_index = y * c.size.w + x;
+			temp const i8 dst_index = y * c.size.w + x;
 
 			with( bit_count )
 			{
 				when( 1 )
 				{
-					temp const i4 byte_index = x / 8;
+					temp const i4 byte_index = x >> 3;
 					temp const i4 bit_index = 7 - ( x % 8 );
-					c.pixels[ dst_index ] = palette[ ( row_data[ byte_index ] >> bit_index ) & 1 ];
+					c.pixels[ dst_index ] = color_to_pixel( palette[ ( row_data[ byte_index ] >> bit_index ) & 1 ] );
 					skip;
 				}
 
 				when( 4 )
 				{
-					temp const i4 byte_index = x / 2;
+					temp const i4 byte_index = x >> 1;
 					temp const n1 nibble = pick( x & 1, row_data[ byte_index ] & 0x0F, ( row_data[ byte_index ] >> 4 ) & 0x0F );
-					c.pixels[ dst_index ] = palette[ nibble ];
+					c.pixels[ dst_index ] = color_to_pixel( palette[ nibble ] );
 					skip;
 				}
 
 				when( 8 )
 				{
-					c.pixels[ dst_index ] = palette[ row_data[ x ] ];
+					c.pixels[ dst_index ] = color_to_pixel( palette[ row_data[ x ] ] );
 					skip;
 				}
 
 				when( 24 )
 				{
 					temp const i4 pixel_offset = x * 3;
-					c.pixels[ dst_index ].r = row_data[ pixel_offset ]; // B in BMP
+					c.pixels[ dst_index ].r = row_data[ pixel_offset + 2 ];
 					c.pixels[ dst_index ].g = row_data[ pixel_offset + 1 ];
-					c.pixels[ dst_index ].b = row_data[ pixel_offset + 2 ]; // R in BMP
+					c.pixels[ dst_index ].b = row_data[ pixel_offset ];
 					c.pixels[ dst_index ].a = 0xff;
 					skip;
 				}
 
 				when( 32 )
 				{
-					temp const i4 pixel_offset = x * 4;
-					c.pixels[ dst_index ].r = row_data[ pixel_offset ]; // B in BMP
+					temp const i4 pixel_offset = x << 2;
+					c.pixels[ dst_index ].r = row_data[ pixel_offset + 2 ];
 					c.pixels[ dst_index ].g = row_data[ pixel_offset + 1 ];
-					c.pixels[ dst_index ].b = row_data[ pixel_offset + 2 ]; // R in BMP
+					c.pixels[ dst_index ].b = row_data[ pixel_offset ];
 					c.pixels[ dst_index ].a = row_data[ pixel_offset + 3 ];
 					skip;
 				}
@@ -1541,7 +1577,7 @@ type( compressed_pixels )
 	byte ref data;
 	n4 data_size;
 	n2x2 size;
-	pixel palette[ 32 ];
+	color palette[ 32 ];
 	n1 palette_size;
 	flag uses_lzss;
 	n4 pre_lzss_size;
@@ -1549,29 +1585,30 @@ type( compressed_pixels )
 
 embed compressed_pixels canvas_to_compressed_pixels( const canvas const_ref in_canvas )
 {
-	temp n4 area = x2_area( in_canvas->size );
-	compressed_pixels out_cpixels = { .data = new_bytes( area ), .size = in_canvas->size };
+	temp n8 area = n8( in_canvas->size.w ) * n8( in_canvas->size.h );
+	compressed_pixels out_cpixels = make( compressed_pixels, .data = new_bytes( area ), .size = in_canvas->size );
 	temp const pixel ref p = in_canvas->pixels;
 	temp const pixel const_ref p_end = p + area;
 
 	find_palette:
 	{
-		temp pixel color = val_of( p );
+		temp pixel this_p = val_of( p );
 		temp n1 n = 0;
 		check_palette:
 		{
 			if( n is 0 and out_cpixels.palette_size > 0 )
 			{
-				jump_if_all( color.r is out_cpixels.palette[ 0 ].r, color.g is out_cpixels.palette[ 0 ].g, color.b is out_cpixels.palette[ 0 ].b ) found_palette;
+				jump_if_all( this_p.r is out_cpixels.palette[ 0 ].r, this_p.g is out_cpixels.palette[ 0 ].g, this_p.b is out_cpixels.palette[ 0 ].b ) found_palette;
 			}
-			else jump_if_all( color.r is out_cpixels.palette[ n ].r, color.g is out_cpixels.palette[ n ].g, color.b is out_cpixels.palette[ n ].b, color.a is out_cpixels.palette[ n ].a ) found_palette;
+			else jump_if_all( this_p.r is out_cpixels.palette[ n ].r, this_p.g is out_cpixels.palette[ n ].g, this_p.b is out_cpixels.palette[ n ].b, this_p.a is out_cpixels.palette[ n ].a ) found_palette;
 			jump_if( ++n < out_cpixels.palette_size ) check_palette;
 		}
 		found_palette:
+
 		if( n >= out_cpixels.palette_size and n < 32 )
 		{
-			if( out_cpixels.palette_size is 0 ) color.a = 0;
-			out_cpixels.palette[ out_cpixels.palette_size++ ] = color;
+			if( out_cpixels.palette_size is 0 ) this_p.a = 0;
+			out_cpixels.palette[ out_cpixels.palette_size++ ] = pixel_to_color(this_p);
 		}
 		jump_if( ++p < p_end ) find_palette;
 	}
@@ -1579,7 +1616,7 @@ embed compressed_pixels canvas_to_compressed_pixels( const canvas const_ref in_c
 	temp flag low_color = out_cpixels.palette_size <= 2;
 	temp n1 run_bits = pick( low_color, 3, ( 8 - n_to_bits( out_cpixels.palette_size ) ) );
 	temp n1 max_run = 1 << run_bits;
-	temp n4 data_size = 0;
+	temp n8 data_size = 0;
 	p = in_canvas->pixels;
 
 	encode_pixels:
@@ -1615,28 +1652,28 @@ embed compressed_pixels canvas_to_compressed_pixels( const canvas const_ref in_c
 			p += run;
 			if( p < p_end )
 			{
-				temp const pixel color2 = val_of( p );
+				temp const pixel this_p = val_of( p );
 				temp n1 index_low = 0;
 				find_index_low:
 				{
 					if( index_low is 0 )
 					{
-						jump_if_all( color2.r is out_cpixels.palette[ 0 ].r, color2.g is out_cpixels.palette[ 0 ].g, color2.b is out_cpixels.palette[ 0 ].b ) found_index_low;
+						jump_if_all( this_p.r is out_cpixels.palette[ 0 ].r, this_p.g is out_cpixels.palette[ 0 ].g, this_p.b is out_cpixels.palette[ 0 ].b ) found_index_low;
 					}
-					else jump_if_all( color2.r is out_cpixels.palette[ index_low ].r, color2.g is out_cpixels.palette[ index_low ].g, color2.b is out_cpixels.palette[ index_low ].b, color2.a is out_cpixels.palette[ index_low ].a ) found_index_low;
+					else jump_if_all( this_p.r is out_cpixels.palette[ index_low ].r, this_p.g is out_cpixels.palette[ index_low ].g, this_p.b is out_cpixels.palette[ index_low ].b, this_p.a is out_cpixels.palette[ index_low ].a ) found_index_low;
 					++index_low;
 					jump find_index_low;
 				}
 				found_index_low:
 
 				temp n1 run_low = 1;
-				temp const pixel ref scan2 = p + 1;
-				while( scan2 < p_end and run_low < max_run )
+				temp const pixel ref scan_low = p + 1;
+				while( scan_low < p_end and run_low < max_run )
 				{
-					temp const pixel scan_color2 = val_of( scan2 );
-					jump_if_not_all( scan_color2.r is color2.r, scan_color2.g is color2.g, scan_color2.b is color2.b, scan_color2.a is color2.a ) end_run_low;
+					temp const pixel scan_this_p = val_of( scan_low );
+					jump_if_not_all( scan_this_p.r is this_p.r, scan_this_p.g is this_p.g, scan_this_p.b is this_p.b, scan_this_p.a is this_p.a ) end_run_low;
 					++run_low;
-					++scan2;
+					++scan_low;
 				}
 				end_run_low:
 
@@ -1654,7 +1691,7 @@ embed compressed_pixels canvas_to_compressed_pixels( const canvas const_ref in_c
 	}
 
 	temp byte ref lzss_bytes = new_bytes( ( ( data_size << 1 ) + data_size ) >> 1 );
-	temp n4 lzss_size = bytes_compress( out_cpixels.data, data_size, lzss_bytes );
+	temp n8 lzss_size = bytes_compress( out_cpixels.data, data_size, lzss_bytes );
 	if( lzss_size < data_size )
 	{
 		delete_ref( out_cpixels.data );
@@ -1676,7 +1713,7 @@ embed compressed_pixels canvas_to_compressed_pixels( const canvas const_ref in_c
 embed canvas compressed_pixels_to_canvas( const compressed_pixels const_ref in_cpixels )
 {
 	temp byte ref data = in_cpixels->data;
-	temp n4 data_size = in_cpixels->data_size;
+	temp n8 data_size = in_cpixels->data_size;
 	if( in_cpixels->uses_lzss )
 	{
 		data = new_bytes( in_cpixels->pre_lzss_size );
@@ -1684,13 +1721,13 @@ embed canvas compressed_pixels_to_canvas( const compressed_pixels const_ref in_c
 	}
 
 	canvas out_canvas = canvas( in_cpixels->size.w, in_cpixels->size.h );
-	temp n4 area = in_cpixels->size.w * in_cpixels->size.h;
-	temp n4 pos = 0;
+	temp n8 area = in_cpixels->size.w * in_cpixels->size.h;
+	temp n8 pos = 0;
 	temp flag low_color = in_cpixels->palette_size <= 2;
 	temp n1 run_bits = pick( low_color, 3, ( 8 - n_to_bits( in_cpixels->palette_size ) ) );
 	temp n1 run_mask = ( 1 << run_bits ) - 1;
 	temp n1 index_mask = ( 1 << n_to_bits( in_cpixels->palette_size ) ) - 1;
-	temp n4 data_idx = 0;
+	temp n8 data_idx = 0;
 
 	while( data_idx < data_size and pos < area )
 	{
@@ -1703,7 +1740,7 @@ embed canvas compressed_pixels_to_canvas( const compressed_pixels const_ref in_c
 			temp pixel p;
 			while( i++ < run and pos < area )
 			{
-				p = in_cpixels->palette[ index ];
+				p = color_to_pixel(in_cpixels->palette[ index ]);
 				if( p.a != 0 ) out_canvas.pixels[ pos ] = p;
 				++pos;
 			}
@@ -1714,7 +1751,7 @@ embed canvas compressed_pixels_to_canvas( const compressed_pixels const_ref in_c
 				i = 0;
 				while( i++ < run and pos < area )
 				{
-					p = in_cpixels->palette[ index ];
+					p = color_to_pixel(in_cpixels->palette[ index ]);
 					if( p.a != 0 ) out_canvas.pixels[ pos ] = p;
 					++pos;
 				}
@@ -1727,14 +1764,118 @@ embed canvas compressed_pixels_to_canvas( const compressed_pixels const_ref in_c
 			temp n1 i = 0;
 			while( i++ < run and pos < area )
 			{
-				temp pixel p = in_cpixels->palette[ index ];
+				temp pixel p = color_to_pixel(in_cpixels->palette[ index ]);
 				if( p.a != 0 ) out_canvas.pixels[ pos ] = p;
 				++pos;
 			}
 		}
 	}
+
 	if( in_cpixels->uses_lzss ) delete_ref( data );
 	out out_canvas;
+}
+
+//
+
+fn compressed_pixels_to_file( const compressed_pixels cpixels, const byte const_ref name )
+{
+	byte ref output = new_bytes( cpixels.data_size * 2 + 1024 );
+	byte ref r = output;
+
+	bytes_paste_move( "global const canvas ", r );
+	bytes_paste_move( name, r );
+	bytes_paste_move( ";\nglobal const compressed_pixels cpixels_", r );
+	bytes_paste_move( name, r );
+	bytes_paste_move( "={\"", r );
+
+	iter( i, cpixels.data_size )
+	{
+		byte b = cpixels.data[ i ];
+
+		with( b )
+		{
+			when( 0 )
+			{
+				if_all( i + 1 < cpixels.data_size, cpixels.data[ i + 1 ] >= '0', cpixels.data[ i + 1 ] <= '9' )
+				{
+					bytes_paste_move( "\\000", r );
+				}
+				else
+				{
+					bytes_paste_move( "\\0", r );
+				}
+				skip;
+			}
+			when( '"' )
+			{
+				bytes_paste_move( "\\\"", r );
+				skip;
+			}
+			when( '\\' )
+			{
+				bytes_paste_move( "\\\\", r );
+				skip;
+			}
+			when( '\n' )
+			{
+				bytes_paste_move( "\\n", r );
+				skip;
+			}
+			when( '\r' )
+			{
+				bytes_paste_move( "\\r", r );
+				skip;
+			}
+			other
+			{
+				bytes_add( r, b );
+			}
+		}
+
+		if( ( (i + 1) mod 4000 ) is 0 and i + 1 < cpixels.data_size )
+		{
+			bytes_paste_move( "\"\n\"", r );
+		}
+	}
+
+	bytes_paste_move( "\",\n", r );
+	bytes_add_n4( r, cpixels.data_size );
+
+	bytes_paste_move( ",{", r );
+	bytes_add_n2( r, cpixels.size.w );
+	bytes_add( r, ',' );
+	bytes_add_n2( r, cpixels.size.h );
+	bytes_paste_move( "},\n", r );
+
+	bytes_add( r, '{' );
+	iter( p, cpixels.palette_size )
+	{
+		color c = cpixels.palette[ p ];
+		bytes_paste_move( "0x", r );
+		bytes_add_hex_n4( r, c.rgba );
+		if( p < cpixels.palette_size - 1 ) bytes_add( r, ',' );
+	}
+	bytes_paste_move( "},\n", r );
+
+	bytes_add_n1( r, cpixels.palette_size );
+
+	bytes_add( r, ',' );
+	bytes_add_n1( r, cpixels.uses_lzss ? 1 : 0 );
+
+	bytes_add( r, ',' );
+	bytes_add_n4( r, cpixels.pre_lzss_size );
+
+	bytes_paste_move( "};\n", r );
+
+	byte filename[ 256 ] = { 0 };
+	byte ref fname_ptr = filename;
+	bytes_paste_move( name, fname_ptr );
+	bytes_paste_move( ".h", fname_ptr );
+
+	file f = new_file( filename );
+	file_save( ref_of( f ), output, r - output );
+
+	delete_ref( output );
 }
 
 ///////
@@ -1783,4 +1924,4 @@ fn _C7H16_close()
 		_C7H16_close();\
 		out success;\
 	}\
-	fn _C7H16_main()\
+	fn _C7H16_main()
