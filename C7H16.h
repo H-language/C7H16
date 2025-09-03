@@ -14,42 +14,24 @@
 
 //
 
-fusion( pixel )
-{
-	n4 bgra;
+type_from( n4 ) pixel;
+#define pixel_bits 2
 
-	variant
-	{
-		n1 b;
-		n1 g;
-		n1 r;
-		n1 a;
-	};
-};
+#define pixel( R, G, B, A ) ( ( ( ( A ) & 0xff ) << 24 ) | ( ( ( B ) & 0xff ) ) | ( ( ( G ) & 0xff ) << 8 ) | ( ( ( R ) & 0xff ) << 16 ) )
 
-#define pixel( R, G, B, A ) make( pixel, .r = R, .g = G, .b = B, .a = A )
+#define pixel_r( PIXEL ) ( ( PIXEL & 0x00ff0000 ) >> 16 )
+#define pixel_g( PIXEL ) ( ( PIXEL & 0x0000ff00 ) >> 8 )
+#define pixel_b( PIXEL ) ( PIXEL & 0x000000ff )
+#define pixel_a( PIXEL ) ( ( PIXEL & 0xff000000 ) >> 24 )
 
-//
-
-fusion( color )
-{
-	n4 rgba;
-
-	variant
-	{
-		n1 r;
-		n1 g;
-		n1 b;
-		n1 a;
-	};
-};
-
-#define color( R, G, B, A ) make( color, .r = R, .g = G, .b = B, .a = A )
-
-//
-
-#define color_to_pixel( COLOR ) pixel( COLOR.r, COLOR.g, COLOR.b, COLOR.a )
-#define pixel_to_color( PIXEL ) color( PIXEL.r, PIXEL.g, PIXEL.b, PIXEL.a )
+global pixel pixel_black = pixel( 0x00, 0x00, 0x00, 0xff );
+global pixel pixel_white = pixel( 0xff, 0xff, 0xff, 0xff );
+global pixel pixel_red = pixel( 0xff, 0x00, 0x00, 0xff );
+global pixel pixel_yellow = pixel( 0xff, 0xff, 0x00, 0xff );
+global pixel pixel_green = pixel( 0x00, 0xff, 0x00, 0xff );
+global pixel pixel_cyan = pixel( 0x00, 0xff, 0xff, 0xff );
+global pixel pixel_blue = pixel( 0x00, 0x00, 0xff, 0xff );
+global pixel pixel_magenta = pixel( 0xff, 0x00, 0xff, 0xff );
 
 //
 
@@ -61,51 +43,52 @@ type( canvas )
 	n2x2 size;
 };
 
-global perm canvas ref current_canvas_ref = nothing;
+global canvas ref current_canvas_ref = nothing;
 
-#define _canvas( W, H ) make( canvas, .pixels = to( pixel ref, new_ref( pixel, W * H ) ), .size = make( n2x2, .w = W, .h = H ) )
+#define _canvas( W, H ) make( canvas, .pixels = to( pixel ref, new_ref( pixel, ( W ) * ( H ) ) ), .size = make( n2x2, ( W ), ( H ) ) )
 #define _eval_canvas( WIDTH_HEIGHT... ) _canvas( WIDTH_HEIGHT )
 #define canvas( WIDTH_HEIGHT... ) _eval_canvas( DEFAULTS( ( 1, 1 ), WIDTH_HEIGHT ) )
 
-fn canvas_resize( canvas const_ref c, const n2 width, const n2 height )
-{
-	out_if( c->size.w is width and c->size.h is height );
-	c->pixels = ref_resize( c->pixels, ( c->size.w * c->size.h ) << 2, ( width * height ) << 2 );
-	c->size.w = width;
-	c->size.h = height;
-}
+#define canvas_resize( CANVAS, WIDTH, HEIGHT )\
+	START_DEF\
+	{\
+		temp const n2 _WIDTH = n2( WIDTH );\
+		temp const n2 _HEIGHT = n2( HEIGHT );\
+		skip_if( CANVAS.size.w is _WIDTH and CANVAS.size.h is _HEIGHT );\
+		CANVAS.pixels = ref_resize( CANVAS.pixels, ( CANVAS.size.w * CANVAS.size.h ) << pixel_bits, ( _WIDTH * _HEIGHT ) << pixel_bits );\
+		CANVAS.size.w = _WIDTH;\
+		CANVAS.size.h = _HEIGHT;\
+	}\
+	END_DEF
 
-fn canvas_fill( canvas const_ref c, const pixel color )
-{
-	if_all( color.r is color.g, color.g is color.b, color.b is color.a )
-	{
-		bytes_fill( c->pixels, color.r, i4( c->size.w ) * i4( c->size.h ) << 2 );
-	}
-	else
-	{
-		iter( i, i4( c->size.w ) * i4( c->size.h ) )
-		{
-			c->pixels[ i ] = color;
-		}
-	}
-}
+#define canvas_fill( CANVAS, PIXEL )\
+	START_DEF\
+	{\
+		temp const pixel _PIXEL = PIXEL;\
+		if_all( pixel_r( _PIXEL ) is pixel_g( _PIXEL ), pixel_g( _PIXEL ) is pixel_b( _PIXEL ), pixel_b( _PIXEL ) is pixel_a( _PIXEL ) )\
+		{\
+			bytes_fill( CANVAS.pixels, pixel_r( _PIXEL ), i4( CANVAS.size.w ) * i4( CANVAS.size.h ) << pixel_bits );\
+		}\
+		else\
+		{\
+			iter( _p, i4( CANVAS.size.w ) * i4( CANVAS.size.h ) )\
+			{\
+				CANVAS.pixels[ _p ] = _PIXEL;\
+			}\
+		}\
+	}\
+	END_DEF
 
-fn canvas_clear( canvas const_ref c )
-{
-	bytes_clear( c->pixels, i4( c->size.w ) * i4( c->size.h ) << 2 );
-}
+#define canvas_clear( CANVAS ) if_something( CANVAS.pixels ) bytes_clear( CANVAS.pixels, i4( CANVAS.size.w ) * i4( CANVAS.size.h ) << pixel_bits )
 
 //
 
-#define _if_canvas_pixel_safe( CANVAS, X, Y ) if( point_in_size( X, Y, CANVAS.size.w, CANVAS.size.h ) )
+#define canvas_pixel_safe( CANVAS, X, Y ) ( point_in_size( X, Y, CANVAS.size.w, CANVAS.size.h ) )
 #define _canvas_get_pixel_index( CANVAS, INDEX ) CANVAS.pixels[ ( INDEX ) ]
 
 #define canvas_get_pixel_row( CANVAS, X, ROW ) _canvas_get_pixel_index( CANVAS, i4( X ) + ( ROW ) )
 #define canvas_get_pixel( CANVAS, X, Y ) canvas_get_pixel_row( CANVAS, X, i4( Y ) * i4( CANVAS.size.w ) )
-#define canvas_get_pixel_safe( CANVAS, X, Y ) _if_canvas_pixel_safe( CANVAS, X, Y ) canvas_get_pixel( CANVAS, X, Y )
-
-#define get_pixel( X, Y ) canvas_get_pixel( current_canvas_ref, X, Y )
-#define get_pixel_safe( X, Y ) canvas_get_pixel_safe( current_canvas_ref, X, Y )
+#define canvas_get_pixel_safe( CANVAS, X, Y ) pick( canvas_pixel_safe( CANVAS, X, Y ), canvas_get_pixel( CANVAS, X, Y ), pixel( 0, 0, 0, 0 ) )
 
 //
 
@@ -113,60 +96,139 @@ fn canvas_clear( canvas const_ref c )
 
 #define canvas_draw_pixel_row( CANVAS, X, ROW, PIXEL ) ( canvas_get_pixel_row( CANVAS, X, ROW ) ) = ( PIXEL )
 #define canvas_draw_pixel( CANVAS, X, Y, PIXEL ) ( canvas_get_pixel( CANVAS, X, Y ) ) = ( PIXEL )
-#define canvas_draw_pixel_safe( CANVAS, X, Y, PIXEL ) canvas_get_pixel_safe( CANVAS, X, Y ) = ( PIXEL )
-
-#define draw_pixel( X, Y, PIXEL ) canvas_draw_pixel( val_of( current_canvas_ref ), X, Y, PIXEL )
-#define draw_pixel_safe( X, Y, PIXEL ) canvas_draw_pixel_safe( val_of( current_canvas_ref ), X, Y, PIXEL )
+#define canvas_draw_pixel_safe( CANVAS, X, Y, PIXEL ) if( canvas_pixel_safe( CANVAS, X, Y ) ) canvas_get_pixel( CANVAS, X, Y ) = ( PIXEL )
 
 ///////
 
-#define fn_line( Ax, Ay, Bx, By, CODE )\
+#define canvas_draw_canvas( TO_CANVAS, FROM_CANVAS, TLx, TLy )\
 	START_DEF\
 	{\
-		temp i2 _x = i2( Ax );\
-		temp i2 _y = i2( Ay );\
-		temp i2 _x2 = i2( Bx );\
-		temp i2 _y2 = i2( By );\
-		temp i2 dx = i2_abs( _x2 - _x );\
-		temp i2 sx = pick( _x < _x2, 1, -1 );\
-		temp i2 dy = -i2_abs( _y2 - _y );\
-		temp i2 sy = pick( _y < _y2, 1, -1 );\
-		temp i2 err = dx + dy;\
-		temp i2 e2;\
-		loop\
+		temp const n2 _W = FROM_CANVAS.size.w << pixel_bits;\
+		iter( _Y, FROM_CANVAS.size.h )\
 		{\
-			skip_if( _x is _x2 and _y is _y2 );\
-			CODE;\
-			e2 = err << 1;\
-			if( e2 >= dy )\
-			{\
-				skip_if( _x is _x2 );\
-				err += dy;\
-				_x += sx;\
-			}\
-			if( e2 <= dx )\
-			{\
-				skip_if( _y is _y2 );\
-				err += dx;\
-				_y += sy;\
-			}\
+			bytes_copy( ref_of( canvas_get_pixel( FROM_CANVAS, 0, _Y ) ), _W, ref_of( canvas_get_pixel( TO_CANVAS, TLx, TLy + _Y ) ) );\
 		}\
 	}\
 	END_DEF
 
-#define _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, SUFFIX... ) fn_line( Ax, Ay, Bx, By, canvas_draw_pixel##SUFFIX( CANVAS, _x, _y, PIXEL ) );
+//
+
+#define canvas_draw_canvas_part( TO_CANVAS, FROM_CANVAS, TLx, TLy, PART_TLx, PART_TLy, PART_SIZEw, PART_SIZEh )\
+	START_DEF\
+	{\
+		temp const n2 _W = ( PART_SIZEw ) << pixel_bits;\
+		iter( _Y, PART_SIZEh )\
+		{\
+			bytes_copy( ref_of( canvas_get_pixel( FROM_CANVAS, PART_TLx, ( PART_TLy ) + _Y ) ), _W, ref_of( canvas_get_pixel( TO_CANVAS, TLx, ( TLy ) + _Y ) ) );\
+		}\
+	}\
+	END_DEF
+
+#define canvas_draw_canvas_part_safe( TO_CANVAS, FROM_CANVAS, TLx, TLy, PART_TLx, PART_TLy, PART_SIZEw, PART_SIZEh )\
+	START_DEF\
+	{\
+		const i2 _TLx = TLx;\
+		temp i2 _X = MAX( 0, _TLx );\
+		const i2 _PART_TLx = PART_TLx;\
+		skip_if( _PART_TLx + ( _X - _TLx ) >= FROM_CANVAS.size.w );\
+		const i2 _TLy = TLy;\
+		temp i2 _SY = ( PART_TLy ) + ( MAX( 0, _TLy ) - _TLy );\
+		skip_if( _SY >= FROM_CANVAS.size.h );\
+		temp i2 _W = i2_min3( TO_CANVAS.size.w - _X, ( PART_SIZEw ) - ( _X - _TLx ), FROM_CANVAS.size.w - ( _PART_TLx + ( _X - _TLx ) ) );\
+		skip_if( _W <= 0 );\
+		_W <<= pixel_bits;\
+		iter( _Y, i2_min( TO_CANVAS.size.h, _TLy + ( PART_SIZEh ) ) - MAX( 0, _TLy ) )\
+		{\
+			bytes_copy( ref_of( canvas_get_pixel( FROM_CANVAS, _PART_TLx + ( _X - _TLx ), _SY + _Y ) ), _W, ref_of( canvas_get_pixel( TO_CANVAS, _X, MAX( 0, _TLy ) + _Y ) ) );\
+		}\
+	}\
+	END_DEF
+
+///////
+
+#define _line_fn( _LINE_FN, Ax, Ay, Bx, By, X_NAME, Y_NAME, CODE )\
+	START_DEF\
+	{\
+		temp i2 X_NAME = i2( Ax );\
+		temp i2 Y_NAME = i2( Ay );\
+		temp const i2 _LINE_FN##_x2 = i2( Bx );\
+		temp const i2 _LINE_FN##_y2 = i2( By );\
+		temp const i2 _LINE_FN##_xd = _LINE_FN##_x2 - X_NAME;\
+		temp const i2 _LINE_FN##_yd = _LINE_FN##_y2 - Y_NAME;\
+		temp i4 _LINE_FN##_hs = ( i4( X_NAME ) << 20 ) + 0x80000;\
+		temp i4 _LINE_FN##_vs = ( i4( Y_NAME ) << 20 ) + 0x80000;\
+		temp const i2 _LINE_FN##_ax = ABS( _LINE_FN##_xd );\
+		temp const i2 _LINE_FN##_ay = ABS( _LINE_FN##_yd );\
+		temp i2 _LINE_FN##_a = pick( _LINE_FN##_ax > _LINE_FN##_ay, _LINE_FN##_ax, _LINE_FN##_ay );\
+		temp const i4 _LINE_FN##_recip = 0x100000 / i4( _LINE_FN##_a );\
+		temp const i4 _LINE_FN##_xs = i4( _LINE_FN##_xd ) * _LINE_FN##_recip;\
+		temp const i4 _LINE_FN##_ys = i4( _LINE_FN##_yd ) * _LINE_FN##_recip;\
+		temp const i2 _LINE_FN##_i = 0;\
+		++_LINE_FN##_a;\
+		do\
+		{\
+			X_NAME = i2( _LINE_FN##_hs >> 20 );\
+			Y_NAME = i2( _LINE_FN##_vs >> 20 );\
+			CODE;\
+			_LINE_FN##_hs += _LINE_FN##_xs;\
+			_LINE_FN##_vs += _LINE_FN##_ys;\
+		}\
+		while( --_LINE_FN##_a );\
+	}\
+	END_DEF
+#define _line_fn_eval( _LINE_FN, Ax, Ay, Bx, By, X_NAME, Y_NAME, CODE ) _line_fn( _LINE_FN, Ax, Ay, Bx, By, X_NAME, Y_NAME, CODE )
+#define line_fn( Ax, Ay, Bx, By, X_NAME, Y_NAME, CODE ) _line_fn_eval( JOIN( _LINE_FN_, __COUNTER__ ), Ax, Ay, Bx, By, X_NAME, Y_NAME, CODE )
+
+#define _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, SUFFIX... ) line_fn( Ax, Ay, Bx, By, _X, _Y, canvas_draw_pixel##SUFFIX( CANVAS, _X, _Y, PIXEL ) );
 #define canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL )
 #define canvas_draw_line_safe( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, _safe )
-
-#define draw_line( Ax, Ay, Bx, By, PIXEL ) canvas_draw_line( val_of( current_canvas_ref ), Ax, Ay, Bx, By, PIXEL )
-#define draw_line_safe( Ax, Ay, Bx, By, PIXEL ) canvas_draw_line_safe( val_of( current_canvas_ref ), Ax, Ay, Bx, By, PIXEL )
 
 //
 
 #define _wrap_coord( COORD, SIZE ) ( ( ( COORD ) + ( SIZE ) ) mod ( SIZE ) )
 #define canvas_draw_pixel_wrap( CANVAS, X, Y, PIXEL ) canvas_draw_pixel( CANVAS, _wrap_coord( i4( X ), i4( CANVAS.size.w ) ), _wrap_coord( i4( Y ), i4( CANVAS.size.h ) ), PIXEL )
 #define canvas_draw_line_wrap( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, _wrap )
-#define draw_line_wrap( Ax, Ay, Bx, By, PIXEL ) canvas_draw_line_wrap( val_of( current_canvas_ref ), Ax, Ay, Bx, By, PIXEL )
+
+//
+
+#define _box_fn( _BOX_FN, TLx, TLy, BRx, BRy, X_NAME, Y_NAME, CODE )\
+	START_DEF\
+	{\
+		temp i2 _BOX_FN##_x1 = i2( TLx );\
+		temp i2 _BOX_FN##_y1 = i2( TLy );\
+		temp const i2 _BOX_FN##_x2 = i2( BRx );\
+		temp const i2 _BOX_FN##_y2 = i2( BRy );\
+		temp i2 X_NAME = _BOX_FN##_x1;\
+		temp i2 Y_NAME = _BOX_FN##_y1;\
+		temp i2 _BOX_FN##_w = _BOX_FN##_x2 - _BOX_FN##_x1 + 1;\
+		do\
+		{\
+			Y_NAME = _BOX_FN##_y1;\
+			CODE;\
+			Y_NAME = _BOX_FN##_y2;\
+			CODE;\
+			++X_NAME;\
+		}\
+		while( --_BOX_FN##_w );\
+		Y_NAME = _BOX_FN##_y1 + 1;\
+		temp i2 _BOX_FN##_h = _BOX_FN##_y2 - _BOX_FN##_y1 - 1;\
+		while( _BOX_FN##_h-- > 0 )\
+		{\
+			X_NAME = _BOX_FN##_x1;\
+			CODE;\
+			X_NAME = _BOX_FN##_x2;\
+			CODE;\
+			++Y_NAME;\
+		}\
+	}\
+	END_DEF
+
+#define _box_fn_eval( _BOX_FN, TLx, TLy, BRx, BRy, X_NAME, Y_NAME, CODE ) _box_fn( _BOX_FN, TLx, TLy, BRx, BRy, X_NAME, Y_NAME, CODE )
+#define box_fn( TLx, TLy, BRx, BRy, X_NAME, Y_NAME, CODE ) _box_fn_eval( JOIN( _BOX_FN_, __COUNTER__ ), TLx, TLy, BRx, BRy, X_NAME, Y_NAME, CODE )
+
+#define _canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL, SUFFIX... ) box_fn( TLx, TLy, BRx, BRy, _X, _Y, canvas_draw_pixel##SUFFIX( CANVAS, _X, _Y, PIXEL ) );
+#define canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL ) _canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL )
+#define canvas_draw_box_safe( CANVAS, TLx, TLy, BRx, BRy, PIXEL ) _canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL, _safe )
 
 ///////
 
@@ -199,8 +261,9 @@ object( window )
 	#if OS_LINUX
 		GC gc;
 		Picture pic;
-		Picture pic_target;
 		Pixmap pixmap;
+		Pixmap present_pixmap;
+		Picture present_pic;
 		XTransform transform;
 	#elif OS_WINDOWS
 		flag wm_timer;
@@ -239,12 +302,12 @@ object( window )
 	n1 inputs_released_count;
 };
 
-global perm window current_window = nothing;
+global window current_window = nothing;
 
-global perm window alive_windows[ 32 ];
-global perm n1 alive_windows_count = 0;
+global window alive_windows[ 32 ];
+global n1 alive_windows_count = 0;
 
-global perm const byte ref OS_INPUT_MAP = nothing;
+global const byte ref OS_INPUT_MAP = nothing;
 
 #define INPUT_MASK_PRESSED 0x1
 #define INPUT_MASK_HELD 0x2
@@ -356,20 +419,32 @@ fn _window_resize( const window this )
 
 	out_if( this->buffer.size.w is buffer_w and this->buffer.size.h is buffer_h );
 	//
-	canvas_resize( ref_of( this->buffer ), buffer_w, buffer_h );
+	canvas_resize( this->buffer, buffer_w, buffer_h );
 	//
 	#if OS_LINUX
 		this->image->data = to( byte ref, this->buffer.pixels );
 		this->image->width = this->buffer.size.w;
 		this->image->height = this->buffer.size.h;
-		this->image->bytes_per_line = this->buffer.size.w << 2;
+		this->image->bytes_per_line = this->buffer.size.w << pixel_bits;
 
-		XFreePixmap( this->display, this->pixmap );
+		if( this->pixmap )
+		{
+			XFreePixmap( this->display, this->pixmap );
+			XRenderFreePicture( this->display, this->pic );
+		}
+
 		this->pixmap = XCreatePixmap( this->display, this->handle, this->buffer.size.w, this->buffer.size.h, DefaultDepth( this->display, DefaultScreen( this->display ) ) );
-
-		XRenderFreePicture( this->display, this->pic );
 		this->pic = XRenderCreatePicture( this->display, this->pixmap, XRenderFindVisualFormat( this->display, DefaultVisual( this->display, DefaultScreen( this->display ) ) ), 0, 0 );
 		XRenderSetPictureTransform( this->display, this->pic, ref_of( this->transform ) );
+
+		if( this->present_pixmap )
+		{
+			XFreePixmap( this->display, this->present_pixmap );
+			XRenderFreePicture( this->display, this->present_pic );
+		}
+
+		this->present_pixmap = XCreatePixmap( this->display, this->handle, this->size_target.w, this->size_target.h, DefaultDepth( this->display, DefaultScreen( this->display ) ) );
+		this->present_pic = XRenderCreatePicture( this->display, this->present_pixmap, XRenderFindVisualFormat( this->display, DefaultVisual( this->display, DefaultScreen( this->display ) ) ), 0, 0 );
 	#elif OS_WINDOWS
 		this->image.bmiHeader.biWidth = this->buffer.size.w;
 		this->image.bmiHeader.biHeight = -this->buffer.size.h;
@@ -494,7 +569,8 @@ fn _window_update( const window this )
 			if( this->scale > 1 )
 			{
 				XPutImage( this->display, this->pixmap, this->gc, this->image, 0, 0, 0, 0, this->buffer.size.w, this->buffer.size.h );
-				XRenderComposite( this->display, PictOpSrc, this->pic, None, this->pic_target, 0, 0, 0, 0, x, y, scaled_width, scaled_height );
+				XRenderComposite( this->display, PictOpSrc, this->pic, None, this->present_pic, 0, 0, 0, 0, x, y, scaled_width, scaled_height );
+				XPresentPixmap( this->display, this->handle, this->present_pixmap, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 );
 			}
 			else
 			{
@@ -545,6 +621,12 @@ fn _window_update( const window this )
 	{
 		nano_sleep( target_end - now );
 	}
+}
+
+object_fn( window, set_fps, const r8 in_fps )
+{
+	this->fps_target = in_fps;
+	this->target_frame_nano = to( nano, r8( nano_per_sec ) / this->fps_target );
 }
 
 group( window_event_type, n2 )
@@ -713,14 +795,6 @@ embed window new_window( const n2 width, const n2 height )
 
 		out_window->image = XCreateImage( out_window->display, DefaultVisual( out_window->display, screen ), DefaultDepth( out_window->display, screen ), ZPixmap, 0, to( byte ref, out_window->buffer.pixels ), width, height, 32, 0 );
 		out_window->gc = XCreateGC( out_window->display, out_window->handle, 0, 0 );
-
-		out_window->pixmap = XCreatePixmap( out_window->display, out_window->handle, width, height, DefaultDepth( out_window->display, screen ) );
-		XRenderPictFormat ref fmt = XRenderFindVisualFormat( out_window->display, DefaultVisual( out_window->display, screen ) );
-		out_window->pic = XRenderCreatePicture( out_window->display, out_window->pixmap, fmt, 0, 0 );
-		out_window->pic_target = XRenderCreatePicture( out_window->display, out_window->handle, fmt, 0, 0 );
-
-		XRenderSetPictureFilter( out_window->display, out_window->pic, "nearest", 0, 0 );
-
 		out_window->transform.matrix[ 2 ][ 2 ] = XDoubleToFixed( 1.0 );
 	#elif OS_WINDOWS
 		WNDCLASS wc = { 0 };
@@ -746,6 +820,7 @@ embed window new_window( const n2 width, const n2 height )
 		SetWindowLongPtr( out_window->handle, GWLP_USERDATA, to( LONG_PTR, out_window ) );
 	#endif
 	//
+	window_set_fps( out_window, 60 );
 	current_window = out_window;
 	alive_windows[ alive_windows_count++ ] = current_window;
 	//
@@ -810,8 +885,6 @@ object_fn( window, process )
 
 	if( this->tick is 0 )
 	{
-		this->fps_target = 120;
-		this->target_frame_nano = to( nano, r8( nano_per_sec ) / this->fps_target );
 		this->start_nano = get_nano();
 		this->past_nano = this->start_nano;
 		call( this, start_fn );
@@ -842,7 +915,6 @@ object_fn( window, process )
 	out_if( this->close is yes );
 
 	_window_update( this );
-
 }
 
 ///////
@@ -1150,11 +1222,12 @@ group( audio_channel )
 type( audio )
 {
 	r4 ref data;
-	n4 frames;
+	n8 data_size;
+	n4 rate;
 	audio_channel channel;
 };
 
-embed audio load_audio( const byte const_ref wav_path )
+embed audio load_wav( const byte const_ref wav_path )
 {
 	temp audio out_audio = { 0 };
 	file f = map_file( wav_path );
@@ -1182,9 +1255,10 @@ embed audio load_audio( const byte const_ref wav_path )
 	out_if( data_size is 0 ) out_audio;
 
 	temp const n4 samples = data_size / ( bits >> 3 );
-	out_audio.frames = samples / channels;
+	out_audio.rate = samples / channels;
 	out_audio.channel = to( audio_channel, channels );
-	out_audio.data = new_bytes( samples << 2 );
+	out_audio.data_size = samples << 2;
+	out_audio.data = new_bytes( out_audio.data_size );
 
 	if( bits is 16 )
 	{
@@ -1201,6 +1275,62 @@ embed audio load_audio( const byte const_ref wav_path )
 		{
 			out_audio.data[ s ] = ( r4( src[ s ] ) - 128.0 ) / 128.0;
 		}
+	}
+
+	file_unmap( ref_of( f ) );
+
+	out out_audio;
+}
+
+type( _audio_raw )
+{
+	i2 ref data;
+	n4 rate;
+	n8 samples;
+	audio_channel channel;
+};
+
+embed _audio_raw load_wav_raw( const byte const_ref wav_path )
+{
+	temp _audio_raw out_audio = { 0 };
+	file f = map_file( wav_path );
+	out_if_nothing( f.mapped_bytes ) out_audio;
+
+	temp const n2 const_ref fmt = to( n2 ref, f.mapped_bytes + 20 );
+	temp const n2 audio_format = fmt[ 0 ];
+	temp const n2 channels = fmt[ 1 ];
+	temp const n4 sample_rate = val_of( to( n4 ref, f.mapped_bytes + 24 ) );
+	temp const n2 bits = val_of( to( n2 ref, f.mapped_bytes + 34 ) );
+
+	out_if( bits isnt 16 ) out_audio;
+
+	temp byte ref r = f.mapped_bytes + 36;
+	temp n4 data_size = 0;
+	while( r < f.mapped_bytes + f.size )
+	{
+		if( bytes_compare( r, "data", 4 ) is 0 )
+		{
+			data_size = val_of( to( n4 ref, r + 4 ) );
+			r += 8;
+			skip;
+		}
+		r += 8 + val_of( to( n4 ref, r + 4 ) );
+	}
+
+	out_if( data_size is 0 ) out_audio;
+
+	temp const n8 samples = data_size / 2;
+
+	out_audio.rate = samples / channels;
+	out_audio.channel = to( audio_channel, channels );
+	out_audio.samples = samples;
+
+	out_audio.data = to( i2 ref, new_bytes( samples * size_of( i2 ) ) );
+
+	temp const i2 const_ref src = to( i2 const_ref, r );
+	iter( s, samples )
+	{
+		out_audio.data[ s ] = src[ s ];
 	}
 
 	file_unmap( ref_of( f ) );
@@ -1298,17 +1428,17 @@ fn audio_mixer_process( audio_mixer ref m, i2 ref output, n4 samples )
 	{
 		temp audio_instance const_ref i = ref_of( m->instances[ instance_id ] );
 		next_if( i->playing is no );
-		temp const i4 frames = pick( samples < ( i->audio_ref->frames - i->position ), samples, i->audio_ref->frames - i->position );
+		temp const i4 rate = pick( samples < ( i->audio_ref->rate - i->position ), samples, i->audio_ref->rate - i->position );
 		temp const r4 left_gain = i->volume * ( 1.0 - i->pan ) / 2.0;
 		temp const r4 right_gain = i->volume * ( 1.0 + i->pan ) / 2.0;
 
-		iter( f, frames )
+		iter( f, rate )
 		{
 			temp const r4 const_ref p = ref_of( i->audio_ref->data[ ( i->position + f ) * n4( i->audio_ref->channel ) ] );
 			buffer[ f << 1 ] += p[ 0 ] * left_gain;
 			buffer[ ( f << 1 ) + 1 ] += p[ i->audio_ref->channel - 1 ] * right_gain;
 		}
-		if( ( i->position += frames ) >= i->audio_ref->frames ) i->playing = no;
+		if( ( i->position += rate ) >= i->audio_ref->rate ) i->playing = no;
 	}
 
 	iter( sample, samples2 )
@@ -1463,45 +1593,373 @@ fn audio_set( audio_mixer const_ref mixer, audio_id id, const r4 volume, const r
 
 ///////
 
+type( compressed_wave )
+{
+	byte ref data;
+	n4 data_size;
+	n4 orig_size;
+	n4 header_size;
+	n1 k_param;
+};
+
+embed compressed_wave wav_to_compressed_wave( const byte const_ref in_wav, n8 size )
+{
+	compressed_wave out_cw = make( compressed_wave, .orig_size = size );
+
+	temp const byte ref r = in_wav + 36;
+	temp n4 data_off = 36;
+	temp n4 data_sz = 0;
+
+	while( r < in_wav + size )
+	{
+		if( bytes_compare( r, "data", 4 ) is 0 )
+		{
+			data_sz = val_of( to( n4 ref, r + 4 ) );
+			data_off = r + 8 - in_wav;
+			skip;
+		}
+		r += 8 + val_of( to( n4 ref, r + 4 ) );
+	}
+
+	out_cw.header_size = data_off;
+	temp n2 bits = val_of( to( n2 ref, in_wav + 34 ) );
+	temp n2 ch = val_of( to( n2 ref, in_wav + 22 ) );
+	temp n8 samples = data_sz / ( bits >> 3 );
+	temp byte ref comp = new_bytes( data_off + data_sz );
+	temp n8 pos = 0;
+	temp n8 bit_pos = 0;
+
+	bytes_copy( in_wav, data_off, comp );
+	pos = data_off;
+
+	temp n1 k = 4;
+	temp n8 sum = 0;
+
+	if( bits is 16 )
+	{
+		temp const i2 const_ref src = to( i2 const_ref, in_wav + data_off );
+		temp i4 p1 = 0,
+		p2 = 0;
+
+		if( ch is 2 )
+		{
+			iter( s, samples >> 1 )
+			{
+				temp i4 l = src[ s << 1 ];
+				temp i4 r = src[ ( s << 1 ) + 1 ];
+				temp i4 mid = ( l + r ) >> 1;
+				temp i4 side = l - r;
+
+				temp i4 pred_m = ( p1 << 1 ) - p2;
+				temp i4 res_m = mid - pred_m;
+				p2 = p1;
+				p1 = mid;
+
+				sum += pick( res_m < 0, -res_m, res_m );
+
+				temp n4 rice = pick( res_m < 0, ( -res_m << 1 ) - 1, res_m << 1 );
+				temp n4 q = rice >> k;
+				temp n4 r2 = rice & ( ( 1 << k ) - 1 );
+
+				while( q-- > 0 )
+				{
+					comp[ pos + ( bit_pos >> 3 ) ] |= 1 << ( bit_pos & 7 );
+					++bit_pos;
+				}
+				++bit_pos;
+
+				temp n1 b = 0;
+				while( b < k )
+				{
+					if( r2 & ( 1 << b ) ) comp[ pos + ( bit_pos >> 3 ) ] |= 1 << ( bit_pos & 7 );
+					++bit_pos;
+					++b;
+				}
+
+				comp[ pos + ( bit_pos >> 3 ) ] |= ( side & 0xFF ) << ( bit_pos & 7 );
+				bit_pos += 8;
+				comp[ pos + ( bit_pos >> 3 ) ] |= ( ( side >> 8 ) & 0xFF ) << ( bit_pos & 7 );
+				bit_pos += 8;
+			}
+		}
+		else
+		{
+			iter( s, samples )
+			{
+				temp i2 pred = ( p1 << 1 ) - p2;
+				temp i2 res = src[ s ] - pred;
+				p2 = p1;
+				p1 = src[ s ];
+
+				sum += pick( res < 0, -res, res );
+
+				temp n4 rice = pick( res < 0, ( -res << 1 ) - 1, res << 1 );
+				temp n4 q = rice >> k;
+				temp n4 r2 = rice & ( ( 1 << k ) - 1 );
+
+				while( q-- > 0 )
+				{
+					comp[ pos + ( bit_pos >> 3 ) ] |= 1 << ( bit_pos & 7 );
+					++bit_pos;
+				}
+				++bit_pos;
+
+				temp n1 b = 0;
+				while( b < k )
+				{
+					if( r2 & ( 1 << b ) ) comp[ pos + ( bit_pos >> 3 ) ] |= 1 << ( bit_pos & 7 );
+					++bit_pos;
+					++b;
+				}
+			}
+		}
+	}
+	else
+	{
+		temp const n1 const_ref src = to( n1 const_ref, in_wav + data_off );
+		temp n1 p1 = 128,
+		p2 = 128;
+
+		iter( s, samples )
+		{
+			temp n1 pred = ( p1 << 1 ) - p2;
+			temp i1 res = src[ s ] - pred;
+			p2 = p1;
+			p1 = src[ s ];
+
+			sum += pick( res < 0, -res, res );
+
+			temp n2 rice = pick( res < 0, ( -res << 1 ) - 1, res << 1 );
+			temp n2 q = rice >> k;
+			temp n2 r = rice & ( ( 1 << k ) - 1 );
+
+			while( q-- > 0 )
+			{
+				comp[ pos + ( bit_pos >> 3 ) ] |= 1 << ( bit_pos & 7 );
+				++bit_pos;
+			}
+			++bit_pos;
+
+			temp n1 b = 0;
+			while( b < k )
+			{
+				if( r & ( 1 << b ) ) comp[ pos + ( bit_pos >> 3 ) ] |= 1 << ( bit_pos & 7 );
+				++bit_pos;
+				++b;
+			}
+		}
+	}
+
+	while( sum > ( samples << ( k + 1 ) ) and k < 15 ) ++k;
+	while( sum < ( samples << k ) and k > 0 ) --k;
+	out_cw.k_param = k;
+
+	pos += ( bit_pos + 7 ) >> 3;
+	out_cw.data = bytes_resize( comp, pos );
+	out_cw.data_size = pos;
+
+	out out_cw;
+}
+
+embed byte ref compressed_wave_to_wav( const compressed_wave const_ref in_cw, n8 ref out_size )
+{
+	byte ref out_wav = new_bytes( in_cw->orig_size );
+	val_of( out_size ) = in_cw->orig_size;
+
+	bytes_copy( in_cw->data, in_cw->header_size, out_wav );
+
+	temp n2 bits = val_of( to( n2 ref, out_wav + 34 ) );
+	temp n2 ch = val_of( to( n2 ref, out_wav + 22 ) );
+	temp n4 samples = ( in_cw->orig_size - in_cw->header_size ) / ( bits >> 3 );
+	temp n8 pos = in_cw->header_size;
+	temp n4 bit_pos = 0;
+	temp n1 k = in_cw->k_param;
+
+	if( bits is 16 )
+	{
+		temp i2 ref dst = to( i2 ref, out_wav + in_cw->header_size );
+		temp i2 p1 = 0,
+		p2 = 0;
+
+		if( ch is 2 )
+		{
+			iter( s, samples >> 1 )
+			{
+				temp n4 rice = 0;
+				temp n4 q = 0;
+
+				while( in_cw->data[ pos + ( bit_pos >> 3 ) ] & ( 1 << ( bit_pos & 7 ) ) )
+				{
+					++q;
+					++bit_pos;
+				}
+				++bit_pos;
+
+				rice = q << k;
+				temp n1 b = 0;
+				while( b < k )
+				{
+					if( in_cw->data[ pos + ( bit_pos >> 3 ) ] & ( 1 << ( bit_pos & 7 ) ) ) rice |= 1 << b;
+					++bit_pos;
+					++b;
+				}
+
+				temp i2 res = pick( rice & 1, -( ( rice + 1 ) >> 1 ), rice >> 1 );
+				temp i2 pred = ( p1 << 1 ) - p2;
+				temp i2 mid = res + pred;
+				p2 = p1;
+				p1 = mid;
+
+				temp i2 side = 0;
+				side |= in_cw->data[ pos + ( bit_pos >> 3 ) ] >> ( bit_pos & 7 );
+				side |= in_cw->data[ pos + ( ( bit_pos + 8 ) >> 3 ) ] << ( 8 - ( bit_pos & 7 ) );
+				bit_pos += 16;
+
+				dst[ s << 1 ] = mid + ( side >> 1 );
+				dst[ ( s << 1 ) + 1 ] = mid - ( side >> 1 );
+			}
+		}
+		else
+		{
+			iter( s, samples )
+			{
+				temp n4 rice = 0;
+				temp n4 q = 0;
+
+				while( in_cw->data[ pos + ( bit_pos >> 3 ) ] & ( 1 << ( bit_pos & 7 ) ) )
+				{
+					++q;
+					++bit_pos;
+				}
+				++bit_pos;
+
+				rice = q << k;
+				temp n1 b = 0;
+				while( b < k )
+				{
+					if( in_cw->data[ pos + ( bit_pos >> 3 ) ] & ( 1 << ( bit_pos & 7 ) ) ) rice |= 1 << b;
+					++bit_pos;
+					++b;
+				}
+
+				temp i2 res = pick( rice & 1, -( ( rice + 1 ) >> 1 ), rice >> 1 );
+				temp i2 pred = ( p1 << 1 ) - p2;
+				p2 = p1;
+				p1 = res + pred;
+				dst[ s ] = p1;
+			}
+		}
+	}
+	else
+	{
+		temp n1 ref dst = to( n1 ref, out_wav + in_cw->header_size );
+		temp n1 p1 = 128,
+		p2 = 128;
+
+		iter( s, samples )
+		{
+			temp n2 rice = 0;
+			temp n2 q = 0;
+
+			while( in_cw->data[ pos + ( bit_pos >> 3 ) ] & ( 1 << ( bit_pos & 7 ) ) )
+			{
+				++q;
+				++bit_pos;
+			}
+			++bit_pos;
+
+			rice = q << k;
+			temp n1 b = 0;
+			while( b < k )
+			{
+				if( in_cw->data[ pos + ( bit_pos >> 3 ) ] & ( 1 << ( bit_pos & 7 ) ) ) rice |= 1 << b;
+				++bit_pos;
+				++b;
+			}
+
+			temp i1 res = pick( rice & 1, -( ( rice + 1 ) >> 1 ), rice >> 1 );
+			temp n1 pred = ( p1 << 1 ) - p2;
+			p2 = p1;
+			p1 = res + pred;
+			dst[ s ] = p1;
+		}
+	}
+
+	out out_wav;
+}
+
+///////
+
 embed canvas bmp_to_canvas( byte ref bmp_bytes, n4 bmp_bytes_size )
 {
 	temp canvas c = { 0 };
 	out_if_nothing( bmp_bytes ) c;
+	out_if( bmp_bytes_size < 54 ) c;
 
-	temp const n2 type = val_of( to( n2 ref, bmp_bytes + 0x00 ) );
-	temp const n4 data_offset = val_of( to( n4 ref, bmp_bytes + 0x0A ) );
-	temp const i4 width = val_of( to( i4 ref, bmp_bytes + 0x12 ) );
-	temp const i4 height = val_of( to( i4 ref, bmp_bytes + 0x16 ) );
-	temp const n2 bit_count = val_of( to( n2 ref, bmp_bytes + 0x1C ) );
-	temp const n4 colors_used = val_of( to( n4 ref, bmp_bytes + 0x2E ) );
+	temp const n2 type = val_of( to( n2 ref, bmp_bytes + 0 ) );
+	temp const n4 file_size = val_of( to( n4 ref, bmp_bytes + 2 ) );
+	temp const n4 data_offset = val_of( to( n4 ref, bmp_bytes + 10 ) );
+	temp const n4 dib_header_size = val_of( to( n4 ref, bmp_bytes + 14 ) );
+	temp const i4 width = val_of( to( i4 ref, bmp_bytes + 18 ) );
+	temp const i4 height = val_of( to( i4 ref, bmp_bytes + 22 ) );
+	temp const n2 planes = val_of( to( n2 ref, bmp_bytes + 26 ) );
+	temp const n2 bit_count = val_of( to( n2 ref, bmp_bytes + 28 ) );
+	temp const n4 compression = val_of( to( n4 ref, bmp_bytes + 30 ) );
+	temp const n4 image_size_field = val_of( to( n4 ref, bmp_bytes + 34 ) );
+	temp const n4 colors_used = val_of( to( n4 ref, bmp_bytes + 46 ) );
 
-	out_if( type isnt 0x4D42 ) c;
+	out_if( type isnt 0x4d42 ) c;
 	out_if( width <= 0 ) c;
+	out_if( planes isnt 1 ) c;
+	out_if( compression isnt 0 ) c;
+	out_if( bit_count isnt 1 and bit_count isnt 4 and bit_count isnt 8 and bit_count isnt 24 and bit_count isnt 32 ) c;
+	out_if( dib_header_size < 12 ) c;
 
 	c.size.w = width;
 	c.size.h = i4_abs( height );
 
-	temp const i8 row_size = ( ( width * bit_count + 31 ) / 32 ) << 2;
-	temp const n8 image_size = row_size * c.size.h;
+	temp const i8 row_size = ( ( width * bit_count + 31 ) >> 5 ) << pixel_bits;
+	temp const n8 calculated_image_size = row_size * c.size.h;
 
-	out_if( data_offset + image_size > bmp_bytes_size ) c;
+	out_if( data_offset > bmp_bytes_size ) c;
+	out_if( data_offset + calculated_image_size > bmp_bytes_size ) c;
 
 	c.pixels = new_ref( pixel, x2_area( c.size ) );
 	temp const byte ref pixel_data = bmp_bytes + data_offset;
 
-	color palette[ 256 ] = { 0 };
+	pixel palette[ 256 ] = { 0 };
 	if( bit_count <= 8 )
 	{
 		temp const n4 palette_size = pick( colors_used, colors_used, 1 << bit_count );
-		temp const byte ref palette_data = bmp_bytes + 54;
+		if( palette_size > 256 )
+		{
+			delete_ref( c.pixels );
+			out c;
+		}
+
+		temp const n4 palette_offset = 14 + dib_header_size;
+		temp const n4 palette_bytes = palette_size << pixel_bits;
+		if( palette_offset + palette_bytes > data_offset )
+		{
+			delete_ref( c.pixels );
+			out c;
+		}
+
+		temp const byte ref palette_data = bmp_bytes + palette_offset;
 
 		iter( i, palette_size )
 		{
-			temp const n4 pal_offset = i << 2;
-			palette[ i ].r = palette_data[ pal_offset + 2 ];
+			temp const n4 pal_offset = i << pixel_bits;
+			/*palette[ i ].b = palette_data[ pal_offset ];
 			palette[ i ].g = palette_data[ pal_offset + 1 ];
-			palette[ i ].b = palette_data[ pal_offset ];
-			palette[ i ].a = 0xff;
+			palette[ i ].r = palette_data[ pal_offset + 2 ];
+			palette[ i ].a = 255;*/
+			byte C1 = palette_data[ pal_offset ];
+			byte C2 = palette_data[ pal_offset + 1 ];
+			byte C3 = palette_data[ pal_offset + 2 ];
+			byte C4 = palette_data[ pal_offset + 3 ];
+
+			palette[ i ] = pixel( palette_data[ pal_offset + 2 ], palette_data[ pal_offset + 1 ], palette_data[ pal_offset ], 0xff );
 		}
 	}
 
@@ -1520,41 +1978,45 @@ embed canvas bmp_to_canvas( byte ref bmp_bytes, n4 bmp_bytes_size )
 				{
 					temp const i4 byte_index = x >> 3;
 					temp const i4 bit_index = 7 - ( x % 8 );
-					c.pixels[ dst_index ] = color_to_pixel( palette[ ( row_data[ byte_index ] >> bit_index ) & 1 ] );
+					temp const n1 palette_index = ( row_data[ byte_index ] >> bit_index ) & 1;
+					c.pixels[ dst_index ] = ( palette[ palette_index ] );
 					skip;
 				}
 
 				when( 4 )
 				{
 					temp const i4 byte_index = x >> 1;
-					temp const n1 nibble = pick( x & 1, row_data[ byte_index ] & 0x0F, ( row_data[ byte_index ] >> 4 ) & 0x0F );
-					c.pixels[ dst_index ] = color_to_pixel( palette[ nibble ] );
+					temp const n1 palette_index = pick( x & 1, row_data[ byte_index ] & 15, ( row_data[ byte_index ] >> 4 ) & 15 );
+					c.pixels[ dst_index ] = ( palette[ palette_index ] );
 					skip;
 				}
 
 				when( 8 )
 				{
-					c.pixels[ dst_index ] = color_to_pixel( palette[ row_data[ x ] ] );
+					temp const n1 palette_index = row_data[ x ];
+					c.pixels[ dst_index ] = ( palette[ palette_index ] );
 					skip;
 				}
 
 				when( 24 )
 				{
 					temp const i4 pixel_offset = x * 3;
-					c.pixels[ dst_index ].r = row_data[ pixel_offset + 2 ];
+					c.pixels[ dst_index ] = pixel( row_data[ pixel_offset ], row_data[ pixel_offset + 1 ], row_data[ pixel_offset + 2 ], 0xff );
+					/*c.pixels[ dst_index ].b = row_data[ pixel_offset ];
 					c.pixels[ dst_index ].g = row_data[ pixel_offset + 1 ];
-					c.pixels[ dst_index ].b = row_data[ pixel_offset ];
-					c.pixels[ dst_index ].a = 0xff;
+					c.pixels[ dst_index ].r = row_data[ pixel_offset + 2 ];
+					c.pixels[ dst_index ].a = 255;*/
 					skip;
 				}
 
 				when( 32 )
 				{
-					temp const i4 pixel_offset = x << 2;
-					c.pixels[ dst_index ].r = row_data[ pixel_offset + 2 ];
+					temp const i4 pixel_offset = x << pixel_bits;
+					c.pixels[ dst_index ] = pixel( row_data[ pixel_offset ], row_data[ pixel_offset + 1 ], row_data[ pixel_offset + 2 ], row_data[ pixel_offset + 3 ] );
+					/*c.pixels[ dst_index ].b = row_data[ pixel_offset ];
 					c.pixels[ dst_index ].g = row_data[ pixel_offset + 1 ];
-					c.pixels[ dst_index ].b = row_data[ pixel_offset ];
-					c.pixels[ dst_index ].a = row_data[ pixel_offset + 3 ];
+					c.pixels[ dst_index ].r = row_data[ pixel_offset + 2 ];
+					c.pixels[ dst_index ].a = row_data[ pixel_offset + 3 ];*/
 					skip;
 				}
 
@@ -1571,330 +2033,962 @@ embed canvas bmp_to_canvas( byte ref bmp_bytes, n4 bmp_bytes_size )
 }
 
 ///////
-
-type( compressed_pixels )
-{
-	byte ref data;
-	n4 data_size;
-	n2x2 size;
-	color palette[ 32 ];
-	n1 palette_size;
-	flag uses_lzss;
-	n4 pre_lzss_size;
-};
-
-embed compressed_pixels canvas_to_compressed_pixels( const canvas const_ref in_canvas )
-{
-	temp n8 area = n8( in_canvas->size.w ) * n8( in_canvas->size.h );
-	compressed_pixels out_cpixels = make( compressed_pixels, .data = new_bytes( area ), .size = in_canvas->size );
-	temp const pixel ref p = in_canvas->pixels;
-	temp const pixel const_ref p_end = p + area;
-
-	find_palette:
+#if 0
+	type( compressed_pixels )
 	{
-		temp pixel this_p = val_of( p );
-		temp n1 n = 0;
-		check_palette:
-		{
-			if( n is 0 and out_cpixels.palette_size > 0 )
-			{
-				jump_if_all( this_p.r is out_cpixels.palette[ 0 ].r, this_p.g is out_cpixels.palette[ 0 ].g, this_p.b is out_cpixels.palette[ 0 ].b ) found_palette;
-			}
-			else jump_if_all( this_p.r is out_cpixels.palette[ n ].r, this_p.g is out_cpixels.palette[ n ].g, this_p.b is out_cpixels.palette[ n ].b, this_p.a is out_cpixels.palette[ n ].a ) found_palette;
-			jump_if( ++n < out_cpixels.palette_size ) check_palette;
-		}
-		found_palette:
+		byte ref data;
+		n8 data_size;
+		n2x2 size;
+		color palette[ 32 ];
+		n1 palette_size;
+		flag uses_lzss;
+		n8 pre_lzss_size;
+	};
 
-		if( n >= out_cpixels.palette_size and n < 32 )
+	embed compressed_pixels canvas_to_compressed_pixels( const canvas const_ref in_canvas )
+	{
+		temp n8 area = n8( in_canvas->size.w ) * n8( in_canvas->size.h );
+		compressed_pixels out_cpixels = make( compressed_pixels, .data = new_bytes( area ), .size = in_canvas->size );
+		temp const pixel ref p = in_canvas->pixels;
+		temp const pixel const_ref p_end = p + area;
+		temp n8 data_size = 0;
+
+		temp pixel this_p = val_of( p );
+		temp pixel last_p = this_p;
+
+		find_palette:
 		{
-			if( out_cpixels.palette_size is 0 ) this_p.a = 0;
-			out_cpixels.palette[ out_cpixels.palette_size++ ] = pixel_to_color( this_p );
+			jump_if_all( p > in_canvas->pixels, this_p.r is last_p.r, this_p.g is last_p.g, this_p.b is last_p.b, this_p.a is last_p.a ) skip_pixel;
+
+			temp n1 n = 0;
+			check_palette:
+			{
+				if( n is 0 and out_cpixels.palette_size > 0 )
+				{
+					jump_if_all( this_p.r is out_cpixels.palette[ 0 ].r, this_p.g is out_cpixels.palette[ 0 ].g, this_p.b is out_cpixels.palette[ 0 ].b ) found_palette;
+				}
+				else jump_if_all( this_p.r is out_cpixels.palette[ n ].r, this_p.g is out_cpixels.palette[ n ].g, this_p.b is out_cpixels.palette[ n ].b, this_p.a is out_cpixels.palette[ n ].a ) found_palette;
+				jump_if( ++n < out_cpixels.palette_size ) check_palette;
+			}
+			found_palette:
+
+			if( n >= out_cpixels.palette_size and n < 32 )
+			{
+				if( out_cpixels.palette_size is 0 ) this_p.a = 0;
+				out_cpixels.palette[ out_cpixels.palette_size++ ] = pixel_to_color( this_p );
+			}
+
+			skip_pixel:
+			last_p = this_p;
+			if( ++p < p_end )
+			{
+				this_p = val_of( p );
+				jump find_palette;
+			}
 		}
-		jump_if( ++p < p_end ) find_palette;
+
+		//
+
+		temp n1 bits_per_index = n_to_bits( out_cpixels.palette_size );
+		temp n1 indices_per_byte = 8 / bits_per_index;
+		temp n1 index_mask = ( 1 << bits_per_index ) - 1;
+
+		p = in_canvas->pixels;
+		temp byte current_byte = 0;
+		temp n1 indices_in_byte = 0;
+
+		encode_pixels:
+		{
+			temp const pixel color = val_of( p );
+			temp n1 index = 0;
+			find_index:
+			{
+				if( index is 0 )
+				{
+					jump_if_all( color.r is out_cpixels.palette[ 0 ].r, color.g is out_cpixels.palette[ 0 ].g, color.b is out_cpixels.palette[ 0 ].b ) found_index;
+				}
+				else jump_if_all( color.r is out_cpixels.palette[ index ].r, color.g is out_cpixels.palette[ index ].g, color.b is out_cpixels.palette[ index ].b, color.a is out_cpixels.palette[ index ].a ) found_index;
+				++index;
+				jump find_index;
+			}
+			found_index:
+
+			current_byte |= ( index << ( indices_in_byte * bits_per_index ) );
+			++indices_in_byte;
+
+			if( indices_in_byte >= indices_per_byte )
+			{
+				out_cpixels.data[ data_size++ ] = current_byte;
+				current_byte = 0;
+				indices_in_byte = 0;
+			}
+
+			++p;
+			jump_if( p < p_end ) encode_pixels;
+		}
+
+		if( indices_in_byte > 0 ) out_cpixels.data[ data_size++ ] = current_byte;
+
+		temp byte ref lzss_bytes = new_bytes( ( ( data_size << 1 ) + data_size ) );
+		temp n8 lzss_size = bytes_compress( out_cpixels.data, data_size, lzss_bytes );
+		if( lzss_size < data_size )
+		{
+			delete_ref( out_cpixels.data );
+			out_cpixels.data = bytes_resize( lzss_bytes, lzss_size );
+			out_cpixels.data_size = lzss_size;
+			out_cpixels.pre_lzss_size = data_size;
+			out_cpixels.uses_lzss = yes;
+		}
+		else
+		{
+			delete_ref( lzss_bytes );
+			out_cpixels.data = bytes_resize( out_cpixels.data, data_size );
+			out_cpixels.data_size = data_size;
+			out_cpixels.uses_lzss = no;
+		}
+		out out_cpixels;
 	}
 
-	temp flag low_color = out_cpixels.palette_size <= 2;
-	temp n1 run_bits = pick( low_color, 3, ( 8 - n_to_bits( out_cpixels.palette_size ) ) );
-	temp n1 max_run = 1 << run_bits;
-	temp n8 data_size = 0;
-	p = in_canvas->pixels;
-
-	encode_pixels:
+	embed canvas compressed_pixels_to_canvas( const compressed_pixels const_ref in_cpixels )
 	{
-		temp const pixel color = val_of( p );
-		temp n1 index = 0;
-		find_index:
+		temp byte ref data = in_cpixels->data;
+		temp n8 data_size = in_cpixels->data_size;
+		if( in_cpixels->uses_lzss )
 		{
-			if( index is 0 )
+			data = new_bytes( in_cpixels->pre_lzss_size );
+			data_size = bytes_uncompress( in_cpixels->data, in_cpixels->data_size, data );
+		}
+
+		canvas out_canvas = canvas( in_cpixels->size.w, in_cpixels->size.h );
+		temp n8 area = in_cpixels->size.w * in_cpixels->size.h;
+		temp n8 pos = 0;
+		temp n8 data_idx = 0;
+
+		// Calculate bit unpacking parameters
+		temp n1 bits_per_index = n_to_bits( in_cpixels->palette_size );
+		temp n1 indices_per_byte = 8 / bits_per_index;
+		temp n1 index_mask = ( 1 << bits_per_index ) - 1;
+
+		while( data_idx < data_size and pos < area )
+		{
+			temp const byte current_byte = data[ data_idx++ ];
+			temp n1 indices_in_byte = 0;
+
+			while( indices_in_byte < indices_per_byte and pos < area )
 			{
-				jump_if_all( color.r is out_cpixels.palette[ 0 ].r, color.g is out_cpixels.palette[ 0 ].g, color.b is out_cpixels.palette[ 0 ].b ) found_index;
+				temp const pixel p = color_to_pixel( in_cpixels->palette[ ( current_byte >> ( indices_in_byte * bits_per_index ) ) & index_mask ] );
+				if( p.a isnt 0 )
+				{
+					out_canvas.pixels[ pos ] = p;
+				}
+				++pos;
+				++indices_in_byte;
 			}
-			else jump_if_all( color.r is out_cpixels.palette[ index ].r, color.g is out_cpixels.palette[ index ].g, color.b is out_cpixels.palette[ index ].b, color.a is out_cpixels.palette[ index ].a ) found_index;
-			++index;
-			jump find_index;
 		}
-		found_index:
 
-		temp n1 run = 1;
-		temp const pixel ref scan = p + 1;
-		while( scan < p_end and run < max_run )
+		if( in_cpixels->uses_lzss ) delete_ref( data );
+		out out_canvas;
+	}
+
+	//
+
+	fn compressed_pixels_to_file( const compressed_pixels cpixels, const byte const_ref name )
+	{
+		byte ref output = new_bytes( cpixels.data_size * 2 + 1024 );
+		byte ref r = output;
+
+		bytes_paste_move( "global canvas ", r );
+		bytes_paste_move( name, r );
+		bytes_paste_move( ";\nglobal perm const compressed_pixels cpixels_", r );
+		bytes_paste_move( name, r );
+		bytes_paste_move( "={\"", r );
+
+		iter( i, cpixels.data_size )
 		{
-			temp const pixel scan_color = val_of( scan );
-			jump_if_not_all( scan_color.r is color.r, scan_color.g is color.g, scan_color.b is color.b, scan_color.a is color.a ) end_run;
-			++run;
-			++scan;
+			byte b = cpixels.data[ i ];
+
+			with( b )
+			{
+				when( 0 )
+				{
+					if_all( i + 1 < cpixels.data_size, cpixels.data[ i + 1 ] >= '0', cpixels.data[ i + 1 ] <= '9' )
+					{
+						bytes_paste_move( "\\000", r );
+					}
+					else
+					{
+						bytes_paste_move( "\\0", r );
+					}
+					skip;
+				}
+
+				when( 0x1A )
+				{
+					if_all( i + 1 < cpixels.data_size, cpixels.data[ i + 1 ] >= '0', cpixels.data[ i + 1 ] <= '7' )
+					{
+						bytes_paste_move( "\\032", r );
+					}
+					else
+					{
+						bytes_paste_move( "\\32", r );
+					}
+					skip;
+				}
+
+				when( '"' )
+				{
+					bytes_paste_move( "\\\"", r );
+					skip;
+				}
+
+				when( '\\' )
+				{
+					bytes_paste_move( "\\\\", r );
+					skip;
+				}
+
+				when( '\n' )
+				{
+					bytes_paste_move( "\\n", r );
+					skip;
+				}
+
+				when( '\r' )
+				{
+					bytes_paste_move( "\\r", r );
+					skip;
+				}
+
+				other
+				{
+					bytes_add( r, b );
+				}
+			}
+
+			if( ( ( i + 1 ) mod 4000 ) is 0 and i + 1 < cpixels.data_size )
+			{
+				bytes_paste_move( "\"\n\"", r );
+			}
 		}
-		end_run:
 
-		if( low_color )
+		bytes_paste_move( "\",\n", r );
+		bytes_add_n4( r, cpixels.data_size );
+
+		bytes_paste_move( ",{", r );
+		bytes_add_n2( r, cpixels.size.w );
+		bytes_add( r, ',' );
+		bytes_add_n2( r, cpixels.size.h );
+		bytes_paste_move( "},\n", r );
+
+		bytes_add( r, '{' );
+		iter( p, cpixels.palette_size )
 		{
-			temp byte chunk1 = ( ( index & 1 ) << 3 ) | ( run - 1 );
-			p += run;
+			color c = cpixels.palette[ p ];
+			bytes_paste_move( "0x", r );
+			bytes_add_hex_n4( r, c.rgba );
+			if( p < cpixels.palette_size - 1 ) bytes_add( r, ',' );
+		}
+		bytes_paste_move( "},\n", r );
+
+		bytes_add_n1( r, cpixels.palette_size );
+
+		bytes_add( r, ',' );
+		bytes_add_n1( r, cpixels.uses_lzss ? 1 : 0 );
+
+		bytes_add( r, ',' );
+		bytes_add_n4( r, cpixels.pre_lzss_size );
+
+		bytes_paste_move( "};\n", r );
+
+		byte filename[ 256 ] = { 0 };
+		byte ref fname_ptr = filename;
+		bytes_paste_move( name, fname_ptr );
+		bytes_paste_move( ".h", fname_ptr );
+
+		file f = new_file( filename );
+		file_save( ref_of( f ), output, r - output );
+
+		delete_ref( output );
+	}
+
+	//
+
+	///////
+	// Prediction-Encoded Pixels
+
+	type( pep )
+	{
+		byte ref data;
+		n4 data_size;
+		n4 decompressed_size;
+		n2x2 dimensions;
+		color palette[ 256 ];
+		n1 palette_size;
+		flag is_4bit;
+		n1 max_symbol;
+	};
+
+	#define PEP_FREQ_N 257
+	#define PEP_FREQ_END ( PEP_FREQ_N - 1 )
+
+	#define PEP_CONTEXTS_MAX_MASK 0xffu
+
+	#define PEP_ARITH_MAX 0x7fffffffffffffffu
+	#define PEP_ARITH_LOW 0x2000000000000000u
+	#define PEP_ARITH_MID 0x4000000000000000u
+	#define PEP_ARITH_HIGH 0x6000000000000000u
+
+	type( _pep_context )
+	{
+		n2 freq[ PEP_FREQ_N ];
+		n4 sum;
+	};
+
+	#define PEP_FREQ_MAX( AREA ) ( n8_max( PEP_FREQ_END, AREA / 16 ) + PEP_FREQ_END )
+
+	#define PEP_ACCUM( FREQ_REF, SYMBOL ) iter( f_a, SYMBOL ) accum += FREQ_REF[ f_a ]
+
+	#define PEP_ENCODE( FREQ, TOTAL )\
+		START_DEF\
+		{\
+			temp const n8 delta = high - low + 1;\
+			if( delta < TOTAL )\
+			{\
+				high = low + ( accum + FREQ ) - 1;\
+				low = low + accum;\
+			}\
+			else\
+			{\
+				high = low + ( delta / TOTAL ) * ( accum + FREQ ) + ( ( delta mod TOTAL ) * ( accum + FREQ ) ) / TOTAL - 1;\
+				low = low + ( delta / TOTAL ) * accum + ( ( delta mod TOTAL ) * accum ) / TOTAL;\
+			}\
+		}\
+		END_DEF
+
+	#define PEP_UPDATE( CONTEXT, SYMBOL )\
+		START_DEF\
+		{\
+			CONTEXT->freq[ SYMBOL ] ++;\
+			CONTEXT->sum++;\
+			if( CONTEXT->sum > freq_max )\
+			{\
+				CONTEXT->sum = 0;\
+				iter( f, PEP_FREQ_N )\
+				{\
+					CONTEXT->freq[ f ] = ( CONTEXT->freq[ f ] + 1 ) >> 1;\
+					CONTEXT->sum += CONTEXT->freq[ f ];\
+				}\
+			}\
+		}\
+		END_DEF
+
+	#define PEP_TARGET( VALUE, TOTAL ) pick( high - low + 1 < TOTAL, VALUE - low, ( ( VALUE - low ) / ( ( high - low + 1 ) / TOTAL ) ) + ( ( ( VALUE - low ) mod ( ( high - low + 1 ) / TOTAL ) ) * TOTAL ) / ( high - low + 1 ) )
+
+	#define PEP_BIT_OUT( BIT )\
+		START_DEF\
+		{\
+			buffer = ( buffer >> 1 ) | pick( BIT, 0x80u, 0 );\
+			if( --bits_left is 0 )\
+			{\
+				val_of( pep_data_ref++ ) = buffer;\
+				bits_left = 8;\
+				buffer = 0;\
+			}\
+		}\
+		END_DEF
+
+	#define PEP_BIT_IN( VAR )\
+		START_DEF\
+		{\
+			if( bits_left is 0 )\
+			{\
+				buffer = val_of( pep_data_ref++ );\
+				bits_left = 8;\
+			}\
+			VAR = ( VAR << 1 ) | ( buffer & 1 );\
+			buffer >>= 1;\
+			bits_left--;\
+		}\
+		END_DEF
+
+	#define PEP_ADJUST_RANGE( BOUNDARY )\
+		START_DEF\
+		{\
+			low = ( low - BOUNDARY ) << 1;\
+			high = ( ( high - BOUNDARY ) << 1 ) | 1;\
+		}\
+		END_DEF
+
+	#define PEP_OUTPUT_UNDERFLOW( BIT, OPPOSITE_BIT )\
+		START_DEF\
+		{\
+			PEP_BIT_OUT( BIT );\
+			while( underflow > 0 )\
+			{\
+				PEP_BIT_OUT( OPPOSITE_BIT );\
+				underflow--;\
+			}\
+		}\
+		END_DEF
+
+	#define PEP_COMPRESS_RENORM()\
+		START_DEF\
+		{\
+			loop\
+			{\
+				if( high < PEP_ARITH_MID )\
+				{\
+					PEP_OUTPUT_UNDERFLOW( 0, 1 );\
+					low <<= 1;\
+					high = ( high << 1 ) | 1;\
+				}\
+				else if( low >= PEP_ARITH_MID )\
+				{\
+					PEP_OUTPUT_UNDERFLOW( 1, 0 );\
+					PEP_ADJUST_RANGE( PEP_ARITH_MID );\
+				}\
+				else if( low >= PEP_ARITH_LOW and high < PEP_ARITH_HIGH )\
+				{\
+					underflow++;\
+					PEP_ADJUST_RANGE( PEP_ARITH_LOW );\
+				}\
+				else skip;\
+			}\
+		}\
+		END_DEF
+
+	#define PEP_DECOMPRESS_RENORM( VALUE )\
+		START_DEF\
+		{\
+			loop\
+			{\
+				if( high < PEP_ARITH_MID )\
+				{\
+					low <<= 1;\
+					high = ( high << 1 ) | 1;\
+					PEP_BIT_IN( VALUE );\
+				}\
+				else if( low >= PEP_ARITH_MID )\
+				{\
+					PEP_ADJUST_RANGE( PEP_ARITH_MID );\
+					VALUE = ( VALUE - PEP_ARITH_MID );\
+					PEP_BIT_IN( VALUE );\
+				}\
+				else if( low >= PEP_ARITH_LOW and high < PEP_ARITH_HIGH )\
+				{\
+					PEP_ADJUST_RANGE( PEP_ARITH_LOW );\
+					VALUE = ( VALUE - PEP_ARITH_LOW );\
+					PEP_BIT_IN( VALUE );\
+				}\
+				else skip;\
+			}\
+		}\
+		END_DEF
+
+	embed pep canvas_to_pep( const canvas const_ref in_canvas )
+	{
+		temp const n8 area = n8( in_canvas->size.w ) * n8( in_canvas->size.h );
+		pep out_pep = make( pep, .data = nothing, .dimensions = in_canvas->size );
+		temp const pixel ref p = in_canvas->pixels;
+		temp const pixel const_ref p_end = p + area;
+
+		///////
+		// palette construction
+
+		temp pixel this_p = val_of( p );
+		temp pixel last_p = this_p;
+
+		find_palette:
+		{
+			jump_if_all( p > in_canvas->pixels, this_p.r is last_p.r, this_p.g is last_p.g, this_p.b is last_p.b, this_p.a is last_p.a ) skip_pixel;
+
+			temp n2 n = 0;
+			check_palette:
+			{
+				if( n is 0 and out_pep.palette_size > 0 )
+				{
+					jump_if_all( this_p.r is out_pep.palette[ 0 ].r, this_p.g is out_pep.palette[ 0 ].g, this_p.b is out_pep.palette[ 0 ].b ) found_palette;
+				}
+				else jump_if_all( this_p.r is out_pep.palette[ n ].r, this_p.g is out_pep.palette[ n ].g, this_p.b is out_pep.palette[ n ].b, this_p.a is out_pep.palette[ n ].a ) found_palette;
+				jump_if( ++n < out_pep.palette_size ) check_palette;
+			}
+			found_palette:
+
+			if( n >= out_pep.palette_size and n < 256 )
+			{
+				if( out_pep.palette_size is 0 ) this_p.a = 0;
+				out_pep.palette[ out_pep.palette_size++ ] = pixel_to_color( this_p );
+			}
+
+			skip_pixel:
+			last_p = this_p;
+			if( ++p < p_end )
+			{
+				this_p = val_of( p );
+				jump find_palette;
+			}
+		}
+
+		///////
+		// pixels to packed-palette-indices, then PPM order-2 compression
+
+		temp const n1 bits_per_index = n_to_bits( out_pep.palette_size );
+		temp const n1 indices_per_byte = 8 / bits_per_index;
+		temp const n1 index_mask = ( 1 << bits_per_index ) - 1;
+
+		temp byte const_ref pep_data = new_bytes( area );
+		temp byte ref pep_data_ref = pep_data;
+
+		perm _pep_context contexts[ PEP_CONTEXTS_MAX_MASK + 2 ];
+		bytes_clear( contexts, size_of( _pep_context ) * ( PEP_CONTEXTS_MAX_MASK + 2 ) );
+
+		_pep_context ref order0 = ref_of( contexts[ PEP_CONTEXTS_MAX_MASK + 1 ] );
+		iter( i, PEP_FREQ_N ) order0->freq[ i ] = 1;
+		order0->sum = PEP_FREQ_N;
+
+		temp n8 low = 0;
+		temp n8 high = PEP_ARITH_MAX;
+		temp n8 underflow = 0;
+		temp n4 context_id = 0;
+		temp n1 buffer = 0;
+		temp n1 bits_left = 8;
+		temp n8 freq_max = PEP_FREQ_MAX( area );
+		temp n8 data_size = 0;
+
+		p = in_canvas->pixels;
+		temp byte current_byte = 0;
+		temp n1 indices_in_byte = 0;
+
+		while( p < p_end or indices_in_byte > 0 )
+		{
 			if( p < p_end )
 			{
-				temp const pixel this_p = val_of( p );
-				temp n1 index_low = 0;
-				find_index_low:
+				temp const pixel color = val_of( p );
+				temp n1 index = 0;
+				find_index:
 				{
-					if( index_low is 0 )
+					if( index is 0 )
 					{
-						jump_if_all( this_p.r is out_cpixels.palette[ 0 ].r, this_p.g is out_cpixels.palette[ 0 ].g, this_p.b is out_cpixels.palette[ 0 ].b ) found_index_low;
+						jump_if_all( color.r is out_pep.palette[ 0 ].r, color.g is out_pep.palette[ 0 ].g, color.b is out_pep.palette[ 0 ].b ) found_index;
 					}
-					else jump_if_all( this_p.r is out_cpixels.palette[ index_low ].r, this_p.g is out_cpixels.palette[ index_low ].g, this_p.b is out_cpixels.palette[ index_low ].b, this_p.a is out_cpixels.palette[ index_low ].a ) found_index_low;
-					++index_low;
-					jump find_index_low;
+					else jump_if_all( color.r is out_pep.palette[ index ].r, color.g is out_pep.palette[ index ].g, color.b is out_pep.palette[ index ].b, color.a is out_pep.palette[ index ].a ) found_index;
+					++index;
+					jump find_index;
 				}
-				found_index_low:
+				found_index:
 
-				temp n1 run_low = 1;
-				temp const pixel ref scan_low = p + 1;
-				while( scan_low < p_end and run_low < max_run )
-				{
-					temp const pixel scan_this_p = val_of( scan_low );
-					jump_if_not_all( scan_this_p.r is this_p.r, scan_this_p.g is this_p.g, scan_this_p.b is this_p.b, scan_this_p.a is this_p.a ) end_run_low;
-					++run_low;
-					++scan_low;
-				}
-				end_run_low:
-
-				out_cpixels.data[ data_size++ ] = chunk1 | ( ( ( index_low & 1 ) << 3 ) | ( run_low - 1 ) ) << 4;
-				p += run_low;
+				current_byte |= ( index << ( indices_in_byte * bits_per_index ) );
+				++indices_in_byte;
 			}
-			else out_cpixels.data[ data_size++ ] = chunk1;
-		}
-		else
-		{
-			out_cpixels.data[ data_size++ ] = ( index << run_bits ) | ( run - 1 );
-			p += run;
-		}
-		jump_if( p < p_end ) encode_pixels;
-	}
 
-	temp byte ref lzss_bytes = new_bytes( ( ( data_size << 1 ) + data_size ) >> 1 );
-	temp n8 lzss_size = bytes_compress( out_cpixels.data, data_size, lzss_bytes );
-	if( lzss_size < data_size )
-	{
-		delete_ref( out_cpixels.data );
-		out_cpixels.data = bytes_resize( lzss_bytes, lzss_size );
-		out_cpixels.data_size = lzss_size;
-		out_cpixels.pre_lzss_size = data_size;
-		out_cpixels.uses_lzss = yes;
-	}
-	else
-	{
-		delete_ref( lzss_bytes );
-		out_cpixels.data = bytes_resize( out_cpixels.data, data_size );
-		out_cpixels.data_size = data_size;
-		out_cpixels.uses_lzss = no;
-	}
-	out out_cpixels;
-}
-
-embed canvas compressed_pixels_to_canvas( const compressed_pixels const_ref in_cpixels )
-{
-	temp byte ref data = in_cpixels->data;
-	temp n8 data_size = in_cpixels->data_size;
-	if( in_cpixels->uses_lzss )
-	{
-		data = new_bytes( in_cpixels->pre_lzss_size );
-		data_size = bytes_uncompress( in_cpixels->data, in_cpixels->data_size, data );
-	}
-
-	canvas out_canvas = canvas( in_cpixels->size.w, in_cpixels->size.h );
-	temp n8 area = in_cpixels->size.w * in_cpixels->size.h;
-	temp n8 pos = 0;
-	temp flag low_color = in_cpixels->palette_size <= 2;
-	temp n1 run_bits = pick( low_color, 3, ( 8 - n_to_bits( in_cpixels->palette_size ) ) );
-	temp n1 run_mask = ( 1 << run_bits ) - 1;
-	temp n1 index_mask = ( 1 << n_to_bits( in_cpixels->palette_size ) ) - 1;
-	temp n8 data_idx = 0;
-
-	while( data_idx < data_size and pos < area )
-	{
-		temp byte d = data[ data_idx++ ];
-		if( low_color )
-		{
-			temp n1 index = ( d >> 3 ) & 1;
-			temp n1 run = ( d & 0x07 ) + 1;
-			temp n1 i = 0;
-			temp pixel p;
-			while( i++ < run and pos < area )
+			if( indices_in_byte >= indices_per_byte or ( p >= p_end and indices_in_byte > 0 ) )
 			{
-				p = color_to_pixel( in_cpixels->palette[ index ] );
-				if( p.a != 0 ) out_canvas.pixels[ pos ] = p;
-				++pos;
-			}
-			if( pos < area )
-			{
-				index = ( d >> 7 ) & 1;
-				run = ( ( d >> 4 ) & 0x07 ) + 1;
-				i = 0;
-				while( i++ < run and pos < area )
+				temp n8 accum = 0;
+				temp n1 symbol = current_byte;
+				if( symbol > out_pep.max_symbol ) out_pep.max_symbol = symbol;
+				temp _pep_context const_ref context_ref = ref_of( contexts[ context_id % ( PEP_CONTEXTS_MAX_MASK + 1 ) ] );
+				temp const n4 context_sum = context_ref->sum;
+
+				if( context_sum isnt 0 and context_ref->freq[ symbol ] isnt 0 )
 				{
-					p = color_to_pixel( in_cpixels->palette[ index ] );
-					if( p.a != 0 ) out_canvas.pixels[ pos ] = p;
-					++pos;
+					PEP_ACCUM( context_ref->freq, symbol );
+					PEP_ENCODE( context_ref->freq[ symbol ], context_sum );
+					PEP_UPDATE( context_ref, symbol );
 				}
+				else
+				{
+					if( context_sum isnt 0 )
+					{
+						accum = 0;
+						PEP_ACCUM( context_ref->freq, PEP_FREQ_END );
+						PEP_ENCODE( context_ref->freq[ PEP_FREQ_END ], context_sum );
+						PEP_COMPRESS_RENORM();
+					}
+
+					accum = 0;
+					PEP_ACCUM( order0->freq, symbol );
+					PEP_ENCODE( order0->freq[ symbol ], order0->sum );
+
+					if( context_sum is 0 )
+					{
+						context_ref->freq[ PEP_FREQ_END ] = 1;
+						context_ref->sum = 1;
+					}
+					context_ref->freq[ symbol ] = 1;
+					context_ref->sum++;
+					PEP_UPDATE( order0, symbol );
+				}
+				PEP_COMPRESS_RENORM();
+				context_id = ( ( context_id << 8 ) | symbol );
+				++data_size;
+
+				current_byte = 0;
+				indices_in_byte = 0;
+			}
+
+			if( p < p_end )
+			{
+				++p;
+			}
+		}
+
+		++underflow;
+		if( low < PEP_ARITH_MID )
+		{
+			PEP_BIT_OUT( 0 );
+			while( underflow > 0 )
+			{
+				PEP_BIT_OUT( 1 );
+				underflow--;
 			}
 		}
 		else
 		{
-			temp n1 index = ( d >> run_bits ) & index_mask;
-			temp n1 run = ( d & run_mask ) + 1;
-			temp n1 i = 0;
-			while( i++ < run and pos < area )
+			PEP_BIT_OUT( 1 );
+			while( underflow > 0 )
 			{
-				temp pixel p = color_to_pixel( in_cpixels->palette[ index ] );
-				if( p.a != 0 ) out_canvas.pixels[ pos ] = p;
-				++pos;
+				PEP_BIT_OUT( 0 );
+				underflow--;
 			}
 		}
+
+		if( bits_left < 8 ) val_of( pep_data_ref++ ) = buffer >> bits_left;
+
+		out_pep.decompressed_size = data_size;
+		out_pep.data_size = pep_data_ref - pep_data;
+		out_pep.data = bytes_resize( pep_data, out_pep.data_size );
+
+		out out_pep;
 	}
 
-	if( in_cpixels->uses_lzss ) delete_ref( data );
-	out out_canvas;
-}
-
-//
-
-fn compressed_pixels_to_file( const compressed_pixels cpixels, const byte const_ref name )
-{
-	byte ref output = new_bytes( cpixels.data_size * 2 + 1024 );
-	byte ref r = output;
-
-	bytes_paste_move( "global perm canvas ", r );
-	bytes_paste_move( name, r );
-	bytes_paste_move( ";\nglobal perm const compressed_pixels cpixels_", r );
-	bytes_paste_move( name, r );
-	bytes_paste_move( "={\"", r );
-
-	iter( i, cpixels.data_size )
+	embed canvas pep_to_canvas( const pep const_ref in_pep )
 	{
-		byte b = cpixels.data[ i ];
+		temp byte ref pep_data_ref = in_pep->data;
+		temp const n8 data_size = in_pep->decompressed_size;
 
-		with( b )
+		canvas out_canvas = canvas( in_pep->dimensions.w, in_pep->dimensions.h );
+		temp const n8 area = n8( in_pep->dimensions.w ) * n8( in_pep->dimensions.h );
+		temp n8 canvas_pos = 0;
+
+		temp const n1 bits_per_index = n_to_bits( in_pep->palette_size );
+		temp const n1 indices_per_byte = 8 / bits_per_index;
+		temp const n1 index_mask = ( 1 << bits_per_index ) - 1;
+
+		perm _pep_context contexts[ PEP_CONTEXTS_MAX_MASK + 2 ];
+		bytes_clear( contexts, size_of( _pep_context ) * ( PEP_CONTEXTS_MAX_MASK + 2 ) );
+
+		_pep_context ref order0 = ref_of( contexts[ PEP_CONTEXTS_MAX_MASK + 1 ] );
+		iter( i, PEP_FREQ_N ) order0->freq[ i ] = 1;
+		order0->sum = PEP_FREQ_N;
+
+		temp n1 buffer = 0;
+		temp n1 bits_left = 0;
+		temp n8 value = 0;
+
+		repeat( 63 )
 		{
-			when( 0 )
-			{
-				if_all( i + 1 < cpixels.data_size, cpixels.data[ i + 1 ] >= '0', cpixels.data[ i + 1 ] <= '9' )
-				{
-					bytes_paste_move( "\\000", r );
-				}
-				else
-				{
-					bytes_paste_move( "\\0", r );
-				}
-				skip;
-			}
-
-			when( 0x1A )
-			{
-				if_all( i + 1 < cpixels.data_size, cpixels.data[ i + 1 ] >= '0', cpixels.data[ i + 1 ] <= '7' )
-				{
-					bytes_paste_move( "\\032", r );
-				}
-				else
-				{
-					bytes_paste_move( "\\32", r );
-				}
-				skip;
-			}
-
-			when( '"' )
-			{
-				bytes_paste_move( "\\\"", r );
-				skip;
-			}
-
-			when( '\\' )
-			{
-				bytes_paste_move( "\\\\", r );
-				skip;
-			}
-
-			when( '\n' )
-			{
-				bytes_paste_move( "\\n", r );
-				skip;
-			}
-
-			when( '\r' )
-			{
-				bytes_paste_move( "\\r", r );
-				skip;
-			}
-
-			other
-			{
-				bytes_add( r, b );
-			}
+			PEP_BIT_IN( value );
 		}
 
-		if( ( ( i + 1 ) mod 4000 ) is 0 and i + 1 < cpixels.data_size )
+		///////
+		// decompress PPM order-2 structure into packed-palette-indices
+
+		temp n8 low = 0;
+		temp n8 high = PEP_ARITH_MAX;
+		temp n4 context_id = 0;
+		temp const n2 max_symbol = in_pep->max_symbol + 1;
+		temp n8 freq_max = PEP_FREQ_MAX( x2_area( in_pep->dimensions ) );
+
+		temp const color const_ref palette = in_pep->palette;
+		temp pixel const_ref canvas_pixels = out_canvas.pixels;
+
+		iter( b, data_size )
 		{
-			bytes_paste_move( "\"\n\"", r );
+			temp _pep_context const_ref context_ref = ref_of( contexts[ context_id % ( PEP_CONTEXTS_MAX_MASK + 1 ) ] );
+			temp const n4 context_sum = context_ref->sum;
+			temp n8 target = PEP_TARGET( value, pick( context_sum isnt 0, context_sum, 1 ) );
+			temp n8 accum = 0;
+			temp n1 symbol = 0;
+
+			if( context_sum isnt 0 )
+			{
+				iter( f, max_symbol )
+				{
+					temp n2 freq = context_ref->freq[ f ];
+					if( freq )
+					{
+						if( accum + freq > target )
+						{
+							symbol = f;
+							PEP_ENCODE( freq, context_sum );
+							PEP_UPDATE( context_ref, f );
+							goto done_decode;
+						}
+						accum += freq;
+					}
+				}
+
+				if( context_ref->freq[ PEP_FREQ_END ] )
+				{
+					if( accum + context_ref->freq[ PEP_FREQ_END ] > target )
+					{
+						PEP_ENCODE( context_ref->freq[ PEP_FREQ_END ], context_sum );
+						PEP_DECOMPRESS_RENORM( value );
+					}
+				}
+			}
+
+			target = PEP_TARGET( value, order0->sum );
+			accum = 0;
+
+			iter( j, max_symbol )
+			{
+				accum += order0->freq[ j ];
+				if( accum > target )
+				{
+					symbol = j;
+					accum -= order0->freq[ j ];
+					PEP_ENCODE( order0->freq[ j ], order0->sum );
+
+					if( context_sum is 0 )
+					{
+						context_ref->freq[ PEP_FREQ_END ] = 1;
+						context_ref->sum = 1;
+					}
+					context_ref->freq[ symbol ] = 1;
+					context_ref->sum++;
+					PEP_UPDATE( order0, symbol );
+					skip;
+				}
+			}
+
+			done_decode:
+			PEP_DECOMPRESS_RENORM( value );
+
+			///////
+			// convert packed-palette-indices to pixels
+
+			if( indices_per_byte > 1 )
+			{
+				temp n1 indices_in_byte = 0;
+				while( indices_in_byte < indices_per_byte and canvas_pos < area )
+				{
+					temp const n1 palette_idx = ( symbol >> ( indices_in_byte * bits_per_index ) ) & index_mask;
+					temp const pixel p = color_to_pixel( in_pep->palette[ palette_idx ] );
+					canvas_pixels[ canvas_pos ] = p;
+					++canvas_pos;
+					++indices_in_byte;
+				}
+			}
+			else
+			{
+				if( canvas_pos < area )
+				{
+					temp const pixel p = color_to_pixel( in_pep->palette[ symbol ] );
+					canvas_pixels[ canvas_pos ] = p;
+					++canvas_pos;
+				}
+			}
+
+			context_id = ( ( context_id << 8 ) | symbol );
 		}
+
+		out out_canvas;
 	}
 
-	bytes_paste_move( "\",\n", r );
-	bytes_add_n4( r, cpixels.data_size );
-
-	bytes_paste_move( ",{", r );
-	bytes_add_n2( r, cpixels.size.w );
-	bytes_add( r, ',' );
-	bytes_add_n2( r, cpixels.size.h );
-	bytes_paste_move( "},\n", r );
-
-	bytes_add( r, '{' );
-	iter( p, cpixels.palette_size )
+	embed byte ref pep_to_bytes( const pep const_ref in_pep, n4 const_ref out_size )
 	{
-		color c = cpixels.palette[ p ];
-		bytes_paste_move( "0x", r );
-		bytes_add_hex_n4( r, c.rgba );
-		if( p < cpixels.palette_size - 1 ) bytes_add( r, ',' );
+		temp n8 palette_bytes = pick( in_pep->is_4bit, ( in_pep->palette_size * size_of( color ) ) >> 1, size_of( color ) * in_pep->palette_size );
+		temp n8 size = size_of( n4 ) + ( size_of( n2 ) << 1 ) + ( size_of( n1 ) << 1 ) + palette_bytes + in_pep->data_size;
+		temp byte const_ref out_bytes = new_bytes( size );
+		temp byte ref bytes_ref = out_bytes;
+
+		val_of( to( n4 ref, bytes_ref ) ) = in_pep->data_size | ( in_pep->is_4bit << 31 );
+		bytes_ref += size_of( n4 );
+		val_of( to( n2 ref, bytes_ref ) ) = in_pep->dimensions.w;
+		bytes_ref += size_of( n2 );
+		val_of( to( n2 ref, bytes_ref ) ) = in_pep->dimensions.h;
+		bytes_ref += size_of( n2 );
+		val_of( bytes_ref++ ) = in_pep->palette_size;
+
+		if( in_pep->palette_size )
+		{
+			if( in_pep->is_4bit )
+			{
+				iter( i, in_pep->palette_size )
+				{
+					temp color c = in_pep->palette[ i ];
+					val_of( bytes_ref++ ) = ( ( c.r & 0xF0 ) >> 4 ) | ( c.g & 0xF0 );
+					val_of( bytes_ref++ ) = ( ( c.b & 0xF0 ) >> 4 ) | ( c.a & 0xF0 );
+				}
+			}
+			else
+			{
+				bytes_copy( ref_of( in_pep->palette[ 0 ] ), size_of( color ) * in_pep->palette_size, bytes_ref );
+				bytes_ref += size_of( color ) * in_pep->palette_size;
+			}
+		}
+
+		val_of( bytes_ref++ ) = in_pep->max_symbol;
+
+		if( in_pep->data_size )
+		{
+			bytes_copy( in_pep->data, in_pep->data_size, bytes_ref );
+		}
+
+		val_of( out_size ) = size;
+		out out_bytes;
 	}
-	bytes_paste_move( "},\n", r );
 
-	bytes_add_n1( r, cpixels.palette_size );
+	embed pep bytes_to_pep( const byte const_ref in_bytes )
+	{
+		pep out_pep = { 0 };
+		temp const byte ref bytes_ref = in_bytes;
 
-	bytes_add( r, ',' );
-	bytes_add_n1( r, cpixels.uses_lzss ? 1 : 0 );
+		temp n4 packed_data_size = val_of( to( n4 const_ref, bytes_ref ) );
+		out_pep.is_4bit = ( packed_data_size >> 31 ) & 1;
+		out_pep.data_size = packed_data_size & 0x7FFFFFFF;
+		bytes_ref += size_of( n4 );
 
-	bytes_add( r, ',' );
-	bytes_add_n4( r, cpixels.pre_lzss_size );
+		out_pep.dimensions.w = val_of( to( n2 const_ref, bytes_ref ) );
+		bytes_ref += size_of( n2 );
+		out_pep.dimensions.h = val_of( to( n2 const_ref, bytes_ref ) );
+		bytes_ref += size_of( n2 );
+		out_pep.palette_size = val_of( bytes_ref++ );
 
-	bytes_paste_move( "};\n", r );
+		bytes_clear( out_pep.palette, size_of( color ) * 256 );
 
-	byte filename[ 256 ] = { 0 };
-	byte ref fname_ptr = filename;
-	bytes_paste_move( name, fname_ptr );
-	bytes_paste_move( ".h", fname_ptr );
+		if( out_pep.palette_size )
+		{
+			if( out_pep.is_4bit )
+			{
+				iter( i, out_pep.palette_size )
+				{
+					temp n1 b1 = val_of( bytes_ref++ );
+					temp n1 b2 = val_of( bytes_ref++ );
+					out_pep.palette[ i ].r = ( b1 & 0x0F ) | ( ( b1 & 0x0F ) << 4 );
+					out_pep.palette[ i ].g = ( b1 & 0xF0 ) | ( ( b1 & 0xF0 ) >> 4 );
+					out_pep.palette[ i ].b = ( b2 & 0x0F ) | ( ( b2 & 0x0F ) << 4 );
+					out_pep.palette[ i ].a = ( b2 & 0xF0 ) | ( ( b2 & 0xF0 ) >> 4 );
+				}
+			}
+			else
+			{
+				bytes_copy( bytes_ref, size_of( color ) * out_pep.palette_size, ref_of( out_pep.palette[ 0 ] ) );
+				bytes_ref += size_of( color ) * out_pep.palette_size;
+			}
+		}
 
-	file f = new_file( filename );
-	file_save( ref_of( f ), output, r - output );
+		out_pep.max_symbol = val_of( bytes_ref++ );
 
-	delete_ref( output );
-}
+		temp const n1 bits_per_index = n_to_bits( out_pep.palette_size );
+		temp const n1 indices_per_byte = 8 / bits_per_index;
+		temp const n8 area = n8( out_pep.dimensions.w ) * n8( out_pep.dimensions.h );
+		out_pep.decompressed_size = ( area + indices_per_byte - 1 ) / indices_per_byte;
+
+		out_pep.data = pick( out_pep.data_size isnt 0, new_bytes( out_pep.data_size ), nothing );
+		if( out_pep.data_size )
+		{
+			bytes_copy( bytes_ref, out_pep.data_size, out_pep.data );
+		}
+
+		out out_pep;
+	}
+
+	fn pep_to_file( const pep const_ref in_pep, const byte const_ref name )
+	{
+		n4 pep_bytes_size = 0;
+		temp const byte const_ref pep_bytes = pep_to_bytes( in_pep, ref_of( pep_bytes_size ) );
+
+		temp byte ref output = new_bytes( ( pep_bytes_size << 1 ) + 256 );
+		temp byte ref out_ref = output;
+
+		bytes_paste_move( "global canvas ", out_ref );
+		bytes_paste_move( name, out_ref );
+		bytes_paste_move( ";global const byte ", out_ref );
+		bytes_paste_move( name, out_ref );
+		bytes_paste_move( "_pep_bytes[]=\"", out_ref );
+
+		iter( b, pep_bytes_size )
+		{
+			temp const byte pbyte = pep_bytes[ b ];
+			with( pbyte )
+			{
+				when( '\0' )
+				{
+					if_all( b + 1 < pep_bytes_size, pep_bytes[ b + 1 ] >= '0', pep_bytes[ b + 1 ] <= '9' )
+					{
+						bytes_paste_move( "\\000", out_ref );
+					}
+					else
+					{
+						bytes_paste_move( "\\0", out_ref );
+					}
+					skip;
+				}
+
+				when( 0x1A )
+				{
+					if_all( b + 1 < pep_bytes_size, pep_bytes[ b + 1 ] >= '0', pep_bytes[ b + 1 ] <= '7' )
+					{
+						bytes_paste_move( "\\032", out_ref );
+					}
+					else
+					{
+						bytes_paste_move( "\\32", out_ref );
+					}
+					skip;
+				}
+
+				when( '"' )
+				{
+					bytes_paste_move( "\\\"", out_ref );
+					skip;
+				}
+
+				when( '\\' )
+				{
+					bytes_paste_move( "\\\\", out_ref );
+					skip;
+				}
+
+				when( '\r' )
+				{
+					bytes_paste_move( "\\r", out_ref );
+					skip;
+				}
+
+				when( '\n' )
+				{
+					bytes_paste_move( "\\n", out_ref );
+					skip;
+				}
+
+				other
+				{
+					bytes_add( out_ref, pbyte );
+				}
+			}
+
+			if( ( ( b + 1 ) mod 4000 ) is 0 and b + 1 < pep_bytes_size )
+			{
+				bytes_paste_move( "\"\n\"", out_ref );
+			}
+		}
+
+		bytes_paste_move( "\";\n", out_ref );
+
+		byte filename[ 256 ] = { 0 };
+		byte ref fname_ptr = filename;
+		bytes_paste_move( name, fname_ptr );
+		bytes_paste_move( ".h", fname_ptr );
+
+		file f = new_file( filename );
+		file_save( ref_of( f ), output, out_ref - output );
+
+		delete_ref( output );
+	}
+#endif
 
 ///////
 
