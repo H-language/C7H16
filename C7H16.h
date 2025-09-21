@@ -14,17 +14,73 @@
 
 //
 
-type_from( n4 ) pixel;
+// dyadic n/2^k
+type_from( i4 ) d4;
+#define d4( VAL ) to( d4, VAL )
+#define d4_bits 12
+
+#define i4_to_d4( I4 ) ( d4( I4 ) << d4_bits )
+#define d4_to_i4( D4 ) ( i4( ( D4 ) >> d4_bits ) )
+
+#define r8_to_d4( R8 ) ( d4( r8_round( ( R8 ) * r8( 1 << d4_bits ) ) ) )
+
+#define d4_min i4_min
+#define d4_max i4_max
+#define d4_clamp i4_clamp
+#define d4_abs i4_abs
+
+#define d4_trunc( D4 ) ( i4_to_d4( d4_to_i4( D4 ) ) )
+
+#define d4_round_to_i4( D4 ) ( d4_to_i4( ( D4 ) + pick( ( D4 ) >= 0, ( 1 << ( d4_bits - 1 ) ), -( 1 << ( d4_bits - 1 ) ) ) ) )
+#define d4_round( D4 ) ( i4_to_d4( d4_round_to_i4( D4 ) ) )
+
+#define d4_ceil_to_i4( D4 ) ( d4_to_i4( ( D4 ) + pick( ( D4 ) > 0, ( ( 1 << d4_bits ) - 1 ), 0 ) ) )
+#define d4_ceil( D4 ) ( i4_to_d4( d4_ceil_to_i4( D4 ) ) )
+
+#define d4_floor_to_i4( D4 ) ( d4_to_i4( D4 ) - pick( ( ( D4 ) < 0 ) && ( ( D4 ) & ( ( 1 << d4_bits ) - 1 ) ), 1, 0 ) )
+#define d4_floor( D4 ) ( i4_to_d4( d4_floor_to_i4( D4 ) ) )
+
+#define d4_mul( A, B ) d4( ( i8( A ) * i8( B ) ) >> d4_bits )
+#define d4_div( A, B ) d4( ( i8( A ) << d4_bits ) / i8( B ) )
+
+type_from( i4x2 ) d4x2;
+
+//
+
+#if IS_BIG_ENDIAN
+	fusion( pixel )
+	{
+		n4 argb;
+		variant
+		{
+			n1 a;
+			n1 r;
+			n1 g;
+			n1 b;
+		};
+	};
+#else
+	fusion( pixel )
+	{
+		n4 argb;
+		variant
+		{
+			n1 b;
+			n1 g;
+			n1 r;
+			n1 a;
+		};
+	};
+#endif
+
 #define pixel_bits 2
 
-#define pixel( R, G, B, A ) ( ( ( ( A ) & 0xff ) << 24 ) | ( ( ( B ) & 0xff ) ) | ( ( ( G ) & 0xff ) << 8 ) | ( ( ( R ) & 0xff ) << 16 ) )
-
-#define pixel_r( PIXEL ) ( ( PIXEL & 0x00ff0000 ) >> 16 )
-#define pixel_g( PIXEL ) ( ( PIXEL & 0x0000ff00 ) >> 8 )
-#define pixel_b( PIXEL ) ( PIXEL & 0x000000ff )
-#define pixel_a( PIXEL ) ( ( PIXEL & 0xff000000 ) >> 24 )
+#define pixel( R, G, B, A ) ( ( pixel ) { .r = ( R ), .g = ( G ), .b = ( B ), .a = ( A ) } )
 
 global pixel pixel_black = pixel( 0x00, 0x00, 0x00, 0xff );
+global pixel pixel_dark_gray = pixel( 0x3f, 0x3f, 0x3f, 0xff );
+global pixel pixel_gray = pixel( 0x7f, 0x7f, 0x7f, 0xff );
+global pixel pixel_light_gray = pixel( 0xbf, 0xbf, 0xbf, 0xff );
 global pixel pixel_white = pixel( 0xff, 0xff, 0xff, 0xff );
 global pixel pixel_red = pixel( 0xff, 0x00, 0x00, 0xff );
 global pixel pixel_yellow = pixel( 0xff, 0xff, 0x00, 0xff );
@@ -65,9 +121,9 @@ global canvas ref current_canvas_ref = nothing;
 	START_DEF\
 	{\
 		temp const pixel _PIXEL = PIXEL;\
-		if_all( pixel_r( _PIXEL ) is pixel_g( _PIXEL ), pixel_g( _PIXEL ) is pixel_b( _PIXEL ), pixel_b( _PIXEL ) is pixel_a( _PIXEL ) )\
+		if_all( _PIXEL.r is _PIXEL.g, _PIXEL.g is _PIXEL.b, _PIXEL.b is _PIXEL.a )\
 		{\
-			bytes_fill( CANVAS.pixels, pixel_r( _PIXEL ), i4( CANVAS.size.w ) * i4( CANVAS.size.h ) << pixel_bits );\
+			bytes_fill( CANVAS.pixels, _PIXEL.r, i4( CANVAS.size.w ) * i4( CANVAS.size.h ) << pixel_bits );\
 		}\
 		else\
 		{\
@@ -98,6 +154,23 @@ global canvas ref current_canvas_ref = nothing;
 #define canvas_draw_pixel( CANVAS, X, Y, PIXEL ) ( canvas_get_pixel( CANVAS, X, Y ) ) = ( PIXEL )
 #define canvas_draw_pixel_safe( CANVAS, X, Y, PIXEL ) if( canvas_pixel_safe( CANVAS, X, Y ) ) canvas_get_pixel( CANVAS, X, Y ) = ( PIXEL )
 
+#define canvas_draw_pixel_mix( CANVAS, X, Y, PIXEL )\
+	START_DEF\
+	{\
+		temp const pixel _p = canvas_get_pixel( CANVAS, X, Y );\
+		canvas_get_pixel( CANVAS, X, Y).argb = ( ( _p.argb & 0xfefefefe ) >> 1 ) + ( ( ( PIXEL.argb ) & 0xfefefefe ) >> 1 );\
+	}\
+	END_DEF
+
+#define canvas_draw_pixel_mix_safe( CANVAS, X, Y, PIXEL )\
+	START_DEF\
+	{\
+		skip_if( not canvas_pixel_safe( CANVAS, X, Y ) );\
+		temp const pixel _p = canvas_get_pixel( CANVAS, X, Y );\
+		canvas_get_pixel( CANVAS, X, Y).argb = ( ( _p.argb & 0xfefefefe ) >> 1 ) + ( ( ( PIXEL.argb ) & 0xfefefefe ) >> 1 );\
+	}\
+	END_DEF
+
 ///////
 
 #define canvas_draw_canvas( TO_CANVAS, FROM_CANVAS, TLx, TLy )\
@@ -111,15 +184,52 @@ global canvas ref current_canvas_ref = nothing;
 	}\
 	END_DEF
 
-//
+#define canvas_draw_canvas_safe( TO_CANVAS, FROM_CANVAS, TLx, TLy )\
+	START_DEF\
+	{\
+		temp const i2 _X = MAX( 0, TLx );\
+		temp const i2 _OFFX = _X - TLx;\
+		temp i2 _W = i2_min( TO_CANVAS.size.w - _X, FROM_CANVAS.size.w - _OFFX );\
+		skip_if( _W < 0 );\
+		_W <<= pixel_bits;\
+		range( _Y, MAX( 0, TLy ), i2_min( TO_CANVAS.size.h - 1, TLy + FROM_CANVAS.size.h - 1 ) )\
+		{\
+			bytes_copy( ref_of( canvas_get_pixel( FROM_CANVAS, _OFFX, _Y - TLy ) ), _W, ref_of( canvas_get_pixel( TO_CANVAS, _X, _Y ) ) );\
+		}\
+	}\
+	END_DEF
 
+#define canvas_draw_canvas_trans( TO_CANVAS, FROM_CANVAS, TLx, TLy )\
+	START_DEF\
+	{\
+		iter( _Y, FROM_CANVAS.size.h )\
+		{\
+			iter( _X, FROM_CANVAS.size.w )\
+			{\
+				temp const pixel _PIXEL = canvas_get_pixel( FROM_CANVAS, _X, _Y );\
+				if( _PIXEL.a isnt 0 )\
+				{\
+					canvas_get_pixel( TO_CANVAS, TLx + _X, TLy + _Y ) = _PIXEL;\
+				}\
+			}\
+		}\
+	}\
+	END_DEF
+
+//
 #define canvas_draw_canvas_part( TO_CANVAS, FROM_CANVAS, TLx, TLy, PART_TLx, PART_TLy, PART_SIZEw, PART_SIZEh )\
 	START_DEF\
 	{\
-		temp const n2 _W = ( PART_SIZEw ) << pixel_bits;\
-		iter( _Y, PART_SIZEh )\
+		temp const i2 _tlx = TLx;\
+		temp const i2 _tly = TLy;\
+		temp const i2 _part_tlx = PART_TLx;\
+		temp const i2 _part_tly = PART_TLy;\
+		temp const i2 _part_sizew = PART_SIZEw;\
+		temp const i2 _part_sizeh = PART_SIZEh;\
+		temp const n2 _W = _part_sizew << pixel_bits;\
+		iter( _Y, _part_sizeh )\
 		{\
-			bytes_copy( ref_of( canvas_get_pixel( FROM_CANVAS, PART_TLx, ( PART_TLy ) + _Y ) ), _W, ref_of( canvas_get_pixel( TO_CANVAS, TLx, ( TLy ) + _Y ) ) );\
+			bytes_copy( ref_of( canvas_get_pixel( FROM_CANVAS, _part_tlx, _part_tly + _Y ) ), _W, ref_of( canvas_get_pixel( TO_CANVAS, _tlx, _tly + _Y ) ) );\
 		}\
 	}\
 	END_DEF
@@ -144,6 +254,50 @@ global canvas ref current_canvas_ref = nothing;
 	}\
 	END_DEF
 
+#define canvas_draw_canvas_part_trans( TO_CANVAS, FROM_CANVAS, TLx, TLy, PART_TLx, PART_TLy, PART_SIZEw, PART_SIZEh )\
+	START_DEF\
+	{\
+		iter( _Y, PART_SIZEh )\
+		{\
+			iter( _X, PART_SIZEw )\
+			{\
+				temp const pixel _PIXEL = canvas_get_pixel( FROM_CANVAS, ( PART_TLx ) + _X, ( PART_TLy ) + _Y );\
+				if( _PIXEL.a isnt 0 )\
+				{\
+					canvas_get_pixel( TO_CANVAS, ( TLx ) + _X, ( TLy ) + _Y ) = _PIXEL;\
+				}\
+			}\
+		}\
+	}\
+	END_DEF
+
+#define canvas_draw_canvas_part_trans_safe( TO_CANVAS, FROM_CANVAS, TLx, TLy, PART_TLx, PART_TLy, PART_SIZEw, PART_SIZEh )\
+	START_DEF\
+	{\
+		const i2 _TLx = TLx;\
+		temp i2 _X = MAX( 0, _TLx );\
+		const i2 _PART_TLx = PART_TLx;\
+		skip_if( _PART_TLx + ( _X - _TLx ) >= FROM_CANVAS.size.w );\
+		const i2 _TLy = TLy;\
+		temp i2 _SY = ( PART_TLy ) + ( MAX( 0, _TLy ) - _TLy );\
+		skip_if( _SY >= FROM_CANVAS.size.h );\
+		temp i2 _W = i2_min3( TO_CANVAS.size.w - _X, ( PART_SIZEw ) - ( _X - _TLx ), FROM_CANVAS.size.w - ( _PART_TLx + ( _X - _TLx ) ) );\
+		skip_if( _W <= 0 );\
+		temp const i2 _H = i2_min( TO_CANVAS.size.h, _TLy + ( PART_SIZEh ) ) - MAX( 0, _TLy );\
+		iter( _Y, _H )\
+		{\
+			iter( _IX, _W )\
+			{\
+				temp const pixel _PIXEL = canvas_get_pixel( FROM_CANVAS, _PART_TLx + ( _X - _TLx ) + _IX, _SY + _Y );\
+				if( _PIXEL.a isnt 0 )\
+				{\
+					canvas_get_pixel( TO_CANVAS, _X + _IX, MAX( 0, _TLy ) + _Y ) = _PIXEL;\
+				}\
+			}\
+		}\
+	}\
+	END_DEF
+
 ///////
 
 #define _line_fn( _LINE_FN, Ax, Ay, Bx, By, X_NAME, Y_NAME, CODE )\
@@ -160,7 +314,7 @@ global canvas ref current_canvas_ref = nothing;
 		temp const i2 _LINE_FN##_ax = ABS( _LINE_FN##_xd );\
 		temp const i2 _LINE_FN##_ay = ABS( _LINE_FN##_yd );\
 		temp i2 _LINE_FN##_a = pick( _LINE_FN##_ax > _LINE_FN##_ay, _LINE_FN##_ax, _LINE_FN##_ay );\
-		temp const i4 _LINE_FN##_recip = 0x100000 / i4( _LINE_FN##_a );\
+		temp const i4 _LINE_FN##_recip = 0x100000 / i4( MAX( _LINE_FN##_a, 1 ) );\
 		temp const i4 _LINE_FN##_xs = i4( _LINE_FN##_xd ) * _LINE_FN##_recip;\
 		temp const i4 _LINE_FN##_ys = i4( _LINE_FN##_yd ) * _LINE_FN##_recip;\
 		temp const i2 _LINE_FN##_i = 0;\
@@ -229,21 +383,94 @@ global canvas ref current_canvas_ref = nothing;
 #define _canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL, SUFFIX... ) box_fn( TLx, TLy, BRx, BRy, _X, _Y, canvas_draw_pixel##SUFFIX( CANVAS, _X, _Y, PIXEL ) );
 #define canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL ) _canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL )
 #define canvas_draw_box_safe( CANVAS, TLx, TLy, BRx, BRy, PIXEL ) _canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL, _safe )
+#define canvas_draw_box_mix( CANVAS, TLx, TLy, BRx, BRy, PIXEL ) _canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL, _mix )
+#define canvas_draw_box_mix_safe( CANVAS, TLx, TLy, BRx, BRy, PIXEL ) _canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL, _mix_safe )
+
+///////
+
+type( font )
+{
+	canvas pixels;
+	n2x2 letter_size;
+};
+
+#define font( CANVAS ) make( font, .pixels = CANVAS, .letter_size.w = CANVAS.size.w >> 4, .letter_size.h = CANVAS.size.h >> 4 )
+
+#define canvas_draw_bytes( CANVAS, FONT, BYTES, BYTES_SIZE, POS, ANCHOR, COLOR, BOLD_SHADOW... )\
+	START_DEF\
+	{\
+		temp const n2 _text_len = pick( BYTES_SIZE is 0, bytes_measure( BYTES ), BYTES_SIZE );\
+		temp const i2 _text_width = _text_len * FONT.letter_size.x;\
+		temp const i2 _text_height = FONT.letter_size.y;\
+		temp i2 _offset_x;\
+		temp i2 _offset_y;\
+		get_anchor_offsets( _offset_x, _offset_y, _text_width, _text_height, ANCHOR );\
+		temp i2 _draw_x = POS.x - _offset_x;\
+		temp i2 _draw_y = POS.y - _offset_y;\
+		temp i2 _letter_x = 0;\
+		temp i2 _letter_y = 0;\
+		temp byte _letter = 0;\
+		temp const flag _is_bold = DEFAULT( no, GET_ARG1( BOLD_SHADOW ) );\
+		temp const flag _is_shadow = DEFAULT( no, SKIP_ARG( BOLD_SHADOW ) );\
+		temp i2 _w = 0;\
+		temp const pixel _color = COLOR;\
+		iter( _l, _text_len )\
+		{\
+			_letter = BYTES[ _l ];\
+			_letter_x = ( _letter & 0x0F ) * FONT.letter_size.x;\
+			_letter_y = ( _letter >> 4 ) * FONT.letter_size.y;\
+			iter( _Y, FONT.letter_size.h )\
+			{\
+				iter( _X, FONT.letter_size.w )\
+				{\
+					if( canvas_get_pixel( FONT.pixels, _letter_x + _X, _letter_y + _Y ).a isnt 0 )\
+					{\
+						canvas_get_pixel( CANVAS, _draw_x + _w + _X, _draw_y + _Y ) = _color;\
+						if( _is_bold ) canvas_get_pixel( CANVAS, _draw_x + _w + _X + 1, _draw_y + _Y ) = _color;\
+						if( _is_shadow )\
+						{\
+							temp const i2 _shX = _draw_x + _w + _X + _is_bold;\
+							temp const i2 _shY = _draw_y + _Y;\
+							canvas_get_pixel( CANVAS, _shX + 1, _shY ) = pixel_black;\
+							canvas_get_pixel( CANVAS, _shX + 1, _shY + 1 ) = pixel_black;\
+							canvas_get_pixel( CANVAS, _shX, _shY + 1 ) = pixel_black;\
+						}\
+					}\
+				}\
+			}\
+			_w += FONT.letter_size.x;\
+		}\
+	}\
+	END_DEF
 
 ///////
 
 group( anchor )
 {
-	anchor_top_left,
-	anchor_top_center,
-	anchor_top_right,
-	anchor_middle_left,
-	anchor_middle_center,
-	anchor_middle_right,
-	anchor_bottom_left,
-	anchor_bottom_center,
-	anchor_bottom_right
+	anchor_top_left = 0x00, // 0000 0000
+	anchor_top_center = 0x01, // 0000 0001
+	anchor_top_right = 0x02, // 0000 0010
+	anchor_middle_left = 0x10, // 0001 0000
+	anchor_middle_center = 0x11, // 0001 0001
+	anchor_middle_right = 0x12, // 0001 0010
+	anchor_bottom_left = 0x20, // 0010 0000
+	anchor_bottom_center = 0x21, // 0010 0001
+	anchor_bottom_right = 0x22 // 0010 0010
 };
+
+#define get_anchor_offsets( X_NAME, Y_NAME, W, H, ANCHOR )\
+	START_DEF\
+	{\
+		temp const n1 _h_align = ANCHOR & 0x0F;\
+		temp const n1 _v_align = ANCHOR >> 4;\
+		X_NAME = 0;\
+		Y_NAME = 0;\
+		if( _h_align is 1 ) X_NAME = W >> 1;\
+		else if( _h_align is 2 ) X_NAME = W;\
+		if( _v_align is 1 ) Y_NAME = H >> 1;\
+		else if( _v_align is 2 ) Y_NAME = H;\
+	}\
+	END_DEF
 
 ///////
 
@@ -300,6 +527,13 @@ object( window )
 	n1 inputs_pressed_count;
 	byte inputs_released[ 32 ];
 	n1 inputs_released_count;
+	//
+	i4 mouse_x;
+	i4 mouse_y;
+	i2 mouse_delta_x;
+	i2 mouse_delta_y;
+	d4 mouse_pixel_x;
+	d4 mouse_pixel_y;
 };
 
 global window current_window = nothing;
@@ -316,6 +550,18 @@ global const byte ref OS_INPUT_MAP = nothing;
 #define key_pressed( KEY ) ( current_window->inputs[ input_##KEY ] & INPUT_MASK_PRESSED )
 #define key_held( KEY ) ( current_window->inputs[ input_##KEY ] & INPUT_MASK_HELD )
 #define key_released( KEY ) ( current_window->inputs[ input_##KEY ] & INPUT_MASK_RELEASED )
+
+#define mouse_left_pressed() key_pressed( mouse_left )
+#define mouse_middle_pressed() key_pressed( mouse_middle )
+#define mouse_right_pressed() key_pressed( mouse_right )
+
+#define mouse_left_held() key_held( mouse_left )
+#define mouse_middle_held() key_held( mouse_middle )
+#define mouse_right_held() key_held( mouse_right )
+
+#define mouse_left_released() key_released( mouse_left )
+#define mouse_middle_released() key_released( mouse_middle )
+#define mouse_right_released() key_released( mouse_right )
 
 object_fn( window, set_start_fn, const window_fn start_fn )
 {
@@ -417,9 +663,8 @@ fn _window_resize( const window this )
 	temp n2 buffer_w = ( this->size_target.w + this->scale - 1 ) / this->scale;
 	temp n2 buffer_h = ( this->size_target.h + this->scale - 1 ) / this->scale;
 
-	out_if( this->buffer.size.w is buffer_w and this->buffer.size.h is buffer_h );
-	//
-	canvas_resize( this->buffer, buffer_w, buffer_h );
+	if( this->buffer.size.w isnt buffer_w or this->buffer.size.h isnt buffer_h ) canvas_resize( this->buffer, buffer_w, buffer_h );
+	
 	//
 	#if OS_LINUX
 		this->image->data = to( byte ref, this->buffer.pixels );
@@ -494,6 +739,40 @@ fn _window_update( const window this )
 	this->total_time += this->delta_time;
 	this->past_nano = now;
 	++this->tick;
+
+	this->mouse_delta_x = this->mouse_x;
+	this->mouse_delta_y = this->mouse_y;
+
+	#if OS_LINUX
+		Window _empty;
+		i4 _root;
+		n4 _mask;
+		XQueryPointer( this->display, this->handle, ref_of( _empty ), ref_of( _empty ), ref_of( _root ), ref_of( _root ), ref_of( this->mouse_x ), ref_of( this->mouse_y ), ref_of( _mask ) );
+	#elif OS_WINDOWS
+		POINT cursor;
+		GetCursorPos( ref_of( cursor ) );
+		ScreenToClient( this->handle, ref_of( cursor ) );
+		this->mouse_x = cursor.x;
+		this->mouse_y = cursor.y;
+	#endif
+
+	this->mouse_delta_x -= this->mouse_x;
+	this->mouse_delta_y -= this->mouse_y;
+
+	temp const n2 scaled_width = this->buffer.size.w * this->scale;
+	temp const n2 scaled_height = this->buffer.size.h * this->scale;
+
+	temp const i4 overflow_w = i4( this->size_target.w ) - i4( scaled_width );
+	temp const i4 overflow_h = i4( this->size_target.h ) - i4( scaled_height );
+
+	temp i4 offset_x;
+	temp i4 offset_y;
+
+	get_anchor_offsets( offset_x, offset_y, overflow_w, overflow_h, this->buffer_anchor );
+
+	this->mouse_pixel_x = d4_div( i4_to_d4( this->mouse_x - offset_x ), i4_to_d4( this->scale ) );
+	this->mouse_pixel_y = d4_div( i4_to_d4( this->mouse_y - offset_y ), i4_to_d4( this->scale ) );
+
 	call( this, tick_fn );
 
 	if( this->refresh )
@@ -501,91 +780,27 @@ fn _window_update( const window this )
 		this->refresh = no;
 		call( this, draw_fn );
 
-		temp const n2 scaled_width = this->buffer.size.w * this->scale;
-		temp const n2 scaled_height = this->buffer.size.h * this->scale;
-
-		temp const i4 overflow_w = i4( this->size_target.w ) - i4( scaled_width );
-		temp const i4 overflow_h = i4( this->size_target.h ) - i4( scaled_height );
-
-		temp i4 x = 0;
-		temp i4 y = 0;
-
-		with( this->buffer_anchor )
-		{
-			when( anchor_top_center )
-			{
-				x = overflow_w >> 1;
-				skip;
-			}
-
-			when( anchor_top_right )
-			{
-				x = overflow_w;
-				skip;
-			}
-
-			when( anchor_middle_left )
-			{
-				y = overflow_h >> 1;
-				skip;
-			}
-
-			when( anchor_middle_center )
-			{
-				x = overflow_w >> 1;
-				y = overflow_h >> 1;
-				skip;
-			}
-
-			when( anchor_middle_right )
-			{
-				x = overflow_w;
-				y = overflow_h >> 1;
-				skip;
-			}
-
-			when( anchor_bottom_left )
-			{
-				y = overflow_h;
-				skip;
-			}
-
-			when( anchor_bottom_center )
-			{
-				x = overflow_w >> 1;
-				y = overflow_h;
-				skip;
-			}
-
-			when( anchor_bottom_right )
-			{
-				x = overflow_w;
-				y = overflow_h;
-				skip;
-			}
-		}
-
 		#if OS_LINUX
 			if( this->scale > 1 )
 			{
 				XPutImage( this->display, this->pixmap, this->gc, this->image, 0, 0, 0, 0, this->buffer.size.w, this->buffer.size.h );
-				XRenderComposite( this->display, PictOpSrc, this->pic, None, this->present_pic, 0, 0, 0, 0, x, y, scaled_width, scaled_height );
+				XRenderComposite( this->display, PictOpSrc, this->pic, None, this->present_pic, 0, 0, 0, 0, offset_x, offset_y, scaled_width, scaled_height );
 				XPresentPixmap( this->display, this->handle, this->present_pixmap, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 );
 			}
 			else
 			{
-				XPutImage( this->display, this->handle, this->gc, this->image, 0, 0, x, y, this->buffer.size.w, this->buffer.size.h );
+				XPutImage( this->display, this->handle, this->gc, this->image, 0, 0, offset_x, offset_y, this->buffer.size.w, this->buffer.size.h );
 			}
 			XSync( this->display, no );
 		#elif OS_WINDOWS
 			if( this->scale > 1 )
 			{
 				SetStretchBltMode( this->display, COLORONCOLOR );
-				StretchDIBits( this->display, x, y, scaled_width, scaled_height, 0, 0, this->buffer.size.w, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
+				StretchDIBits( this->display, offset_x, offset_y, scaled_width, scaled_height, 0, 0, this->buffer.size.w, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
 			}
 			else
 			{
-				SetDIBitsToDevice( this->display, x, y, this->buffer.size.w, this->buffer.size.h, 0, 0, 0, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS );
+				SetDIBitsToDevice( this->display, offset_x, offset_y, this->buffer.size.w, this->buffer.size.h, 0, 0, 0, this->buffer.size.h, this->buffer.pixels, ref_of( this->image ), DIB_RGB_COLORS );
 			}
 		#endif
 	}
@@ -629,6 +844,107 @@ object_fn( window, set_fps, const r8 in_fps )
 	this->target_frame_nano = to( nano, r8( nano_per_sec ) / this->fps_target );
 }
 
+//
+
+group( input_type )
+{
+	input_none,
+	//
+	input_mouse_left,
+	input_mouse_right,
+	input_cancel,
+	input_mouse_middle,
+	//
+	input_a,
+	input_b,
+	input_c,
+	input_d,
+	input_e,
+	input_f,
+	input_g,
+	input_h,
+	input_i,
+	input_j,
+	input_k,
+	input_l,
+	input_m,
+	input_n,
+	input_o,
+	input_p,
+	input_q,
+	input_r,
+	input_s,
+	input_t,
+	input_u,
+	input_v,
+	input_w,
+	input_x,
+	input_y,
+	input_z,
+
+	input_0,
+	input_1,
+	input_2,
+	input_3,
+	input_4,
+	input_5,
+	input_6,
+	input_7,
+	input_8,
+	input_9,
+
+	input_f1,
+	input_f2,
+	input_f3,
+	input_f4,
+	input_f5,
+	input_f6,
+	input_f7,
+	input_f8,
+	input_f9,
+	input_f10,
+	input_f11,
+	input_f12,
+
+	input_escape,
+	input_tab,
+	input_capslock,
+	input_shift,
+	input_ctrl,
+	input_alt,
+	input_space,
+	input_enter,
+	input_backspace,
+	input_insert,
+	input_delete,
+	input_home,
+	input_end,
+	input_pageup,
+	input_pagedown,
+
+	input_up,
+	input_down,
+	input_left,
+	input_right,
+
+	input_backtick,
+	input_minus,
+	input_equals,
+	input_leftbracket,
+	input_rightbracket,
+	input_backslash,
+	input_semicolon,
+	input_apostrophe,
+	input_comma,
+	input_period,
+	input_slash,
+
+	input_super,
+	input_menu,
+	//
+	input_count
+};
+
 group( window_event_type, n2 )
 {
 	window_event_resize = PICK( OS_LINUX, ConfigureNotify, WM_SIZE ),
@@ -637,6 +953,19 @@ group( window_event_type, n2 )
 	window_event_key_activate = PICK( OS_LINUX, KeyPress, WM_KEYDOWN ),
 	window_event_key_deactivate = PICK( OS_LINUX, KeyRelease, WM_KEYUP )
 };
+
+#define HANDLE_MOUSE_DOWN( button_input )\
+	if( not( w->inputs[ button_input ] & INPUT_MASK_HELD ) )\
+	{\
+		w->inputs[ button_input ] |= INPUT_MASK_PRESSED | INPUT_MASK_HELD;\
+		w->inputs_pressed[ w->inputs_pressed_count++ ] = button_input;\
+	}\
+	is_input = yes
+
+#define HANDLE_MOUSE_UP( button_input )\
+	w->inputs[ button_input ] = INPUT_MASK_RELEASED;\
+	w->inputs_released[ w->inputs_released_count++ ] = button_input;\
+	is_input = yes
 
 #if OS_LINUX
 	embed out_state window_process_event( const window w, const window_event_type event, const os_event ref e )
@@ -755,6 +1084,85 @@ group( window_event_type, n2 )
 			out success;
 		}
 
+		#if OS_LINUX
+			when( ButtonPress )
+			{
+				with( e->xbutton.button )
+				{
+					when( Button1 )
+					{
+						HANDLE_MOUSE_DOWN( input_mouse_left );
+						skip;
+					}
+					when( Button2 )
+					{
+						HANDLE_MOUSE_DOWN( input_mouse_middle );
+						skip;
+					}
+					when( Button3 )
+					{
+						HANDLE_MOUSE_DOWN( input_mouse_right );
+						skip;
+					}
+				}
+				skip;
+			}
+
+			when( ButtonRelease )
+			{
+				with( e->xbutton.button )
+				{
+					when( Button1 )
+					{
+						HANDLE_MOUSE_UP( input_mouse_left );
+						skip;
+					}
+					when( Button2 )
+					{
+						HANDLE_MOUSE_UP( input_mouse_middle );
+						skip;
+					}
+					when( Button3 )
+					{
+						HANDLE_MOUSE_UP( input_mouse_right );
+						skip;
+					}
+				}
+				skip;
+			}
+		#elif OS_WINDOWS
+			when( WM_LBUTTONDOWN )
+			{
+				HANDLE_MOUSE_DOWN( input_mouse_left );
+				skip;
+			}
+			when( WM_MBUTTONDOWN )
+			{
+				HANDLE_MOUSE_DOWN( input_mouse_middle );
+				skip;
+			}
+			when( WM_RBUTTONDOWN )
+			{
+				HANDLE_MOUSE_DOWN( input_mouse_right );
+				skip;
+			}
+			when( WM_LBUTTONUP )
+			{
+				HANDLE_MOUSE_UP( input_mouse_left );
+				skip;
+			}
+			when( WM_MBUTTONUP )
+			{
+				HANDLE_MOUSE_UP( input_mouse_middle );
+				skip;
+			}
+			when( WM_RBUTTONUP )
+			{
+				HANDLE_MOUSE_UP( input_mouse_right );
+				skip;
+			}
+		#endif
+
 		other skip;
 	}
 	//
@@ -771,7 +1179,7 @@ group( window_event_type, n2 )
 	#endif
 }
 
-embed window new_window( const n2 width, const n2 height )
+new_object_fn( window, const n2 width, const n2 height )
 {
 	temp const window out_window = new_object( window );
 
@@ -790,7 +1198,7 @@ embed window new_window( const n2 width, const n2 height )
 		out_window->handle = XCreateSimpleWindow( out_window->display, RootWindow( out_window->display, screen ), 0, 0, width, height, 0, 0, 0 );
 
 		XSetWindowBackgroundPixmap( out_window->display, out_window->handle, None );
-		XSelectInput( out_window->display, out_window->handle, ExposureMask | StructureNotifyMask | KeyPressMask | KeyReleaseMask );
+		XSelectInput( out_window->display, out_window->handle, ExposureMask | StructureNotifyMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask );
 		XkbSetDetectableAutoRepeat( out_window->display, yes, nothing );
 
 		out_window->image = XCreateImage( out_window->display, DefaultVisual( out_window->display, screen ), DefaultDepth( out_window->display, screen ), ZPixmap, 0, to( byte ref, out_window->buffer.pixels ), width, height, 32, 0 );
@@ -918,105 +1326,6 @@ object_fn( window, process )
 }
 
 ///////
-
-group( input_type )
-{
-	input_none,
-	//
-	input_mouse_left,
-	input_mouse_right,
-	input_cancel,
-	input_mouse_middle,
-	//
-	input_a,
-	input_b,
-	input_c,
-	input_d,
-	input_e,
-	input_f,
-	input_g,
-	input_h,
-	input_i,
-	input_j,
-	input_k,
-	input_l,
-	input_m,
-	input_n,
-	input_o,
-	input_p,
-	input_q,
-	input_r,
-	input_s,
-	input_t,
-	input_u,
-	input_v,
-	input_w,
-	input_x,
-	input_y,
-	input_z,
-
-	input_0,
-	input_1,
-	input_2,
-	input_3,
-	input_4,
-	input_5,
-	input_6,
-	input_7,
-	input_8,
-	input_9,
-
-	input_f1,
-	input_f2,
-	input_f3,
-	input_f4,
-	input_f5,
-	input_f6,
-	input_f7,
-	input_f8,
-	input_f9,
-	input_f10,
-	input_f11,
-	input_f12,
-
-	input_escape,
-	input_tab,
-	input_capslock,
-	input_shift,
-	input_ctrl,
-	input_alt,
-	input_space,
-	input_enter,
-	input_backspace,
-	input_insert,
-	input_delete,
-	input_home,
-	input_end,
-	input_pageup,
-	input_pagedown,
-
-	input_up,
-	input_down,
-	input_left,
-	input_right,
-
-	input_backtick,
-	input_minus,
-	input_equals,
-	input_leftbracket,
-	input_rightbracket,
-	input_backslash,
-	input_semicolon,
-	input_apostrophe,
-	input_comma,
-	input_period,
-	input_slash,
-
-	input_super,
-	input_menu,
-	//
-	input_count
-};
 
 embed const byte const_ref _C7H16_input_map()
 {
@@ -1496,7 +1805,7 @@ embed out_state audio_mixer_start( audio_mixer ref m )
 			out failure;
 		}
 		snd_pcm_set_params( m->device, 2, 3, 2, 44100, 1, 100000 );
-		m->process = new_cpu_thread( audio_mixer_thread_fn, m );
+		m->process = start_thread( audio_mixer_thread_fn, m );
 
 	#elif OS_WINDOWS
 		if_nothing( winmm_dll )
