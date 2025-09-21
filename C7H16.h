@@ -664,7 +664,7 @@ fn _window_resize( const window this )
 	temp n2 buffer_h = ( this->size_target.h + this->scale - 1 ) / this->scale;
 
 	if( this->buffer.size.w isnt buffer_w or this->buffer.size.h isnt buffer_h ) canvas_resize( this->buffer, buffer_w, buffer_h );
-	
+
 	//
 	#if OS_LINUX
 		this->image->data = to( byte ref, this->buffer.pixels );
@@ -1865,7 +1865,7 @@ fn audio_mixer_stop( audio_mixer ref m )
 
 type_from( i4 ) audio_id;
 
-embed audio_id audio_play( audio_mixer const_ref mixer, const audio const_ref a, const r4 volume, const r4 pan )
+embed audio_id audio_play( audio_mixer const_ref mixer, audio const_ref a, const r4 volume, const r4 pan )
 {
 	lock_thread( mixer->lock );
 	iter( id, audio_max_instances )
