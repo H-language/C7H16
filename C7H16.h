@@ -158,7 +158,7 @@ global canvas ref current_canvas_ref = nothing;
 	START_DEF\
 	{\
 		temp const pixel _p = canvas_get_pixel( CANVAS, X, Y );\
-		canvas_get_pixel( CANVAS, X, Y).argb = ( ( _p.argb & 0xfefefefe ) >> 1 ) + ( ( ( PIXEL.argb ) & 0xfefefefe ) >> 1 );\
+		canvas_get_pixel( CANVAS, X, Y ).argb = ( ( _p.argb & 0xfefefefe ) >> 1 ) + ( ( ( PIXEL.argb ) & 0xfefefefe ) >> 1 );\
 	}\
 	END_DEF
 
@@ -167,7 +167,17 @@ global canvas ref current_canvas_ref = nothing;
 	{\
 		skip_if( not canvas_pixel_safe( CANVAS, X, Y ) );\
 		temp const pixel _p = canvas_get_pixel( CANVAS, X, Y );\
-		canvas_get_pixel( CANVAS, X, Y).argb = ( ( _p.argb & 0xfefefefe ) >> 1 ) + ( ( ( PIXEL.argb ) & 0xfefefefe ) >> 1 );\
+		canvas_get_pixel( CANVAS, X, Y ).argb = ( ( _p.argb & 0xfefefefe ) >> 1 ) + ( ( ( PIXEL.argb ) & 0xfefefefe ) >> 1 );\
+	}\
+	END_DEF
+
+#define canvas_draw_pixel_multiply( CANVAS, X, Y, PIXEL )\
+	START_DEF\
+	{\
+		temp pixel const_ref _p = ref_of( canvas_get_pixel( CANVAS, X, Y ) );\
+		_p->r = ( n2( _p->r ) * n2( PIXEL.r ) ) >> 8;\
+		_p->g = ( n2( _p->g ) * n2( PIXEL.g ) ) >> 8;\
+		_p->b = ( n2( _p->b ) * n2( PIXEL.b ) ) >> 8;\
 	}\
 	END_DEF
 
@@ -199,6 +209,34 @@ global canvas ref current_canvas_ref = nothing;
 	}\
 	END_DEF
 
+#define canvas_draw_canvas_mix( TO_CANVAS, FROM_CANVAS, TLx, TLy )\
+	START_DEF\
+	{\
+		iter( _Y, FROM_CANVAS.size.h )\
+		{\
+			iter( _X, FROM_CANVAS.size.w )\
+			{\
+				temp const pixel _PIXEL = canvas_get_pixel( FROM_CANVAS, _X, _Y );\
+				canvas_draw_pixel_mix( TO_CANVAS, TLx + _X, TLy + _Y, _PIXEL );\
+			}\
+		}\
+	}\
+	END_DEF
+
+#define canvas_draw_canvas_multiply( TO_CANVAS, FROM_CANVAS, TLx, TLy )\
+	START_DEF\
+	{\
+		iter( _Y, FROM_CANVAS.size.h )\
+		{\
+			iter( _X, FROM_CANVAS.size.w )\
+			{\
+				temp const pixel _PIXEL = canvas_get_pixel( FROM_CANVAS, _X, _Y );\
+				canvas_draw_pixel_multiply( TO_CANVAS, TLx + _X, TLy + _Y, _PIXEL );\
+			}\
+		}\
+	}\
+	END_DEF
+
 #define canvas_draw_canvas_trans( TO_CANVAS, FROM_CANVAS, TLx, TLy )\
 	START_DEF\
 	{\
@@ -210,6 +248,23 @@ global canvas ref current_canvas_ref = nothing;
 				if( _PIXEL.a isnt 0 )\
 				{\
 					canvas_get_pixel( TO_CANVAS, TLx + _X, TLy + _Y ) = _PIXEL;\
+				}\
+			}\
+		}\
+	}\
+	END_DEF
+
+#define canvas_draw_canvas_trans_mix( TO_CANVAS, FROM_CANVAS, TLx, TLy )\
+	START_DEF\
+	{\
+		iter( _Y, FROM_CANVAS.size.h )\
+		{\
+			iter( _X, FROM_CANVAS.size.w )\
+			{\
+				temp const pixel _PIXEL = canvas_get_pixel( FROM_CANVAS, _X, _Y );\
+				if( _PIXEL.a isnt 0 )\
+				{\
+					canvas_draw_pixel_mix( TO_CANVAS, TLx + _X, TLy + _Y, _PIXEL );\
 				}\
 			}\
 		}\
@@ -336,6 +391,9 @@ global canvas ref current_canvas_ref = nothing;
 #define _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, SUFFIX... ) line_fn( Ax, Ay, Bx, By, _X, _Y, canvas_draw_pixel##SUFFIX( CANVAS, _X, _Y, PIXEL ) );
 #define canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL )
 #define canvas_draw_line_safe( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, _safe )
+
+#define canvas_draw_line_mix( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, _mix )
+#define canvas_draw_line_mix_safe( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, _mix_safe )
 
 //
 
@@ -479,6 +537,12 @@ type_from( PICK( OS_LINUX, Display ref, HDC ) ) os_display;
 type_from( PICK( OS_LINUX, XImage ref, BITMAPINFO ) ) os_image;
 type_from( PICK( OS_LINUX, XEvent, MSG ) ) os_event;
 
+#if OS_LINUX
+	#define INPUTS_MAX 512
+#else
+	#define INPUTS_MAX 256
+#endif
+
 object( window )
 {
 	os_handle handle;
@@ -522,7 +586,7 @@ object( window )
 	r8 total_time;
 	r8 delta_time;
 	//
-	byte inputs[ PICK( OS_LINUX, 512, 256 ) ];
+	byte inputs[ INPUTS_MAX ];
 	byte inputs_pressed[ 32 ];
 	n1 inputs_pressed_count;
 	byte inputs_released[ 32 ];
@@ -631,7 +695,7 @@ object_fn( window, set_scale, const r8 scale )
 {
 	out_if_nothing( this );
 
-	this->scale = n2_max( scale, 1 );
+	this->scale = n2_max( r8_ceil(scale), 1 );
 
 	#if OS_LINUX
 		this->transform.matrix[ 0 ][ 0 ] = XDoubleToFixed( 1.0 / r8( this->scale ) );
@@ -951,33 +1015,34 @@ group( window_event_type, n2 )
 	window_event_refresh = PICK( OS_LINUX, Expose, WM_PAINT ),
 	window_event_close = PICK( OS_LINUX, ClientMessage, WM_DESTROY ),
 	window_event_key_activate = PICK( OS_LINUX, KeyPress, WM_KEYDOWN ),
-	window_event_key_deactivate = PICK( OS_LINUX, KeyRelease, WM_KEYUP )
+	window_event_key_deactivate = PICK( OS_LINUX, KeyRelease, WM_KEYUP ),
+	window_event_focus_lost = PICK( OS_LINUX, FocusOut, WM_KILLFOCUS )
 };
 
 #define HANDLE_MOUSE_DOWN( button_input )\
-	if( not( w->inputs[ button_input ] & INPUT_MASK_HELD ) )\
+	if( not( this->inputs[ button_input ] & INPUT_MASK_HELD ) )\
 	{\
-		w->inputs[ button_input ] |= INPUT_MASK_PRESSED | INPUT_MASK_HELD;\
-		w->inputs_pressed[ w->inputs_pressed_count++ ] = button_input;\
+		this->inputs[ button_input ] |= INPUT_MASK_PRESSED | INPUT_MASK_HELD;\
+		this->inputs_pressed[ this->inputs_pressed_count++ ] = button_input;\
 	}\
 	is_input = yes
 
 #define HANDLE_MOUSE_UP( button_input )\
-	w->inputs[ button_input ] = INPUT_MASK_RELEASED;\
-	w->inputs_released[ w->inputs_released_count++ ] = button_input;\
+	this->inputs[ button_input ] = INPUT_MASK_RELEASED;\
+	this->inputs_released[ this->inputs_released_count++ ] = button_input;\
 	is_input = yes
 
 #if OS_LINUX
-	embed out_state window_process_event( const window w, const window_event_type event, const os_event ref e )
+	embed out_state window_process_event( const window this, const window_event_type event, const os_event ref e )
 #elif OS_WINDOWS
 	embed LRESULT CALLBACK window_process_event( const os_handle h, const window_event_type event, const WPARAM wp, const LPARAM lp )
 #endif
 {
 	#if OS_WINDOWS
-		temp window w = to( window, GetWindowLongPtr( h, GWLP_USERDATA ) );
+		temp window this = to( window, GetWindowLongPtr( h, GWLP_USERDATA ) );
 	#endif
 	//
-	jump_if_nothing( w ) exit_events;
+	jump_if_nothing( this ) exit_events;
 	//
 	temp flag is_input = no;
 	//
@@ -986,7 +1051,7 @@ group( window_event_type, n2 )
 		#if OS_WINDOWS
 			when( WM_ENTERSIZEMOVE )
 			{
-				w->wm_timer = yes;
+				this->wm_timer = yes;
 				SetTimer( h, 1, 0, nothing );
 				skip;
 			}
@@ -994,8 +1059,8 @@ group( window_event_type, n2 )
 			when( WM_EXITSIZEMOVE )
 			{
 				KillTimer( h, 1 );
-				w->wm_resize = no;
-				w->wm_timer = no;
+				this->wm_resize = no;
+				this->wm_timer = no;
 				skip;
 			}
 
@@ -1003,13 +1068,13 @@ group( window_event_type, n2 )
 			{
 				if( wp is 1 )
 				{
-					if( w->wm_resize is yes )
+					if( this->wm_resize is yes )
 					{
-						_window_resize( w );
-						w->wm_resize = no;
+						_window_resize( this );
+						this->wm_resize = no;
 					}
 
-					_window_update( w );
+					_window_update( this );
 				}
 				skip;
 			}
@@ -1026,36 +1091,46 @@ group( window_event_type, n2 )
 			}
 		#endif
 
+		when( window_event_focus_lost )
+		{
+			bytes_clear( this->inputs, INPUTS_MAX );
+			bytes_clear( this->inputs_pressed, 32 );
+			bytes_clear( this->inputs_released, 32 );
+			this->inputs_pressed_count = 0;
+			this->inputs_released_count = 0;
+			skip;
+		}
+
 		when( window_event_resize )
 		{
-			w->refresh = yes;
+			this->refresh = yes;
 			#if OS_WINDOWS
-				w->wm_resize = yes;
-				_window_set_size( w, LOWORD( lp ), HIWORD( lp ) );
-				if( w->wm_timer is no )
+				this->wm_resize = yes;
+				_window_set_size( this, LOWORD( lp ), HIWORD( lp ) );
+				if( this->wm_timer is no )
 				{
-					_window_resize( w );
+					_window_resize( this );
 				}
 			#elif OS_LINUX
-				_window_set_size( w, e->xconfigure.width, e->xconfigure.height );
-				_window_resize( w );
+				_window_set_size( this, e->xconfigure.width, e->xconfigure.height );
+				_window_resize( this );
 			#endif
 			skip;
 		}
 
 		when( window_event_refresh )
 		{
-			w->refresh = yes;
+			this->refresh = yes;
 			skip;
 		}
 
 		when( window_event_key_activate )
 		{
-			temp const byte key = OS_INPUT_MAP[ PICK( OS_LINUX, XkbKeycodeToKeysym( w->display, e->xkey.keycode, 0, 0 ) & 0x1FF, wp & 0xff ) ];
-			if( key isnt 0 and not( w->inputs[ key ] & INPUT_MASK_HELD ) )
+			temp const byte key = OS_INPUT_MAP[ PICK( OS_LINUX, XkbKeycodeToKeysym( this->display, e->xkey.keycode, 0, 0 ) & 0x1FF, wp & 0xff ) ];
+			if( key isnt 0 and not( this->inputs[ key ] & INPUT_MASK_HELD ) )
 			{
-				w->inputs[ key ] |= INPUT_MASK_PRESSED | INPUT_MASK_HELD;
-				w->inputs_pressed[ w->inputs_pressed_count++ ] = key;
+				this->inputs[ key ] |= INPUT_MASK_PRESSED | INPUT_MASK_HELD;
+				this->inputs_pressed[ this->inputs_pressed_count++ ] = key;
 			}
 			//
 			is_input = yes;
@@ -1064,11 +1139,11 @@ group( window_event_type, n2 )
 
 		when( window_event_key_deactivate )
 		{
-			temp const byte key = OS_INPUT_MAP[ PICK( OS_LINUX, XkbKeycodeToKeysym( w->display, e->xkey.keycode, 0, 0 ) & 0x1FF, wp & 0xff ) ];
+			temp const byte key = OS_INPUT_MAP[ PICK( OS_LINUX, XkbKeycodeToKeysym( this->display, e->xkey.keycode, 0, 0 ) & 0x1FF, wp & 0xff ) ];
 			if( key isnt 0 )
 			{
-				w->inputs[ key ] = INPUT_MASK_RELEASED;
-				w->inputs_released[ w->inputs_released_count++ ] = key;
+				this->inputs[ key ] = INPUT_MASK_RELEASED;
+				this->inputs_released[ this->inputs_released_count++ ] = key;
 			}
 			//
 			is_input = yes;
@@ -1168,7 +1243,7 @@ group( window_event_type, n2 )
 	//
 	if( is_input is yes )
 	{
-		call( w, input_fn );
+		call( this, input_fn );
 	}
 	//
 	exit_events:
@@ -1198,7 +1273,7 @@ new_object_fn( window, const n2 width, const n2 height )
 		out_window->handle = XCreateSimpleWindow( out_window->display, RootWindow( out_window->display, screen ), 0, 0, width, height, 0, 0, 0 );
 
 		XSetWindowBackgroundPixmap( out_window->display, out_window->handle, None );
-		XSelectInput( out_window->display, out_window->handle, ExposureMask | StructureNotifyMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask );
+		XSelectInput( out_window->display, out_window->handle, ExposureMask | StructureNotifyMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | FocusChangeMask );
 		XkbSetDetectableAutoRepeat( out_window->display, yes, nothing );
 
 		out_window->image = XCreateImage( out_window->display, DefaultVisual( out_window->display, screen ), DefaultDepth( out_window->display, screen ), ZPixmap, 0, to( byte ref, out_window->buffer.pixels ), width, height, 32, 0 );
@@ -1301,8 +1376,8 @@ object_fn( window, process )
 	else if( this->tick is 1 )
 	{
 		this->refresh = yes;
-		window_center( this );
 		window_show( this );
+		window_center( this );
 	}
 
 	os_event e;
