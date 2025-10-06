@@ -695,7 +695,7 @@ object_fn( window, set_scale, const r8 scale )
 {
 	out_if_nothing( this );
 
-	this->scale = n2_max( r8_ceil(scale), 1 );
+	this->scale = n2_max( r8_ceil( scale ), 1 );
 
 	#if OS_LINUX
 		this->transform.matrix[ 0 ][ 0 ] = XDoubleToFixed( 1.0 / r8( this->scale ) );
@@ -3411,13 +3411,13 @@ fn _C7H16_close()
 
 #undef start
 #define start\
-	fn _C7H16_main();\
+	fn _C7H16_main( const i4 inputs_count, const byte const_ref const_ref inputs_bytes );\
 	_main_fn\
 	{\
 		_C7H16_init();\
-		_C7H16_main();\
+		_C7H16_main( inputs_count, inputs_bytes );\
 		_C7H16_loop();\
 		_C7H16_close();\
 		out success;\
 	}\
-	fn _C7H16_main()
+	fn _C7H16_main( const i4 inputs_count, const byte const_ref const_ref inputs_bytes )
