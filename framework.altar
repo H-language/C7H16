@@ -1,0 +1,32 @@
+libraries
+	H
+	C7H16
+
+Linux
+	-lm
+	-lX11
+	-lXrender
+	-lXpresent
+	-lasound
+	-lpthread
+
+Windows
+	-luser32
+	-lgdi32
+
+example
+`
+#include <C7H16.h>
+
+object_fn( window, draw )
+{
+	canvas_fill( this->buffer, pixel( 0xff, 0, 0x44, 0xff ) );
+}
+
+start
+{
+	print( "hello C7H16!" newline );
+	new_window( 640, 480 );
+	window_set_draw_fn( current_window, window_draw );
+}
+`
