@@ -406,15 +406,24 @@ global canvas ref current_canvas_ref = nothing;
 	START_DEF\
 	{\
 		temp const pixel _PIXEL = PIXEL;\
+		temp const i4 _WIDTH = i4( CANVAS.size.w );\
+		temp const i4 _AREA = _WIDTH * i4( CANVAS.size.h );\
 		if_all( _PIXEL.r is _PIXEL.g, _PIXEL.g is _PIXEL.b, _PIXEL.b is _PIXEL.a )\
 		{\
-			bytes_fill( CANVAS.pixels, _PIXEL.r, i4( CANVAS.size.w ) * i4( CANVAS.size.h ) << pixel_shift );\
+			bytes_fill( CANVAS.pixels, _PIXEL.r, _AREA << pixel_shift );\
 		}\
 		else\
 		{\
-			iter( _p, i4( CANVAS.size.w ) * i4( CANVAS.size.h ) )\
+			iter( _x, _WIDTH )\
 			{\
-				CANVAS.pixels[ _p ] = _PIXEL;\
+				CANVAS.pixels[ _x ] = _PIXEL;\
+			}\
+			temp i4 _filled = _WIDTH;\
+			while( _filled < _AREA )\
+			{\
+				temp const i4 _copy_count = pick( _AREA - _filled < _filled, _AREA - _filled, _filled );\
+				bytes_copy( ref_of( CANVAS.pixels[ _filled ] ), ref_of( CANVAS.pixels[ 0 ] ), _copy_count << pixel_shift );\
+				_filled += _copy_count;\
 			}\
 		}\
 	}\
@@ -511,6 +520,8 @@ global canvas ref current_canvas_ref = nothing;
 #define canvas_draw_pixel_row( CANVAS, X, ROW, PIXEL, BLEND... ) canvas_draw_pixel_index( CANVAS, i4( X ) + i4( ROW ), PIXEL, BLEND )
 #define canvas_draw_pixel( CANVAS, X, Y, PIXEL, BLEND... ) canvas_draw_pixel_row( CANVAS, i4( X ), i4( Y ) * i4( CANVAS.size.w ), PIXEL, BLEND )
 #define canvas_draw_pixel_safe( CANVAS, X, Y, PIXEL, BLEND... ) if( canvas_pixel_safe( CANVAS, _X, _Y ) ) canvas_draw_pixel( CANVAS, X, Y, PIXEL, BLEND )
+#define canvas_draw_pixel_trans( CANVAS, X, Y, PIXEL, BLEND... ) if( canvas_pixel_safe( CANVAS, _X, _Y ) ) canvas_draw_pixel( CANVAS, X, Y, PIXEL, BLEND )
+#define canvas_draw_pixel_trans_safe( CANVAS, X, Y, PIXEL, BLEND... ) if( canvas_pixel_safe( CANVAS, _X, _Y ) ) canvas_draw_pixel( CANVAS, X, Y, PIXEL, BLEND )
 
 ////////
 // canvas to canvas
@@ -521,12 +532,16 @@ global canvas ref current_canvas_ref = nothing;
 		temp const n2 _bytes_per_row = FROM_CANVAS.size.w << pixel_shift;\
 		temp i4 _to_index = ( TLx ) + ( ( TLy ) * TO_CANVAS.size.w );\
 		temp i4 _from_index = 0;\
-		repeat( FROM_CANVAS.size.h )\
+		temp const i4 _to_step = TO_CANVAS.size.w;\
+		temp const i4 _from_step = FROM_CANVAS.size.w;\
+		temp i2 _h = FROM_CANVAS.size.h;\
+		do\
 		{\
 			bytes_copy( ref_of( canvas_get_pixel_index( TO_CANVAS, _to_index ) ), ref_of( canvas_get_pixel_index( FROM_CANVAS, _from_index ) ), _bytes_per_row );\
-			_to_index += TO_CANVAS.size.w;\
-			_from_index += FROM_CANVAS.size.w;\
+			_to_index += _to_step;\
+			_from_index += _from_step;\
 		}\
+		while( --_h );\
 	}\
 	END_DEF
 
@@ -536,20 +551,25 @@ global canvas ref current_canvas_ref = nothing;
 		temp const i2 _TLx = TLx;\
 		temp const i2 _X = MAX( 0, _TLx );\
 		temp const i2 _OFFX = _X - _TLx;\
-		temp i2 _bytes_per_row = i2_min( TO_CANVAS.size.w - _X, FROM_CANVAS.size.w - _OFFX );\
-		skip_if( _bytes_per_row <= 0 );\
-		_bytes_per_row <<= pixel_shift;\
+		temp const i2 _W = i2_min( TO_CANVAS.size.w - _X, FROM_CANVAS.size.w - _OFFX );\
+		skip_if( _W <= 0 );\
 		temp const i2 _TLy = TLy;\
 		temp const i2 _start_y = MAX( 0, _TLy );\
-		temp const i2 _range = i2_min( TO_CANVAS.size.h, _TLy + FROM_CANVAS.size.h ) - _start_y;\
+		temp const i2 _H = i2_min( TO_CANVAS.size.h, _TLy + FROM_CANVAS.size.h ) - _start_y;\
+		skip_if( _H <= 0 );\
+		temp const i2 _bytes_per_row = _W << pixel_shift;\
 		temp i4 _to_index = _start_y * TO_CANVAS.size.w + _X;\
 		temp i4 _from_index = ( _start_y - _TLy ) * FROM_CANVAS.size.w + _OFFX;\
-		repeat( _range )\
+		temp const i4 _to_step = TO_CANVAS.size.w;\
+		temp const i4 _from_step = FROM_CANVAS.size.w;\
+		temp i2 _h = _H;\
+		do\
 		{\
 			bytes_copy( ref_of( canvas_get_pixel_index( TO_CANVAS, _to_index ) ), ref_of( canvas_get_pixel_index( FROM_CANVAS, _from_index ) ), _bytes_per_row );\
-			_to_index += TO_CANVAS.size.w;\
-			_from_index += FROM_CANVAS.size.w;\
+			_to_index += _to_step;\
+			_from_index += _from_step;\
 		}\
+		while( --_h );\
 	}\
 	END_DEF
 
@@ -558,11 +578,16 @@ global canvas ref current_canvas_ref = nothing;
 	{\
 		temp i4 _to_index = ( TLy ) * TO_CANVAS.size.w + ( TLx );\
 		temp i4 _from_index = 0;\
-		repeat( FROM_CANVAS.size.h )\
+		temp const i4 _to_step = TO_CANVAS.size.w;\
+		temp const i4 _from_step = FROM_CANVAS.size.w;\
+		temp const i2 _width = FROM_CANVAS.size.w;\
+		temp i2 _h = FROM_CANVAS.size.h;\
+		do\
 		{\
 			temp pixel ref _to = ref_of( canvas_get_pixel_index( TO_CANVAS, _to_index ) );\
 			temp const pixel ref _from = ref_of( canvas_get_pixel_index( FROM_CANVAS, _from_index ) );\
-			repeat( FROM_CANVAS.size.w )\
+			temp i2 _w = _width;\
+			do\
 			{\
 				if( _from->a )\
 				{\
@@ -571,28 +596,37 @@ global canvas ref current_canvas_ref = nothing;
 				++_to;\
 				++_from;\
 			}\
-			_to_index += TO_CANVAS.size.w;\
-			_from_index += FROM_CANVAS.size.w;\
+			while( --_w );\
+			_to_index += _to_step;\
+			_from_index += _from_step;\
 		}\
+		while( --_h );\
 	}\
 	END_DEF
 
 #define canvas_draw_canvas_trans_safe( TO_CANVAS, FROM_CANVAS, TLx, TLy )\
 	START_DEF\
 	{\
-		temp const i2 _X = MAX( 0, TLx );\
-		temp const i2 _OFFX = _X - TLx;\
+		temp const i2 _TLx = TLx;\
+		temp const i2 _X = MAX( 0, _TLx );\
+		temp const i2 _OFFX = _X - _TLx;\
 		temp const i2 _W = i2_min( TO_CANVAS.size.w - _X, FROM_CANVAS.size.w - _OFFX );\
 		skip_if( _W <= 0 );\
-		temp const i2 _start_y = MAX( 0, TLy );\
-		temp const i2 _range = i2_min( TO_CANVAS.size.h, TLy + FROM_CANVAS.size.h ) - _start_y;\
+		temp const i2 _TLy = TLy;\
+		temp const i2 _start_y = MAX( 0, _TLy );\
+		temp const i2 _H = i2_min( TO_CANVAS.size.h, _TLy + FROM_CANVAS.size.h ) - _start_y;\
+		skip_if( _H <= 0 );\
 		temp i4 _to_index = _start_y * TO_CANVAS.size.w + _X;\
-		temp i4 _from_index = ( _start_y - TLy ) * FROM_CANVAS.size.w + _OFFX;\
-		repeat( _range )\
+		temp i4 _from_index = ( _start_y - _TLy ) * FROM_CANVAS.size.w + _OFFX;\
+		temp const i4 _to_step = TO_CANVAS.size.w;\
+		temp const i4 _from_step = FROM_CANVAS.size.w;\
+		temp i2 _h = _H;\
+		do\
 		{\
 			temp pixel ref _to = ref_of( canvas_get_pixel_index( TO_CANVAS, _to_index ) );\
 			temp const pixel ref _from = ref_of( canvas_get_pixel_index( FROM_CANVAS, _from_index ) );\
-			repeat( _W )\
+			temp i2 _w = _W;\
+			do\
 			{\
 				if( _from->a )\
 				{\
@@ -601,9 +635,11 @@ global canvas ref current_canvas_ref = nothing;
 				++_to;\
 				++_from;\
 			}\
-			_to_index += TO_CANVAS.size.w;\
-			_from_index += FROM_CANVAS.size.w;\
+			while( --_w );\
+			_to_index += _to_step;\
+			_from_index += _from_step;\
 		}\
+		while( --_h );\
 	}\
 	END_DEF
 
@@ -613,12 +649,16 @@ global canvas ref current_canvas_ref = nothing;
 		temp const n2 _bytes_per_row = ( PART_SIZEw ) << pixel_shift;\
 		temp i4 _to_index = ( TLy ) * TO_CANVAS.size.w + ( TLx );\
 		temp i4 _from_index = ( PART_TLy ) * FROM_CANVAS.size.w + ( PART_TLx );\
-		repeat( PART_SIZEh )\
+		temp const i4 _to_step = TO_CANVAS.size.w;\
+		temp const i4 _from_step = FROM_CANVAS.size.w;\
+		temp i2 _y = PART_SIZEh;\
+		do\
 		{\
 			bytes_copy( ref_of( canvas_get_pixel_index( TO_CANVAS, _to_index ) ), ref_of( canvas_get_pixel_index( FROM_CANVAS, _from_index ) ), _bytes_per_row );\
-			_to_index += TO_CANVAS.size.w;\
-			_from_index += FROM_CANVAS.size.w;\
+			_to_index += _to_step;\
+			_from_index += _from_step;\
 		}\
+		while( --_y );\
 	}\
 	END_DEF
 
@@ -626,23 +666,30 @@ global canvas ref current_canvas_ref = nothing;
 	START_DEF\
 	{\
 		temp const i2 _TLx = TLx;\
-		temp const i2 _TLy = TLy;\
 		temp const i2 _to_x = MAX( 0, _TLx );\
+		temp const i2 _offset_x = _to_x - _TLx;\
+		temp const i2 _from_x = PART_TLx + _offset_x;\
+		temp const i2 _W = i2_min3( TO_CANVAS.size.w - _to_x, FROM_CANVAS.size.w - _from_x, PART_SIZEw - _offset_x );\
+		skip_if( _W <= 0 );\
+		temp const i2 _TLy = TLy;\
 		temp const i2 _to_y = MAX( 0, _TLy );\
-		temp const i2 _from_x = PART_TLx + ( _to_x - _TLx );\
-		temp const i2 _from_y = PART_TLy + ( _to_y - _TLy );\
-		temp i2 _bytes_per_row = i2_min3( TO_CANVAS.size.w - _to_x, FROM_CANVAS.size.w - _from_x, PART_SIZEw - ( _to_x - _TLx ) );\
-		temp const i2 _h = i2_min3( TO_CANVAS.size.h - _to_y, FROM_CANVAS.size.h - _from_y, PART_SIZEh - ( _to_y - _TLy ) );\
-		skip_if( _bytes_per_row <= 0 or _h <= 0 );\
-		_bytes_per_row <<= pixel_shift;\
+		temp const i2 _offset_y = _to_y - _TLy;\
+		temp const i2 _from_y = PART_TLy + _offset_y;\
+		temp const i2 _H = i2_min3( TO_CANVAS.size.h - _to_y, FROM_CANVAS.size.h - _from_y, PART_SIZEh - _offset_y );\
+		skip_if( _H <= 0 );\
+		temp const i2 _bytes_per_row = _W << pixel_shift;\
 		temp i4 _to_index = _to_y * TO_CANVAS.size.w + _to_x;\
 		temp i4 _from_index = _from_y * FROM_CANVAS.size.w + _from_x;\
-		repeat( _h )\
+		temp const i4 _to_step = TO_CANVAS.size.w;\
+		temp const i4 _from_step = FROM_CANVAS.size.w;\
+		temp i2 _h = _H;\
+		do\
 		{\
 			bytes_copy( ref_of( canvas_get_pixel_index( TO_CANVAS, _to_index ) ), ref_of( canvas_get_pixel_index( FROM_CANVAS, _from_index ) ), _bytes_per_row );\
-			_to_index += TO_CANVAS.size.w;\
-			_from_index += FROM_CANVAS.size.w;\
+			_to_index += _to_step;\
+			_from_index += _from_step;\
 		}\
+		while( --_h );\
 	}\
 	END_DEF
 
@@ -911,6 +958,199 @@ group( input_type )
 	input_menu,
 	input_count
 };
+
+embed const byte const_ref _input_map()
+{
+	#if OS_LINUX
+		#define XK_COMPRESS( XK ) ( XK & 0x1ff )
+		perm const byte _INPUT_MAP[] =
+			{
+				[ XK_a ] = input_a,
+				[ XK_b ] = input_b,
+				[ XK_c ] = input_c,
+				[ XK_d ] = input_d,
+				[ XK_e ] = input_e,
+				[ XK_f ] = input_f,
+				[ XK_g ] = input_g,
+				[ XK_h ] = input_h,
+				[ XK_i ] = input_i,
+				[ XK_j ] = input_j,
+				[ XK_k ] = input_k,
+				[ XK_l ] = input_l,
+				[ XK_m ] = input_m,
+				[ XK_n ] = input_n,
+				[ XK_o ] = input_o,
+				[ XK_p ] = input_p,
+				[ XK_q ] = input_q,
+				[ XK_r ] = input_r,
+				[ XK_s ] = input_s,
+				[ XK_t ] = input_t,
+				[ XK_u ] = input_u,
+				[ XK_v ] = input_v,
+				[ XK_w ] = input_w,
+				[ XK_x ] = input_x,
+				[ XK_y ] = input_y,
+				[ XK_z ] = input_z,
+
+				[ XK_0 ] = input_0,
+				[ XK_1 ] = input_1,
+				[ XK_2 ] = input_2,
+				[ XK_3 ] = input_3,
+				[ XK_4 ] = input_4,
+				[ XK_5 ] = input_5,
+				[ XK_6 ] = input_6,
+				[ XK_7 ] = input_7,
+				[ XK_8 ] = input_8,
+				[ XK_9 ] = input_9,
+
+				[ XK_space ] = input_space,
+				[ XK_grave ] = input_backtick,
+				[ XK_minus ] = input_minus,
+				[ XK_equal ] = input_equals,
+				[ XK_bracketleft ] = input_leftbracket,
+				[ XK_bracketright ] = input_rightbracket,
+				[ XK_backslash ] = input_backslash,
+				[ XK_semicolon ] = input_semicolon,
+				[ XK_apostrophe ] = input_apostrophe,
+				[ XK_comma ] = input_comma,
+				[ XK_period ] = input_period,
+				[ XK_slash ] = input_slash,
+
+				[ XK_COMPRESS( XK_F1 ) ] = input_f1,
+				[ XK_COMPRESS( XK_F2 ) ] = input_f2,
+				[ XK_COMPRESS( XK_F3 ) ] = input_f3,
+				[ XK_COMPRESS( XK_F4 ) ] = input_f4,
+				[ XK_COMPRESS( XK_F5 ) ] = input_f5,
+				[ XK_COMPRESS( XK_F6 ) ] = input_f6,
+				[ XK_COMPRESS( XK_F7 ) ] = input_f7,
+				[ XK_COMPRESS( XK_F8 ) ] = input_f8,
+				[ XK_COMPRESS( XK_F9 ) ] = input_f9,
+				[ XK_COMPRESS( XK_F10 ) ] = input_f10,
+				[ XK_COMPRESS( XK_F11 ) ] = input_f11,
+				[ XK_COMPRESS( XK_F12 ) ] = input_f12,
+
+				[ XK_COMPRESS( XK_BackSpace ) ] = input_backspace,
+				[ XK_COMPRESS( XK_Tab ) ] = input_tab,
+				[ XK_COMPRESS( XK_Return ) ] = input_enter,
+				[ XK_COMPRESS( XK_Escape ) ] = input_escape,
+				[ XK_COMPRESS( XK_Delete ) ] = input_delete,
+				[ XK_COMPRESS( XK_Insert ) ] = input_insert,
+
+				[ XK_COMPRESS( XK_Home ) ] = input_home,
+				[ XK_COMPRESS( XK_End ) ] = input_end,
+				[ XK_COMPRESS( XK_Page_Up ) ] = input_pageup,
+				[ XK_COMPRESS( XK_Page_Down ) ] = input_pagedown,
+				[ XK_COMPRESS( XK_Left ) ] = input_left,
+				[ XK_COMPRESS( XK_Up ) ] = input_up,
+				[ XK_COMPRESS( XK_Right ) ] = input_right,
+				[ XK_COMPRESS( XK_Down ) ] = input_down,
+
+				[ XK_COMPRESS( XK_Shift_L ) ] = input_shift,
+				[ XK_COMPRESS( XK_Shift_R ) ] = input_shift,
+				[ XK_COMPRESS( XK_Control_L ) ] = input_ctrl,
+				[ XK_COMPRESS( XK_Control_R ) ] = input_ctrl,
+				[ XK_COMPRESS( XK_Caps_Lock ) ] = input_capslock,
+				[ XK_COMPRESS( XK_Alt_L ) ] = input_alt,
+				[ XK_COMPRESS( XK_Alt_R ) ] = input_alt,
+				[ XK_COMPRESS( XK_Super_L ) ] = input_super,
+				[ XK_COMPRESS( XK_Super_R ) ] = input_super,
+				[ XK_COMPRESS( XK_Menu ) ] = input_menu,
+			};
+	#elif OS_WINDOWS
+		perm const byte _INPUT_MAP[] =
+			{
+				[ 'A' ] = input_a,
+				[ 'B' ] = input_b,
+				[ 'C' ] = input_c,
+				[ 'D' ] = input_d,
+				[ 'E' ] = input_e,
+				[ 'F' ] = input_f,
+				[ 'G' ] = input_g,
+				[ 'H' ] = input_h,
+				[ 'I' ] = input_i,
+				[ 'J' ] = input_j,
+				[ 'K' ] = input_k,
+				[ 'L' ] = input_l,
+				[ 'M' ] = input_m,
+				[ 'N' ] = input_n,
+				[ 'O' ] = input_o,
+				[ 'P' ] = input_p,
+				[ 'Q' ] = input_q,
+				[ 'R' ] = input_r,
+				[ 'S' ] = input_s,
+				[ 'T' ] = input_t,
+				[ 'U' ] = input_u,
+				[ 'V' ] = input_v,
+				[ 'W' ] = input_w,
+				[ 'X' ] = input_x,
+				[ 'Y' ] = input_y,
+				[ 'Z' ] = input_z,
+
+				[ '0' ] = input_0,
+				[ '1' ] = input_1,
+				[ '2' ] = input_2,
+				[ '3' ] = input_3,
+				[ '4' ] = input_4,
+				[ '5' ] = input_5,
+				[ '6' ] = input_6,
+				[ '7' ] = input_7,
+				[ '8' ] = input_8,
+				[ '9' ] = input_9,
+
+				[ VK_F1 ] = input_f1,
+				[ VK_F2 ] = input_f2,
+				[ VK_F3 ] = input_f3,
+				[ VK_F4 ] = input_f4,
+				[ VK_F5 ] = input_f5,
+				[ VK_F6 ] = input_f6,
+				[ VK_F7 ] = input_f7,
+				[ VK_F8 ] = input_f8,
+				[ VK_F9 ] = input_f9,
+				[ VK_F10 ] = input_f10,
+				[ VK_F11 ] = input_f11,
+				[ VK_F12 ] = input_f12,
+
+				[ VK_SPACE ] = input_space,
+				[ VK_ESCAPE ] = input_escape,
+				[ VK_TAB ] = input_tab,
+				[ VK_CAPITAL ] = input_capslock,
+				[ VK_SHIFT ] = input_shift,
+				[ VK_CONTROL ] = input_ctrl,
+				[ VK_MENU ] = input_alt,
+				[ VK_RETURN ] = input_enter,
+				[ VK_BACK ] = input_backspace,
+				[ VK_INSERT ] = input_insert,
+				[ VK_DELETE ] = input_delete,
+				[ VK_HOME ] = input_home,
+				[ VK_END ] = input_end,
+				[ VK_PRIOR ] = input_pageup,
+				[ VK_NEXT ] = input_pagedown,
+
+				[ VK_UP ] = input_up,
+				[ VK_DOWN ] = input_down,
+				[ VK_LEFT ] = input_left,
+				[ VK_RIGHT ] = input_right,
+
+				[ VK_OEM_3 ] = input_backtick,
+				[ VK_OEM_MINUS ] = input_minus,
+				[ VK_OEM_PLUS ] = input_equals,
+				[ VK_OEM_4 ] = input_leftbracket,
+				[ VK_OEM_6 ] = input_rightbracket,
+				[ VK_OEM_5 ] = input_backslash,
+				[ VK_OEM_1 ] = input_semicolon,
+				[ VK_OEM_7 ] = input_apostrophe,
+				[ VK_OEM_COMMA ] = input_comma,
+				[ VK_OEM_PERIOD ] = input_period,
+				[ VK_OEM_2 ] = input_slash,
+
+				[ VK_LWIN ] = input_super,
+				[ VK_RWIN ] = input_super,
+				[ VK_APPS ] = input_menu,
+			};
+	#endif
+
+	out to( const byte const_ref, ref_of( _INPUT_MAP ) );
+}
 
 ////////////////////////////////
 /// window
@@ -1315,45 +1555,6 @@ object_fn( window, refresh )
 	#endif
 }
 
-object_fn( window, process )
-{
-	current_window = this;
-	current_canvas_ref = ref_of( this->buffer );
-
-	if( this->tick is 0 )
-	{
-		this->start_nano = get_nano();
-		this->past_nano = this->start_nano;
-		call( this, start_fn );
-		_window_resize( this );
-	}
-	else if( this->tick is 1 )
-	{
-		this->refresh = yes;
-		window_show( this );
-		window_center( this );
-	}
-
-	os_event e;
-	#if OS_LINUX
-		while( XPending( this->display ) )
-		{
-			XNextEvent( this->display, ref_of( e ) );
-			window_process_event( this, e.type, ref_of( e ) );
-		}
-	#elif OS_WINDOWS
-		while( PeekMessage( ref_of( e ), 0, 0, 0, PM_REMOVE ) )
-		{
-			TranslateMessage( ref_of( e ) );
-			DispatchMessage( ref_of( e ) );
-		}
-	#endif
-
-	out_if( this->close is yes );
-
-	_window_update( this );
-}
-
 ////////////////////////////////
 /// window events
 
@@ -1597,6 +1798,45 @@ group( window_event_type, n2 )
 	#endif
 }
 
+object_fn( window, process )
+{
+	current_window = this;
+	current_canvas_ref = ref_of( this->buffer );
+
+	if( this->tick is 0 )
+	{
+		this->start_nano = get_nano();
+		this->past_nano = this->start_nano;
+		call( this, start_fn );
+		_window_resize( this );
+	}
+	else if( this->tick is 1 )
+	{
+		this->refresh = yes;
+		window_show( this );
+		window_center( this );
+	}
+
+	os_event e;
+	#if OS_LINUX
+		while( XPending( this->display ) )
+		{
+			XNextEvent( this->display, ref_of( e ) );
+			window_process_event( this, e.type, ref_of( e ) );
+		}
+	#elif OS_WINDOWS
+		while( PeekMessage( ref_of( e ), 0, 0, 0, PM_REMOVE ) )
+		{
+			TranslateMessage( ref_of( e ) );
+			DispatchMessage( ref_of( e ) );
+		}
+	#endif
+
+	out_if( this->close is yes );
+
+	_window_update( this );
+}
+
 ////////
 // new window
 
@@ -1657,202 +1897,9 @@ new_object_fn( window, const n2 width, const n2 height )
 ////////////////////////////////
 /// Heptane system functions
 
-embed const byte const_ref _C7H16_input_map()
-{
-	#if OS_LINUX
-		#define XK_COMPRESS( XK ) ( XK & 0x1ff )
-		perm const byte _INPUT_MAP[] =
-			{
-				[ XK_a ] = input_a,
-				[ XK_b ] = input_b,
-				[ XK_c ] = input_c,
-				[ XK_d ] = input_d,
-				[ XK_e ] = input_e,
-				[ XK_f ] = input_f,
-				[ XK_g ] = input_g,
-				[ XK_h ] = input_h,
-				[ XK_i ] = input_i,
-				[ XK_j ] = input_j,
-				[ XK_k ] = input_k,
-				[ XK_l ] = input_l,
-				[ XK_m ] = input_m,
-				[ XK_n ] = input_n,
-				[ XK_o ] = input_o,
-				[ XK_p ] = input_p,
-				[ XK_q ] = input_q,
-				[ XK_r ] = input_r,
-				[ XK_s ] = input_s,
-				[ XK_t ] = input_t,
-				[ XK_u ] = input_u,
-				[ XK_v ] = input_v,
-				[ XK_w ] = input_w,
-				[ XK_x ] = input_x,
-				[ XK_y ] = input_y,
-				[ XK_z ] = input_z,
-
-				[ XK_0 ] = input_0,
-				[ XK_1 ] = input_1,
-				[ XK_2 ] = input_2,
-				[ XK_3 ] = input_3,
-				[ XK_4 ] = input_4,
-				[ XK_5 ] = input_5,
-				[ XK_6 ] = input_6,
-				[ XK_7 ] = input_7,
-				[ XK_8 ] = input_8,
-				[ XK_9 ] = input_9,
-
-				[ XK_space ] = input_space,
-				[ XK_grave ] = input_backtick,
-				[ XK_minus ] = input_minus,
-				[ XK_equal ] = input_equals,
-				[ XK_bracketleft ] = input_leftbracket,
-				[ XK_bracketright ] = input_rightbracket,
-				[ XK_backslash ] = input_backslash,
-				[ XK_semicolon ] = input_semicolon,
-				[ XK_apostrophe ] = input_apostrophe,
-				[ XK_comma ] = input_comma,
-				[ XK_period ] = input_period,
-				[ XK_slash ] = input_slash,
-
-				[ XK_COMPRESS( XK_F1 ) ] = input_f1,
-				[ XK_COMPRESS( XK_F2 ) ] = input_f2,
-				[ XK_COMPRESS( XK_F3 ) ] = input_f3,
-				[ XK_COMPRESS( XK_F4 ) ] = input_f4,
-				[ XK_COMPRESS( XK_F5 ) ] = input_f5,
-				[ XK_COMPRESS( XK_F6 ) ] = input_f6,
-				[ XK_COMPRESS( XK_F7 ) ] = input_f7,
-				[ XK_COMPRESS( XK_F8 ) ] = input_f8,
-				[ XK_COMPRESS( XK_F9 ) ] = input_f9,
-				[ XK_COMPRESS( XK_F10 ) ] = input_f10,
-				[ XK_COMPRESS( XK_F11 ) ] = input_f11,
-				[ XK_COMPRESS( XK_F12 ) ] = input_f12,
-
-				[ XK_COMPRESS( XK_BackSpace ) ] = input_backspace,
-				[ XK_COMPRESS( XK_Tab ) ] = input_tab,
-				[ XK_COMPRESS( XK_Return ) ] = input_enter,
-				[ XK_COMPRESS( XK_Escape ) ] = input_escape,
-				[ XK_COMPRESS( XK_Delete ) ] = input_delete,
-				[ XK_COMPRESS( XK_Insert ) ] = input_insert,
-
-				[ XK_COMPRESS( XK_Home ) ] = input_home,
-				[ XK_COMPRESS( XK_End ) ] = input_end,
-				[ XK_COMPRESS( XK_Page_Up ) ] = input_pageup,
-				[ XK_COMPRESS( XK_Page_Down ) ] = input_pagedown,
-				[ XK_COMPRESS( XK_Left ) ] = input_left,
-				[ XK_COMPRESS( XK_Up ) ] = input_up,
-				[ XK_COMPRESS( XK_Right ) ] = input_right,
-				[ XK_COMPRESS( XK_Down ) ] = input_down,
-
-				[ XK_COMPRESS( XK_Shift_L ) ] = input_shift,
-				[ XK_COMPRESS( XK_Shift_R ) ] = input_shift,
-				[ XK_COMPRESS( XK_Control_L ) ] = input_ctrl,
-				[ XK_COMPRESS( XK_Control_R ) ] = input_ctrl,
-				[ XK_COMPRESS( XK_Caps_Lock ) ] = input_capslock,
-				[ XK_COMPRESS( XK_Alt_L ) ] = input_alt,
-				[ XK_COMPRESS( XK_Alt_R ) ] = input_alt,
-				[ XK_COMPRESS( XK_Super_L ) ] = input_super,
-				[ XK_COMPRESS( XK_Super_R ) ] = input_super,
-				[ XK_COMPRESS( XK_Menu ) ] = input_menu,
-			};
-	#elif OS_WINDOWS
-		perm const byte _INPUT_MAP[] =
-			{
-				[ 'A' ] = input_a,
-				[ 'B' ] = input_b,
-				[ 'C' ] = input_c,
-				[ 'D' ] = input_d,
-				[ 'E' ] = input_e,
-				[ 'F' ] = input_f,
-				[ 'G' ] = input_g,
-				[ 'H' ] = input_h,
-				[ 'I' ] = input_i,
-				[ 'J' ] = input_j,
-				[ 'K' ] = input_k,
-				[ 'L' ] = input_l,
-				[ 'M' ] = input_m,
-				[ 'N' ] = input_n,
-				[ 'O' ] = input_o,
-				[ 'P' ] = input_p,
-				[ 'Q' ] = input_q,
-				[ 'R' ] = input_r,
-				[ 'S' ] = input_s,
-				[ 'T' ] = input_t,
-				[ 'U' ] = input_u,
-				[ 'V' ] = input_v,
-				[ 'W' ] = input_w,
-				[ 'X' ] = input_x,
-				[ 'Y' ] = input_y,
-				[ 'Z' ] = input_z,
-
-				[ '0' ] = input_0,
-				[ '1' ] = input_1,
-				[ '2' ] = input_2,
-				[ '3' ] = input_3,
-				[ '4' ] = input_4,
-				[ '5' ] = input_5,
-				[ '6' ] = input_6,
-				[ '7' ] = input_7,
-				[ '8' ] = input_8,
-				[ '9' ] = input_9,
-
-				[ VK_F1 ] = input_f1,
-				[ VK_F2 ] = input_f2,
-				[ VK_F3 ] = input_f3,
-				[ VK_F4 ] = input_f4,
-				[ VK_F5 ] = input_f5,
-				[ VK_F6 ] = input_f6,
-				[ VK_F7 ] = input_f7,
-				[ VK_F8 ] = input_f8,
-				[ VK_F9 ] = input_f9,
-				[ VK_F10 ] = input_f10,
-				[ VK_F11 ] = input_f11,
-				[ VK_F12 ] = input_f12,
-
-				[ VK_SPACE ] = input_space,
-				[ VK_ESCAPE ] = input_escape,
-				[ VK_TAB ] = input_tab,
-				[ VK_CAPITAL ] = input_capslock,
-				[ VK_SHIFT ] = input_shift,
-				[ VK_CONTROL ] = input_ctrl,
-				[ VK_MENU ] = input_alt,
-				[ VK_RETURN ] = input_enter,
-				[ VK_BACK ] = input_backspace,
-				[ VK_INSERT ] = input_insert,
-				[ VK_DELETE ] = input_delete,
-				[ VK_HOME ] = input_home,
-				[ VK_END ] = input_end,
-				[ VK_PRIOR ] = input_pageup,
-				[ VK_NEXT ] = input_pagedown,
-
-				[ VK_UP ] = input_up,
-				[ VK_DOWN ] = input_down,
-				[ VK_LEFT ] = input_left,
-				[ VK_RIGHT ] = input_right,
-
-				[ VK_OEM_3 ] = input_backtick,
-				[ VK_OEM_MINUS ] = input_minus,
-				[ VK_OEM_PLUS ] = input_equals,
-				[ VK_OEM_4 ] = input_leftbracket,
-				[ VK_OEM_6 ] = input_rightbracket,
-				[ VK_OEM_5 ] = input_backslash,
-				[ VK_OEM_1 ] = input_semicolon,
-				[ VK_OEM_7 ] = input_apostrophe,
-				[ VK_OEM_COMMA ] = input_comma,
-				[ VK_OEM_PERIOD ] = input_period,
-				[ VK_OEM_2 ] = input_slash,
-
-				[ VK_LWIN ] = input_super,
-				[ VK_RWIN ] = input_super,
-				[ VK_APPS ] = input_menu,
-			};
-	#endif
-
-	out to( const byte const_ref, ref_of( _INPUT_MAP ) );
-}
-
 fn _C7H16_init()
 {
-	OS_INPUT_MAP = _C7H16_input_map();
+	OS_INPUT_MAP = _input_map();
 }
 
 fn _C7H16_loop()

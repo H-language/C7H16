@@ -1,6 +1,8 @@
+repo
+	H-language/C7H16
+
 libraries
-	H
-	C7H16
+	H-language/H
 
 Linux
 	-lm
