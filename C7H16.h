@@ -530,16 +530,16 @@ global canvas ref current_canvas_ref = nothing;
 	START_DEF\
 	{\
 		temp const n2 _bytes_per_row = FROM_CANVAS.size.w << pixel_shift;\
-		temp i4 _to_index = ( TLx ) + ( ( TLy ) * TO_CANVAS.size.w );\
-		temp i4 _from_index = 0;\
+		temp pixel ref _to_ref = TO_CANVAS.pixels + ( TLx ) + ( ( TLy ) * TO_CANVAS.size.w );\
+		temp const pixel ref _from_ref = FROM_CANVAS.pixels;\
 		temp const i4 _to_step = TO_CANVAS.size.w;\
 		temp const i4 _from_step = FROM_CANVAS.size.w;\
 		temp i2 _h = FROM_CANVAS.size.h;\
 		do\
 		{\
-			bytes_copy( ref_of( canvas_get_pixel_index( TO_CANVAS, _to_index ) ), ref_of( canvas_get_pixel_index( FROM_CANVAS, _from_index ) ), _bytes_per_row );\
-			_to_index += _to_step;\
-			_from_index += _from_step;\
+			bytes_copy( _to_ref, _from_ref, _bytes_per_row );\
+			_to_ref += _to_step;\
+			_from_ref += _from_step;\
 		}\
 		while( --_h );\
 	}\
@@ -558,16 +558,16 @@ global canvas ref current_canvas_ref = nothing;
 		temp const i2 _H = i2_min( TO_CANVAS.size.h, _TLy + FROM_CANVAS.size.h ) - _start_y;\
 		skip_if( _H <= 0 );\
 		temp const i2 _bytes_per_row = _W << pixel_shift;\
-		temp i4 _to_index = _start_y * TO_CANVAS.size.w + _X;\
-		temp i4 _from_index = ( _start_y - _TLy ) * FROM_CANVAS.size.w + _OFFX;\
+		temp pixel ref _to_ref = TO_CANVAS.pixels + _start_y * TO_CANVAS.size.w + _X;\
+		temp const pixel ref _from_ref = FROM_CANVAS.pixels + ( _start_y - _TLy ) * FROM_CANVAS.size.w + _OFFX;\
 		temp const i4 _to_step = TO_CANVAS.size.w;\
 		temp const i4 _from_step = FROM_CANVAS.size.w;\
 		temp i2 _h = _H;\
 		do\
 		{\
-			bytes_copy( ref_of( canvas_get_pixel_index( TO_CANVAS, _to_index ) ), ref_of( canvas_get_pixel_index( FROM_CANVAS, _from_index ) ), _bytes_per_row );\
-			_to_index += _to_step;\
-			_from_index += _from_step;\
+			bytes_copy( _to_ref, _from_ref, _bytes_per_row );\
+			_to_ref += _to_step;\
+			_from_ref += _from_step;\
 		}\
 		while( --_h );\
 	}\
@@ -576,29 +576,25 @@ global canvas ref current_canvas_ref = nothing;
 #define canvas_draw_canvas_trans( TO_CANVAS, FROM_CANVAS, TLx, TLy )\
 	START_DEF\
 	{\
-		temp i4 _to_index = ( TLy ) * TO_CANVAS.size.w + ( TLx );\
-		temp i4 _from_index = 0;\
-		temp const i4 _to_step = TO_CANVAS.size.w;\
-		temp const i4 _from_step = FROM_CANVAS.size.w;\
+		temp pixel ref _to_ref = TO_CANVAS.pixels + ( TLy ) * TO_CANVAS.size.w + ( TLx );\
+		temp const pixel ref _from_ref = FROM_CANVAS.pixels;\
 		temp const i2 _width = FROM_CANVAS.size.w;\
+		temp const i4 _to_step = TO_CANVAS.size.w - _width;\
 		temp i2 _h = FROM_CANVAS.size.h;\
 		do\
 		{\
-			temp pixel ref _to = ref_of( canvas_get_pixel_index( TO_CANVAS, _to_index ) );\
-			temp const pixel ref _from = ref_of( canvas_get_pixel_index( FROM_CANVAS, _from_index ) );\
 			temp i2 _w = _width;\
 			do\
 			{\
-				if( _from->a )\
+				if( _from_ref->a )\
 				{\
-					val_of( _to ) = val_of( _from );\
+					val_of( _to_ref ) = val_of( _from_ref );\
 				}\
-				++_to;\
-				++_from;\
+				++_to_ref;\
+				++_from_ref;\
 			}\
 			while( --_w );\
-			_to_index += _to_step;\
-			_from_index += _from_step;\
+			_to_ref += _to_step;\
 		}\
 		while( --_h );\
 	}\
@@ -616,28 +612,26 @@ global canvas ref current_canvas_ref = nothing;
 		temp const i2 _start_y = MAX( 0, _TLy );\
 		temp const i2 _H = i2_min( TO_CANVAS.size.h, _TLy + FROM_CANVAS.size.h ) - _start_y;\
 		skip_if( _H <= 0 );\
-		temp i4 _to_index = _start_y * TO_CANVAS.size.w + _X;\
-		temp i4 _from_index = ( _start_y - _TLy ) * FROM_CANVAS.size.w + _OFFX;\
-		temp const i4 _to_step = TO_CANVAS.size.w;\
-		temp const i4 _from_step = FROM_CANVAS.size.w;\
+		temp pixel ref _to_ref = TO_CANVAS.pixels + _start_y * TO_CANVAS.size.w + _X;\
+		temp const pixel ref _from_ref = FROM_CANVAS.pixels + ( _start_y - _TLy ) * FROM_CANVAS.size.w + _OFFX;\
+		temp const i4 _to_step = TO_CANVAS.size.w - _W;\
+		temp const i4 _from_step = FROM_CANVAS.size.w - _W;\
 		temp i2 _h = _H;\
 		do\
 		{\
-			temp pixel ref _to = ref_of( canvas_get_pixel_index( TO_CANVAS, _to_index ) );\
-			temp const pixel ref _from = ref_of( canvas_get_pixel_index( FROM_CANVAS, _from_index ) );\
 			temp i2 _w = _W;\
 			do\
 			{\
-				if( _from->a )\
+				if( _from_ref->a )\
 				{\
-					val_of( _to ) = val_of( _from );\
+					val_of( _to_ref ) = val_of( _from_ref );\
 				}\
-				++_to;\
-				++_from;\
+				++_to_ref;\
+				++_from_ref;\
 			}\
 			while( --_w );\
-			_to_index += _to_step;\
-			_from_index += _from_step;\
+			_to_ref += _to_step;\
+			_from_ref += _from_step;\
 		}\
 		while( --_h );\
 	}\
@@ -647,16 +641,16 @@ global canvas ref current_canvas_ref = nothing;
 	START_DEF\
 	{\
 		temp const n2 _bytes_per_row = ( PART_SIZEw ) << pixel_shift;\
-		temp i4 _to_index = ( TLy ) * TO_CANVAS.size.w + ( TLx );\
-		temp i4 _from_index = ( PART_TLy ) * FROM_CANVAS.size.w + ( PART_TLx );\
+		temp pixel ref _to_ref = TO_CANVAS.pixels + ( TLy ) * TO_CANVAS.size.w + ( TLx );\
+		temp const pixel ref _from_ref = FROM_CANVAS.pixels + ( PART_TLy ) * FROM_CANVAS.size.w + ( PART_TLx );\
 		temp const i4 _to_step = TO_CANVAS.size.w;\
 		temp const i4 _from_step = FROM_CANVAS.size.w;\
 		temp i2 _y = PART_SIZEh;\
 		do\
 		{\
-			bytes_copy( ref_of( canvas_get_pixel_index( TO_CANVAS, _to_index ) ), ref_of( canvas_get_pixel_index( FROM_CANVAS, _from_index ) ), _bytes_per_row );\
-			_to_index += _to_step;\
-			_from_index += _from_step;\
+			bytes_copy( _to_ref, _from_ref, _bytes_per_row );\
+			_to_ref += _to_step;\
+			_from_ref += _from_step;\
 		}\
 		while( --_y );\
 	}\
@@ -678,16 +672,16 @@ global canvas ref current_canvas_ref = nothing;
 		temp const i2 _H = i2_min3( TO_CANVAS.size.h - _to_y, FROM_CANVAS.size.h - _from_y, PART_SIZEh - _offset_y );\
 		skip_if( _H <= 0 );\
 		temp const i2 _bytes_per_row = _W << pixel_shift;\
-		temp i4 _to_index = _to_y * TO_CANVAS.size.w + _to_x;\
-		temp i4 _from_index = _from_y * FROM_CANVAS.size.w + _from_x;\
+		temp pixel ref _to_ref = TO_CANVAS.pixels + ( _to_y * TO_CANVAS.size.w ) + _to_x;\
+		temp const pixel ref _from_ref = FROM_CANVAS.pixels + ( _from_y * FROM_CANVAS.size.w ) + _from_x;\
 		temp const i4 _to_step = TO_CANVAS.size.w;\
 		temp const i4 _from_step = FROM_CANVAS.size.w;\
 		temp i2 _h = _H;\
 		do\
 		{\
-			bytes_copy( ref_of( canvas_get_pixel_index( TO_CANVAS, _to_index ) ), ref_of( canvas_get_pixel_index( FROM_CANVAS, _from_index ) ), _bytes_per_row );\
-			_to_index += _to_step;\
-			_from_index += _from_step;\
+			bytes_copy( _to_ref, _from_ref, _bytes_per_row );\
+			_to_ref += _to_step;\
+			_from_ref += _from_step;\
 		}\
 		while( --_h );\
 	}\
@@ -1547,11 +1541,13 @@ object_fn( window, center )
 
 object_fn( window, refresh )
 {
+	this->refresh = yes;
 	#if OS_LINUX
 		XClearArea( this->display, this->handle, 0, 0, 0, 0, yes );
 		XSync( this->display, no );
 	#elif OS_WINDOWS
 		InvalidateRect( this->handle, nothing, no );
+		UpdateWindow( this->handle );
 	#endif
 }
 
