@@ -9,7 +9,6 @@ Linux
 	-lX11
 	-lXrender
 	-lXpresent
-	-lasound
 	-lpthread
 
 Windows
