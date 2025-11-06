@@ -334,7 +334,7 @@ type_from( i4x2 ) d4x2;
 #if IS_BIG_ENDIAN
 	fusion( pixel )
 	{
-		n4 argb;
+		n4 bgra;
 		variant
 		{
 			n1 a;
@@ -346,7 +346,7 @@ type_from( i4x2 ) d4x2;
 #else
 	fusion( pixel )
 	{
-		n4 argb;
+		n4 bgra;
 		variant
 		{
 			n1 b;
@@ -453,7 +453,7 @@ global canvas ref current_canvas_ref = nothing;
 	{\
 		temp const pixel _PIXEL = PIXEL;\
 		temp pixel const_ref _p = ref_of( canvas_get_pixel_index( CANVAS, INDEX ) );\
-		_p->argb = ( ( _p->argb & 0xfefefefe ) >> 1 ) + ( ( ( _PIXEL.argb ) & 0xfefefefe ) >> 1 );\
+		_p->bgra = ( ( _p->bgra & 0xfefefefe ) >> 1 ) + ( ( ( _PIXEL.bgra ) & 0xfefefefe ) >> 1 );\
 	}\
 	END_DEF
 
@@ -1291,7 +1291,7 @@ object_fn( window, set_scale, const r8 scale )
 {
 	out_if_nothing( this );
 
-	this->scale = n2_max( r8_ceil( scale ), 1 );
+	this->scale = n2_max( r8_round( scale ), 1 );
 
 	#if OS_LINUX
 		this->transform.matrix[ 0 ][ 0 ] = XDoubleToFixed( 1.0 / r8( this->scale ) );
