@@ -84,9 +84,9 @@
 	}
 
 #define DECLARE_TYPE_2D_FN( TYPE )\
-	embed TYPE##x2 TYPE##x2_invert( const TYPE##x2 X )\
+	embed TYPE##x2 TYPE##x2_invert( const TYPE##x2 V )\
 	{\
-		out make( TYPE##x2, .x = -X.x, .y = -X.y );\
+		out make( TYPE##x2, .x = -V.x, .y = -V.y );\
 	}\
 	embed TYPE##x2 TYPE##x2_add( const TYPE##x2 A, const TYPE##x2 B )\
 	{\
@@ -124,9 +124,9 @@
 	{\
 		out A.x * B.x + A.y * B.y;\
 	}\
-	embed TYPE TYPE##x2_mag_sqr( const TYPE##x2 A )\
+	embed TYPE TYPE##x2_mag_sqr( const TYPE##x2 V )\
 	{\
-		out TYPE##x2_dot( A, A );\
+		out TYPE##x2_dot( V, V );\
 	}\
 	embed TYPE TYPE##x2_distance_sqr( const TYPE##x2 A, const TYPE##x2 B )\
 	{\
@@ -134,9 +134,9 @@
 	}
 
 #define DECLARE_TYPE_3D_FN( TYPE )\
-	embed TYPE##x3 TYPE##x3_invert( const TYPE##x3 X )\
+	embed TYPE##x3 TYPE##x3_invert( const TYPE##x3 V )\
 	{\
-		out make( TYPE##x3, .x = -X.x, .y = -X.y, .z = -X.z );\
+		out make( TYPE##x3, .x = -V.x, .y = -V.y, .z = -V.z );\
 	}\
 	embed TYPE##x3 TYPE##x3_add( const TYPE##x3 A, const TYPE##x3 B )\
 	{\
@@ -174,9 +174,9 @@
 	{\
 		out A.x * B.x + A.y * B.y + A.z * B.z;\
 	}\
-	embed TYPE TYPE##x3_mag_sqr( const TYPE##x3 A )\
+	embed TYPE TYPE##x3_mag_sqr( const TYPE##x3 V )\
 	{\
-		out TYPE##x3_dot( A, A );\
+		out TYPE##x3_dot( V, V );\
 	}\
 	embed TYPE TYPE##x3_distance_sqr( const TYPE##x3 A, const TYPE##x3 B )\
 	{\
@@ -188,9 +188,9 @@
 	}
 
 #define DECLARE_TYPE_4D_FN( TYPE )\
-	embed TYPE##x4 TYPE##x4_invert( const TYPE##x4 X )\
+	embed TYPE##x4 TYPE##x4_invert( const TYPE##x4 V )\
 	{\
-		out make( TYPE##x4, .x = -X.x, .y = -X.y, .z = -X.z, .w = -X.w );\
+		out make( TYPE##x4, .x = -V.x, .y = -V.y, .z = -V.z, .w = -V.w );\
 	}\
 	embed TYPE##x4 TYPE##x4_add( const TYPE##x4 A, const TYPE##x4 B )\
 	{\
@@ -228,9 +228,9 @@
 	{\
 		out A.x * B.x + A.y * B.y + A.z * B.z + A.w * B.w;\
 	}\
-	embed TYPE TYPE##x4_mag_sqr( const TYPE##x4 A )\
+	embed TYPE TYPE##x4_mag_sqr( const TYPE##x4 V )\
 	{\
-		out TYPE##x4_dot( A, A );\
+		out TYPE##x4_dot( V, V );\
 	}\
 	embed TYPE TYPE##x4_distance_sqr( const TYPE##x4 A, const TYPE##x4 B )\
 	{\
@@ -238,17 +238,24 @@
 	}
 
 #define DECLARE_TYPE_XD_FN_R( N, X )\
-	embed r##N r##N##x##X##_length( const r##N##x##X A )\
+	embed r##N r##N##x##X##_length( const r##N##x##X V )\
 	{\
-		out r##N##_sqrt( r##N##x##X##_mag_sqr( A ) );\
+		out r##N##_sqrt( r##N##x##X##_mag_sqr( V ) );\
 	}\
 	embed r##N r##N##x##X##_distance( const r##N##x##X A, const r##N##x##X B )\
 	{\
 		out r##N##_sqrt( r##N##x##X##_distance_sqr( A, B ) );\
 	}\
-	embed r##N##x##X r##N##x##X##_norm( const r##N##x##X A )\
+	embed r##N##x##X r##N##x##X##_norm( const r##N##x##X V )\
 	{\
-		out r##N##x##X##_mul_##r##N( A, 1.0 / r##N##x##X##_length( A ) );\
+		out r##N##x##X##_mul_##r##N( V, 1.0 / r##N##x##X##_length( V ) );\
+	}\
+	embed r##N##x##X r##N##x##X##_rotate( const r##N##x##X V, const r##N R )\
+	{\
+		r##N cos_angle = 0;\
+		r##N sin_angle = 0;\
+		r##N##_sincos( R, ref_of( sin_angle ), ref_of( cos_angle ) );\
+		out r##N##x##X( V.x * cos_angle - V.y * sin_angle, V.x * sin_angle + V.y * cos_angle );\
 	}
 
 #define DECLARE_TYPE_MULTI( TYPE )\
@@ -287,14 +294,17 @@ DECLARE_TYPE_MULTI( i2 );
 DECLARE_TYPE_MULTI( n4 );
 DECLARE_TYPE_MULTI( i4 );
 DECLARE_TYPE_MULTI( r4 );
-DECLARE_TYPE_MULTI_R( 4 );
 #define r4x2( X_Y... ) _x2( r4, X_Y )
 #define r4x3( X_Y_Z... ) _x3( r4, X_Y_Z )
 #define r4x4( X_Y_Z_W... ) _x4( r4, X_Y_Z_W )
+DECLARE_TYPE_MULTI_R( 4 );
 
 DECLARE_TYPE_MULTI( n8 );
 DECLARE_TYPE_MULTI( i8 );
 DECLARE_TYPE_MULTI( r8 );
+#define r8x2( X_Y... ) _x2( r8, X_Y )
+#define r8x3( X_Y_Z... ) _x3( r8, X_Y_Z )
+#define r8x4( X_Y_Z_W... ) _x4( r8, X_Y_Z_W )
 DECLARE_TYPE_MULTI_R( 8 );
 
 #define x2_area( x2 ) ( x2.w * x2.h )
@@ -539,9 +549,9 @@ global canvas ref current_canvas_ref = nothing;
 #define canvas_draw_pixel_index( CANVAS, INDEX, PIXEL, BLEND... ) _canvas_draw_pixel_index_##BLEND( CANVAS, INDEX, PIXEL )
 #define canvas_draw_pixel_row( CANVAS, X, ROW, PIXEL, BLEND... ) canvas_draw_pixel_index( CANVAS, i4( X ) + i4( ROW ), PIXEL, BLEND )
 #define canvas_draw_pixel( CANVAS, X, Y, PIXEL, BLEND... ) canvas_draw_pixel_row( CANVAS, i4( X ), i4( Y ) * i4( CANVAS.size.w ), PIXEL, BLEND )
-#define canvas_draw_pixel_safe( CANVAS, X, Y, PIXEL, BLEND... ) if( canvas_pixel_safe( CANVAS, _X, _Y ) ) canvas_draw_pixel( CANVAS, X, Y, PIXEL, BLEND )
-#define canvas_draw_pixel_trans( CANVAS, X, Y, PIXEL, BLEND... ) if( canvas_pixel_safe( CANVAS, _X, _Y ) ) canvas_draw_pixel( CANVAS, X, Y, PIXEL, BLEND )
-#define canvas_draw_pixel_trans_safe( CANVAS, X, Y, PIXEL, BLEND... ) if( canvas_pixel_safe( CANVAS, _X, _Y ) ) canvas_draw_pixel( CANVAS, X, Y, PIXEL, BLEND )
+#define canvas_draw_pixel_safe( CANVAS, X, Y, PIXEL, BLEND... ) if( canvas_pixel_safe( CANVAS, X, Y ) ) canvas_draw_pixel( CANVAS, X, Y, PIXEL, BLEND )
+#define canvas_draw_pixel_trans( CANVAS, X, Y, PIXEL, BLEND... ) if( canvas_pixel_safe( CANVAS, X, Y ) ) canvas_draw_pixel( CANVAS, X, Y, PIXEL, BLEND )
+#define canvas_draw_pixel_trans_safe( CANVAS, X, Y, PIXEL, BLEND... ) if( canvas_pixel_safe( CANVAS, X, Y ) ) canvas_draw_pixel( CANVAS, X, Y, PIXEL, BLEND )
 
 ////////
 // canvas to canvas
@@ -1324,7 +1334,7 @@ object_fn( window, update_scale )
 {
 	if( this->buffer_max.w > 0 or this->buffer_max.h > 0 )
 	{
-		window_set_scale( this, r8_max( 1.0, r8_min (r8( this->size_target.w ) / r8( this->buffer_max.w ), r8( this->size_target.h ) / r8( this->buffer_max.h ) ) ) );
+		window_set_scale( this, r8_max( 1.0, r8_min ( r8( this->size_target.w ) / r8( this->buffer_max.w ), r8( this->size_target.h ) / r8( this->buffer_max.h ) ) ) );
 	}
 }
 
@@ -1448,8 +1458,8 @@ fn _window_update( const window this )
 
 	this->mouse_delta_x -= this->mouse_x;
 	this->mouse_delta_y -= this->mouse_y;
-	this->mouse_pixel_x = r4( this->mouse_x - offset_x ) / r4( this->scale );//d4_div( i4_to_d4( this->mouse_x - offset_x ), i4_to_d4( this->scale ) );
-	this->mouse_pixel_y = r4( this->mouse_y - offset_y ) / r4( this->scale );//d4_div( i4_to_d4( this->mouse_y - offset_y ), i4_to_d4( this->scale ) );
+	this->mouse_pixel_x = r4( this->mouse_x - offset_x ) / r4( this->scale ); //d4_div( i4_to_d4( this->mouse_x - offset_x ), i4_to_d4( this->scale ) );
+	this->mouse_pixel_y = r4( this->mouse_y - offset_y ) / r4( this->scale ); //d4_div( i4_to_d4( this->mouse_y - offset_y ), i4_to_d4( this->scale ) );
 
 	call( this, tick_fn );
 
