@@ -238,7 +238,7 @@
 	}
 
 #define DECLARE_TYPE_XD_FN_R( N, X )\
-	embed r##N r##N##x##X##_mag( const r##N##x##X A )\
+	embed r##N r##N##x##X##_length( const r##N##x##X A )\
 	{\
 		out r##N##_sqrt( r##N##x##X##_mag_sqr( A ) );\
 	}\
@@ -248,7 +248,7 @@
 	}\
 	embed r##N##x##X r##N##x##X##_norm( const r##N##x##X A )\
 	{\
-		out r##N##x##X##_mul_##r##N( A, 1.0 / r##N##x##X##_mag( A ) );\
+		out r##N##x##X##_mul_##r##N( A, 1.0 / r##N##x##X##_length( A ) );\
 	}
 
 #define DECLARE_TYPE_MULTI( TYPE )\
@@ -264,14 +264,34 @@
 	DECLARE_TYPE_XD_FN_R( N, 3 );\
 	DECLARE_TYPE_XD_FN_R( N, 4 )
 
+#define _x2( TYPE, X_Y... ) make( TYPE##x2, DEFAULTS( ( 0, 0 ), X_Y ) )
+#define _x3( TYPE, X_Y_Z... ) make( TYPE##x3, DEFAULTS( ( 0, 0, 0 ), X_Y_Z ) )
+#define _x4( TYPE, X_Y_Z_W... ) make( TYPE##x4, DEFAULTS( ( 0, 0, 0, 0 ), X_Y_Z_W ) )
+
 DECLARE_TYPE_MULTI( n1 );
+#define n1x2( X_Y... ) _x2( n1, X_Y )
+#define n1x3( X_Y_Z... ) _x3( n1, X_Y_Z )
+#define n1x4( X_Y_Z_W... ) _x4( n1, X_Y_Z_W )
+
 DECLARE_TYPE_MULTI( i1 );
+#define i1x2( X_Y... ) _x2( i1, X_Y )
+#define i1x3( X_Y_Z... ) _x3( i1, X_Y_Z )
+#define i1x4( X_Y_Z_W... ) _x4( i1, X_Y_Z_W )
+
 DECLARE_TYPE_MULTI( n2 );
+#define n2x2( X_Y... ) _x2( n2, X_Y )
+#define n2x3( X_Y_Z... ) _x3( n2, X_Y_Z )
+#define n2x4( X_Y_Z_W... ) _x4( n2, X_Y_Z_W )
+
 DECLARE_TYPE_MULTI( i2 );
 DECLARE_TYPE_MULTI( n4 );
 DECLARE_TYPE_MULTI( i4 );
 DECLARE_TYPE_MULTI( r4 );
 DECLARE_TYPE_MULTI_R( 4 );
+#define r4x2( X_Y... ) _x2( r4, X_Y )
+#define r4x3( X_Y_Z... ) _x3( r4, X_Y_Z )
+#define r4x4( X_Y_Z_W... ) _x4( r4, X_Y_Z_W )
+
 DECLARE_TYPE_MULTI( n8 );
 DECLARE_TYPE_MULTI( i8 );
 DECLARE_TYPE_MULTI( r8 );
@@ -361,19 +381,19 @@ type_from( i4x2 ) d4x2;
 #define pixel_shift 2
 
 // construction is RGBA though, for consistency
-#define pixel( R, G, B, A ) ( ( pixel ) { .r = ( R ), .g = ( G ), .b = ( B ), .a = ( A ) } )
+#define pixel( R, G, B, A... ) ( ( pixel ) { .r = ( R ), .g = ( G ), .b = ( B ), .a = DEFAULT( 0xff, A ) } )
 
-global pixel pixel_black = pixel( 0x00, 0x00, 0x00, 0xff );
-global pixel pixel_dark_gray = pixel( 0x3f, 0x3f, 0x3f, 0xff );
-global pixel pixel_gray = pixel( 0x7f, 0x7f, 0x7f, 0xff );
-global pixel pixel_light_gray = pixel( 0xbf, 0xbf, 0xbf, 0xff );
-global pixel pixel_white = pixel( 0xff, 0xff, 0xff, 0xff );
-global pixel pixel_red = pixel( 0xff, 0x00, 0x00, 0xff );
-global pixel pixel_yellow = pixel( 0xff, 0xff, 0x00, 0xff );
-global pixel pixel_green = pixel( 0x00, 0xff, 0x00, 0xff );
-global pixel pixel_cyan = pixel( 0x00, 0xff, 0xff, 0xff );
-global pixel pixel_blue = pixel( 0x00, 0x00, 0xff, 0xff );
-global pixel pixel_magenta = pixel( 0xff, 0x00, 0xff, 0xff );
+global pixel pixel_black = pixel( 0x00, 0x00, 0x00 );
+global pixel pixel_dark_gray = pixel( 0x3f, 0x3f, 0x3f );
+global pixel pixel_gray = pixel( 0x7f, 0x7f, 0x7f );
+global pixel pixel_light_gray = pixel( 0xbf, 0xbf, 0xbf );
+global pixel pixel_white = pixel( 0xff, 0xff, 0xff );
+global pixel pixel_red = pixel( 0xff, 0x00, 0x00 );
+global pixel pixel_yellow = pixel( 0xff, 0xff, 0x00 );
+global pixel pixel_green = pixel( 0x00, 0xff, 0x00 );
+global pixel pixel_cyan = pixel( 0x00, 0xff, 0xff );
+global pixel pixel_blue = pixel( 0x00, 0x00, 0xff );
+global pixel pixel_magenta = pixel( 0xff, 0x00, 0xff );
 
 ////////////////////////////////
 /// canvas
@@ -388,7 +408,7 @@ global canvas ref current_canvas_ref = nothing;
 
 #define index_2d( X, Y, WIDTH ) ( ( X ) + ( ( Y ) * ( WIDTH ) ) )
 
-#define canvas( W, H ) make( canvas, .pixels = to( pixel ref, new_ref( pixel, ( W ) * ( H ) ) ), .size = make( n2x2, ( W ), ( H ) ) )
+#define new_canvas( W, H ) make( canvas, .pixels = to( pixel ref, new_ref( pixel, ( W ) * ( H ) ) ), .size = make( n2x2, ( W ), ( H ) ) )
 
 #define canvas_resize( CANVAS, WIDTH, HEIGHT )\
 	START_DEF\
@@ -1190,6 +1210,7 @@ object( window )
 	r8 fps_target;
 	r8 total_time;
 	r8 delta_time;
+
 	byte inputs[ INPUTS_MAX ];
 	byte inputs_pressed[ 32 ];
 	n1 inputs_pressed_count;
@@ -1199,8 +1220,8 @@ object( window )
 	i4 mouse_y;
 	i2 mouse_delta_x;
 	i2 mouse_delta_y;
-	d4 mouse_pixel_x;
-	d4 mouse_pixel_y;
+	r4 mouse_pixel_x;
+	r4 mouse_pixel_y;
 };
 
 global window current_window;
@@ -1291,7 +1312,7 @@ object_fn( window, set_scale, const r8 scale )
 {
 	out_if_nothing( this );
 
-	this->scale = n2_max( r8_round( scale ), 1 );
+	this->scale = n2_max( r8_floor( scale ), 1 );
 
 	#if OS_LINUX
 		this->transform.matrix[ 0 ][ 0 ] = XDoubleToFixed( 1.0 / r8( this->scale ) );
@@ -1303,7 +1324,7 @@ object_fn( window, update_scale )
 {
 	if( this->buffer_max.w > 0 or this->buffer_max.h > 0 )
 	{
-		window_set_scale( this, r8_max3( 1.0, r8( this->size_target.w ) / r8( this->buffer_max.w ), r8( this->size_target.h ) / r8( this->buffer_max.h ) ) );
+		window_set_scale( this, r8_max( 1.0, r8_min (r8( this->size_target.w ) / r8( this->buffer_max.w ), r8( this->size_target.h ) / r8( this->buffer_max.h ) ) ) );
 	}
 }
 
@@ -1320,8 +1341,8 @@ fn _window_resize( const window this )
 {
 	out_if_any( this is nothing, this->size_target.w <= 1, this->size_target.h <= 1 );
 
-	temp n2 buffer_w = ( this->size_target.w + this->scale - 1 ) / this->scale;
-	temp n2 buffer_h = ( this->size_target.h + this->scale - 1 ) / this->scale;
+	temp n2 buffer_w = 200; //( this->size_target.w + this->scale - 1 ) / this->scale;
+	temp n2 buffer_h = 200; //( this->size_target.h + this->scale - 1 ) / this->scale;
 
 	if( this->buffer.size.w isnt buffer_w or this->buffer.size.h isnt buffer_h ) canvas_resize( this->buffer, buffer_w, buffer_h );
 
@@ -1398,6 +1419,17 @@ fn _window_update( const window this )
 	this->past_nano = now;
 	++this->tick;
 
+	temp const n2 scaled_width = this->buffer.size.w * this->scale;
+	temp const n2 scaled_height = this->buffer.size.h * this->scale;
+
+	temp const i4 overflow_w = i4( this->size_target.w ) - i4( scaled_width );
+	temp const i4 overflow_h = i4( this->size_target.h ) - i4( scaled_height );
+
+	temp i4 offset_x;
+	temp i4 offset_y;
+
+	get_anchor_offsets( offset_x, offset_y, overflow_w, overflow_h, this->buffer_anchor );
+
 	this->mouse_delta_x = this->mouse_x;
 	this->mouse_delta_y = this->mouse_y;
 
@@ -1416,20 +1448,8 @@ fn _window_update( const window this )
 
 	this->mouse_delta_x -= this->mouse_x;
 	this->mouse_delta_y -= this->mouse_y;
-
-	temp const n2 scaled_width = this->buffer.size.w * this->scale;
-	temp const n2 scaled_height = this->buffer.size.h * this->scale;
-
-	temp const i4 overflow_w = i4( this->size_target.w ) - i4( scaled_width );
-	temp const i4 overflow_h = i4( this->size_target.h ) - i4( scaled_height );
-
-	temp i4 offset_x;
-	temp i4 offset_y;
-
-	get_anchor_offsets( offset_x, offset_y, overflow_w, overflow_h, this->buffer_anchor );
-
-	this->mouse_pixel_x = d4_div( i4_to_d4( this->mouse_x - offset_x ), i4_to_d4( this->scale ) );
-	this->mouse_pixel_y = d4_div( i4_to_d4( this->mouse_y - offset_y ), i4_to_d4( this->scale ) );
+	this->mouse_pixel_x = r4( this->mouse_x - offset_x ) / r4( this->scale );//d4_div( i4_to_d4( this->mouse_x - offset_x ), i4_to_d4( this->scale ) );
+	this->mouse_pixel_y = r4( this->mouse_y - offset_y ) / r4( this->scale );//d4_div( i4_to_d4( this->mouse_y - offset_y ), i4_to_d4( this->scale ) );
 
 	call( this, tick_fn );
 
@@ -1451,6 +1471,20 @@ fn _window_update( const window this )
 			}
 			XSync( this->display, no );
 		#elif OS_WINDOWS
+			RECT rect;
+			GetClientRect( this->handle, & rect );
+
+			HRGN region = CreateRectRgn( 0, 0, rect.right, rect.bottom );
+			HRGN bitmapRegion = CreateRectRgn( offset_x, offset_y, offset_x + scaled_width, offset_y + scaled_height );
+			CombineRgn( region, region, bitmapRegion, RGN_DIFF );
+			SelectClipRgn( this->display, region );
+
+			FillRect( this->display, & rect, ( HBRUSH ) GetStockObject( BLACK_BRUSH ) );
+
+			SelectClipRgn( this->display, NULL );
+			DeleteObject( region );
+			DeleteObject( bitmapRegion );
+
 			if( this->scale > 1 )
 			{
 				SetStretchBltMode( this->display, COLORONCOLOR );
@@ -1547,7 +1581,7 @@ object_fn( window, refresh )
 		XSync( this->display, no );
 	#elif OS_WINDOWS
 		InvalidateRect( this->handle, nothing, no );
-		UpdateWindow( this->handle );
+		//UpdateWindow( this->handle );
 	#endif
 }
 
@@ -1690,17 +1724,6 @@ group( window_event_type, n2 )
 			skip;
 		}
 
-		when( window_event_close )
-		{
-			#if OS_WINDOWS
-				PostQuitMessage( 0 );
-			#endif
-
-			--alive_windows_count;
-
-			out success;
-		}
-
 		#if OS_LINUX
 			when( ButtonPress )
 			{
@@ -1780,6 +1803,17 @@ group( window_event_type, n2 )
 			}
 		#endif
 
+		when( window_event_close )
+		{
+			#if OS_WINDOWS
+				PostQuitMessage( 0 );
+			#endif
+
+			--alive_windows_count;
+
+			out success;
+		}
+
 		other skip;
 	}
 	if( is_input is yes )
@@ -1843,7 +1877,7 @@ new_object_fn( window, const n2 width, const n2 height )
 	out_window->scale = 1;
 	out_window->size_target.w = width;
 	out_window->size_target.h = height;
-	out_window->buffer = canvas( width, height );
+	out_window->buffer = new_canvas( width, height );
 	out_window->buffer_anchor = anchor_middle_center;
 
 	byte ref name = "test";
@@ -1895,7 +1929,9 @@ new_object_fn( window, const n2 width, const n2 height )
 
 fn _C7H16_init()
 {
-	OS_INPUT_MAP = _input_map();
+	#ifndef C7H16_NO_INPUT
+		OS_INPUT_MAP = _input_map();
+	#endif
 }
 
 fn _C7H16_loop()
