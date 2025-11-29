@@ -253,8 +253,7 @@
 	{\
 		r##N cos_angle = 0;\
 		r##N sin_angle = 0;\
-		r##N##_sincos( R, ref_of( sin_angle ), ref_of( cos_angle ) );\
-		out r##N##x##X( V.x * cos_angle - V.y * sin_angle, V.x * sin_angle + V.y * cos_angle );\
+		/*r##N##_sincos( R, ref_of( sin_angle ), ref_of( cos_angle ) );*/ out r##N##x##X( V.x * cos_angle - V.y * sin_angle, V.x * sin_angle + V.y * cos_angle );\
 	}
 
 #define DECLARE_TYPE_MULTI( TYPE )\
@@ -796,44 +795,6 @@ global byte const _INPUT_MAP[] =
 	is_input = yes
 
 ////////////////////////////////
-/// display
-
-embed n2 const display_get_width()
-{
-	#if OS_LINUX
-		out n2( DisplayWidth( windows_display, DefaultScreen( windows_display ) ) );
-	#elif OS_WINDOWS
-		out n2( GetSystemMetrics( SM_CXSCREEN ) );
-	#endif
-}
-
-embed n2 const display_get_height()
-{
-	#if OS_LINUX
-		out n2( DisplayHeight( windows_display, DefaultScreen( windows_display ) ) );
-	#elif OS_WINDOWS
-		out n2( GetSystemMetrics( SM_CYSCREEN ) );
-	#endif
-}
-
-fn display_get_mouse_position( i4 ref const out_x, i4 ref const out_y )
-{
-	#if OS_LINUX
-		Window root,
-		child;
-		i4 win_x,
-		win_y;
-		n4 mask;
-		XQueryPointer( windows_display, DefaultRootWindow( windows_display ), ref_of( root ), ref_of( child ), out_x, out_y, ref_of( win_x ), ref_of( win_y ), ref_of( mask ) );
-	#elif OS_WINDOWS
-		POINT cursor;
-		GetCursorPos( ref_of( cursor ) );
-		val_of( out_x ) = cursor.x;
-		val_of( out_y ) = cursor.y;
-	#endif
-}
-
-////////////////////////////////
 /// windows
 
 ////////
@@ -980,6 +941,44 @@ global n8 windows_time_tick = 0;
 #endif
 
 ////////
+// display
+
+embed n2 const display_get_width()
+{
+	#if OS_LINUX
+		out n2( DisplayWidth( windows_display, DefaultScreen( windows_display ) ) );
+	#elif OS_WINDOWS
+		out n2( GetSystemMetrics( SM_CXSCREEN ) );
+	#endif
+}
+
+embed n2 const display_get_height()
+{
+	#if OS_LINUX
+		out n2( DisplayHeight( windows_display, DefaultScreen( windows_display ) ) );
+	#elif OS_WINDOWS
+		out n2( GetSystemMetrics( SM_CYSCREEN ) );
+	#endif
+}
+
+fn display_get_mouse_position( i4 ref const out_x, i4 ref const out_y )
+{
+	#if OS_LINUX
+		Window root,
+		child;
+		i4 win_x,
+		win_y;
+		n4 mask;
+		XQueryPointer( windows_display, DefaultRootWindow( windows_display ), ref_of( root ), ref_of( child ), out_x, out_y, ref_of( win_x ), ref_of( win_y ), ref_of( mask ) );
+	#elif OS_WINDOWS
+		POINT cursor;
+		GetCursorPos( ref_of( cursor ) );
+		val_of( out_x ) = cursor.x;
+		val_of( out_y ) = cursor.y;
+	#endif
+}
+
+////////
 // visible window functions
 
 object_fn( window, add_window_canvas, window_canvas in_window_canvas )
@@ -993,6 +992,25 @@ object_fn( window, refresh )
 		XClearArea( windows_display, this->handle, 0, 0, 0, 0, yes );
 	#elif OS_WINDOWS
 		InvalidateRect( this->handle, nothing, no );
+	#endif
+}
+
+object_fn( window, set_size, n2 const width, n2 const height )
+{
+	#if OS_LINUX
+		XResizeWindow( windows_display, this->handle, width, height );
+		XSync( windows_display, no );
+	#elif OS_WINDOWS
+		if( this->bordered )
+		{
+			RECT rect = { 0, 0, width, height };
+			AdjustWindowRect( ref_of( rect ), WS_OVERLAPPEDWINDOW, FALSE );
+			SetWindowPos( this->handle, nothing, 0, 0, rect.right - rect.left, rect.bottom - rect.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE );
+		}
+		else
+		{
+			SetWindowPos( this->handle, nothing, 0, 0, width, height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE );
+		}
 	#endif
 }
 
@@ -1083,18 +1101,17 @@ object_fn( window, show_border )
 	out_if( this->bordered is yes );
 
 	#if OS_LINUX
-		struct
-		{
-			n4 flags;
-			n4 functions;
-			n4 decorations;
-			i4 input_mode;
-			n4 status;
-		}
-		hints = { 2, 0, 1, 0, 0 };
+		i4 orig_x,
+		orig_y;
+		window_get_position( this, ref_of( orig_x ), ref_of( orig_y ) );
+
 		Atom prop = XInternAtom( windows_display, "_MOTIF_WM_HINTS", False );
-		XChangeProperty( windows_display, this->handle, prop, prop, 32, PropModeReplace, to( byte ref, ref_of( hints ) ), 5 );
+		XDeleteProperty( windows_display, this->handle, prop );
+		XWithdrawWindow( windows_display, this->handle, DefaultScreen( windows_display ) );
+		XMapWindow( windows_display, this->handle );
 		XSync( windows_display, no );
+
+		window_set_position( this, orig_x, orig_y );
 	#elif OS_WINDOWS
 		temp n2 client_w = this->size.w;
 		temp n2 client_h = this->size.h;
@@ -1120,6 +1137,11 @@ object_fn( window, hide_border )
 	out_if( this->bordered is no );
 
 	#if OS_LINUX
+		Window child;
+		i4 x,
+		y;
+		XTranslateCoordinates( windows_display, this->handle, DefaultRootWindow( windows_display ), 0, 0, ref_of( x ), ref_of( y ), ref_of( child ) );
+
 		struct
 		{
 			n4 flags;
@@ -1131,6 +1153,9 @@ object_fn( window, hide_border )
 		hints = { 2, 0, 0, 0, 0 };
 		Atom prop = XInternAtom( windows_display, "_MOTIF_WM_HINTS", False );
 		XChangeProperty( windows_display, this->handle, prop, prop, 32, PropModeReplace, to( byte ref, ref_of( hints ) ), 5 );
+		XWithdrawWindow( windows_display, this->handle, DefaultScreen( windows_display ) );
+		XMapWindow( windows_display, this->handle );
+		XMoveWindow( windows_display, this->handle, x, y );
 		XSync( windows_display, no );
 	#elif OS_WINDOWS
 		temp n2 client_w = this->size.w;
@@ -1420,7 +1445,7 @@ fn _window_present( window const this )
 	if( this->clear_before_present )
 	{
 		#if OS_LINUX
-				XRenderFillRectangle( windows_display, PictOpSrc, window_picture, ref_of( black ), 0, 0, this->size.w, this->size.h );
+			XRenderFillRectangle( windows_display, PictOpSrc, pick( this->using_buffer, this->buffer_picture, window_picture ), ref_of( black ), 0, 0, this->size.w, this->size.h );
 		#elif OS_WINDOWS
 			PatBlt( target_dc, 0, 0, this->size.w, this->size.h, BLACKNESS );
 		#endif
@@ -2002,7 +2027,7 @@ fn _C7H16_loop()
 					FD_SET( fd, ref_of( fds ) );
 					select( fd + 1, ref_of( fds ), nothing, nothing, nothing );
 				#elif OS_WINDOWS
-					//MsgWaitForMultipleObjects( 0, nothing, FALSE, INFINITE, QS_ALLINPUT );
+					MsgWaitForMultipleObjects( 0, nothing, FALSE, INFINITE, QS_ALLINPUT );
 				#endif
 			}
 		}
