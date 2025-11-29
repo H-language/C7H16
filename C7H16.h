@@ -864,9 +864,10 @@ delete_object_fn( window_canvas )
 	delete_object( this );
 }
 
-embed n4x2 window_canvas_get_scaled_size( window_canvas const this, n4 ref const out_scaled_w, n4 ref const out_scaled_h )
+fn window_canvas_get_scaled_size( window_canvas const this, n4 ref const out_scaled_w, n4 ref const out_scaled_h )
 {
-	out n4x2( n4( r4_round( r4( this->canvas->size.w ) * this->scale.w ) ), n4( r4_round( r4( this->canvas->size.h ) * this->scale.h ) ) );
+	val_of( out_scaled_w ) = n4( r4_round( r4( this->canvas->size.w ) * this->scale.w ) );
+	val_of( out_scaled_h ) = n4( r4_round( r4( this->canvas->size.h ) * this->scale.h ) );
 }
 
 object_fn( window_canvas, set_scale, r4x2 const scale )
@@ -876,12 +877,12 @@ object_fn( window_canvas, set_scale, r4x2 const scale )
 }
 #define window_canvas_set_scale( WINDOW_CANVAS, WIDTH_SCALE, HEIGHT_SCALE... ) window_canvas_set_scale( WINDOW_CANVAS, r4x2( WIDTH_SCALE, DEFAULT( WIDTH_SCALE, HEIGHT_SCALE ) ) )
 
-object_fn( window_canvas, zoom, i4x2 const point, r4 const factor )
+object_fn( window_canvas, zoom, i4 const x, i4 const y, r4 const factor )
 {
 	temp r4 const new_scale = r4_clamp( this->scale.w * factor, 0.2, 200.0 );
 	temp r4 const actual_factor = new_scale / this->scale.w;
-	this->pos.x = i4( r4_round( r4( point.x ) - r4( point.x - this->pos.x ) * actual_factor ) );
-	this->pos.y = i4( r4_round( r4( point.y ) - r4( point.y - this->pos.y ) * actual_factor ) );
+	this->pos.x = i4( r4_round( r4( x ) - r4( x - this->pos.x ) * actual_factor ) );
+	this->pos.y = i4( r4_round( r4( y ) - r4( y - this->pos.y ) * actual_factor ) );
 	window_canvas_set_scale( this, new_scale, new_scale );
 }
 
@@ -1030,6 +1031,12 @@ object_fn( window_canvas, clamp )
 			temp i4 const margin = i4_min( current_window->size.w, current_window->size.h ) / 4;
 			this->pos.x = i4_clamp( this->pos.x, -scaled_w + margin, current_window->size.w - margin );
 			this->pos.y = i4_clamp( this->pos.y, -scaled_h + margin, current_window->size.h - margin );
+			skip;
+		}
+
+		when( scaling_rational_stretch )
+		{
+			this->pos = i4x2();
 			skip;
 		}
 
