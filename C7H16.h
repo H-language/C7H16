@@ -864,12 +864,26 @@ delete_object_fn( window_canvas )
 	delete_object( this );
 }
 
+embed n4x2 window_canvas_get_scaled_size( window_canvas const this, n4 ref const out_scaled_w, n4 ref const out_scaled_h )
+{
+	out n4x2( n4( r4_round( r4( this->canvas->size.w ) * this->scale.w ) ), n4( r4_round( r4( this->canvas->size.h ) * this->scale.h ) ) );
+}
+
 object_fn( window_canvas, set_scale, r4x2 const scale )
 {
 	this->scale = scale;
 	this->scaling = scaling_manual;
 }
 #define window_canvas_set_scale( WINDOW_CANVAS, WIDTH_SCALE, HEIGHT_SCALE... ) window_canvas_set_scale( WINDOW_CANVAS, r4x2( WIDTH_SCALE, DEFAULT( WIDTH_SCALE, HEIGHT_SCALE ) ) )
+
+object_fn( window_canvas, zoom, i4x2 const point, r4 const factor )
+{
+	temp r4 const new_scale = r4_clamp( this->scale.w * factor, 0.2, 200.0 );
+	temp r4 const actual_factor = new_scale / this->scale.w;
+	this->pos.x = i4( r4_round( r4( point.x ) - r4( point.x - this->pos.x ) * actual_factor ) );
+	this->pos.y = i4( r4_round( r4( point.y ) - r4( point.y - this->pos.y ) * actual_factor ) );
+	window_canvas_set_scale( this, new_scale, new_scale );
+}
 
 ////////
 // window
@@ -888,10 +902,8 @@ object( window )
 	flag using_buffer;
 	pixel ref buffer_pixels;
 	#if OS_LINUX
-		XImage ref buffer_image;
 		Pixmap buffer;
 		Picture buffer_picture;
-		XShmSegmentInfo buffer_shm;
 	#elif OS_WINDOWS
 		HBITMAP buffer;
 		HDC buffer_dc;
@@ -981,10 +993,56 @@ fn display_get_mouse_position( i4 ref const out_x, i4 ref const out_y )
 ////////
 // visible window functions
 
+// window_canvas via window
+
+object_fn( window_canvas, center )
+{
+	temp i4 const scaled_w = i4( r4_round( r4( this->canvas->size.w ) * this->scale.w ) );
+	temp i4 const scaled_h = i4( r4_round( r4( this->canvas->size.h ) * this->scale.h ) );
+	this->pos.x = ( current_window->size.w - scaled_w ) / 2;
+	this->pos.y = ( current_window->size.h - scaled_h ) / 2;
+}
+
+object_fn( window_canvas, clamp )
+{
+	n4 scaled_w;
+	n4 scaled_h;
+	window_canvas_get_scaled_size( this, ref_of( scaled_w ), ref_of( scaled_h ) );
+
+	with( this->scaling )
+	{
+		when( scaling_rational_fit, scaling_integer_fit_floor, scaling_integer_fit_round, scaling_integer_fit_ceil )
+		{
+			this->pos.x = i4_clamp( this->pos.x, 0, current_window->size.w - scaled_w );
+			this->pos.y = i4_clamp( this->pos.y, 0, current_window->size.h - scaled_h );
+			skip;
+		}
+
+		when( scaling_rational_fill, scaling_integer_fill_floor, scaling_integer_fill_round, scaling_integer_fill_ceil )
+		{
+			this->pos.x = i4_clamp( this->pos.x, current_window->size.w - scaled_w, 0 );
+			this->pos.y = i4_clamp( this->pos.y, current_window->size.h - scaled_h, 0 );
+			skip;
+		}
+
+		when( scaling_manual )
+		{
+			temp i4 const margin = i4_min( current_window->size.w, current_window->size.h ) / 4;
+			this->pos.x = i4_clamp( this->pos.x, -scaled_w + margin, current_window->size.w - margin );
+			this->pos.y = i4_clamp( this->pos.y, -scaled_h + margin, current_window->size.h - margin );
+			skip;
+		}
+
+		other skip;
+	}
+}
+
 object_fn( window, add_window_canvas, window_canvas in_window_canvas )
 {
 	list_add( this->canvases, in_window_canvas );
 }
+
+// window
 
 object_fn( window, refresh )
 {
@@ -1142,7 +1200,7 @@ object_fn( window, hide_border )
 		y;
 		XTranslateCoordinates( windows_display, this->handle, DefaultRootWindow( windows_display ), 0, 0, ref_of( x ), ref_of( y ), ref_of( child ) );
 
-		struct
+		variant
 		{
 			n4 flags;
 			n4 functions;
@@ -1152,7 +1210,7 @@ object_fn( window, hide_border )
 		}
 		hints = { 2, 0, 0, 0, 0 };
 		Atom prop = XInternAtom( windows_display, "_MOTIF_WM_HINTS", False );
-		XChangeProperty( windows_display, this->handle, prop, prop, 32, PropModeReplace, to( byte ref, ref_of( hints ) ), 5 );
+		XChangeProperty( windows_display, this->handle, prop, prop, 32, PropModeReplace, to( n1 ref, ref_of( hints ) ), 5 );
 		XWithdrawWindow( windows_display, this->handle, DefaultScreen( windows_display ) );
 		XMapWindow( windows_display, this->handle );
 		XMoveWindow( windows_display, this->handle, x, y );
@@ -1230,34 +1288,20 @@ fn _window_resize( window const this )
 			if( this->buffer_picture )
 			{
 				XRenderFreePicture( windows_display, this->buffer_picture );
-				this->buffer_picture = 0;
 			}
 
 			if( this->buffer )
 			{
 				XFreePixmap( windows_display, this->buffer );
-				this->buffer = 0;
 			}
 
-			if( this->buffer_image )
-			{
-				XShmDetach( windows_display, ref_of( this->buffer_shm ) );
-				XSync( windows_display, False );
-				shmdt( this->buffer_shm.shmaddr );
-				shmctl( this->buffer_shm.shmid, IPC_RMID, 0 );
-				this->buffer_image->data = nothing;
-				XDestroyImage( this->buffer_image );
-				this->buffer_image = nothing;
-			}
+			this->buffer = XCreatePixmap( windows_display, this->handle, this->size.w, this->size.h, depth );
 
-			this->buffer_image = XShmCreateImage( windows_display, DefaultVisual( windows_display, screen ), depth, ZPixmap, nothing, ref_of( this->buffer_shm ), this->size.w, this->size.h );
-			this->buffer_shm.shmid = shmget( IPC_PRIVATE, this->buffer_image->bytes_per_line * this->size.h, IPC_CREAT | 0777 );
-			this->buffer_shm.shmaddr = this->buffer_image->data = shmat( this->buffer_shm.shmid, nothing, 0 );
-			this->buffer_shm.readOnly = False;
-			XShmAttach( windows_display, ref_of( this->buffer_shm ) );
+			temp GC temp_gc = XCreateGC( windows_display, this->buffer, 0, nothing );
+			XSetForeground( windows_display, temp_gc, BlackPixel( windows_display, screen ) );
+			XFillRectangle( windows_display, this->buffer, temp_gc, 0, 0, this->size.w, this->size.h );
+			XFreeGC( windows_display, temp_gc );
 
-			this->buffer_pixels = to( pixel ref, this->buffer_image->data );
-			this->buffer = XShmCreatePixmap( windows_display, this->handle, this->buffer_image->data, ref_of( this->buffer_shm ), this->size.w, this->size.h, depth );
 			this->buffer_picture = XRenderCreatePicture( windows_display, this->buffer, format, 0, nothing );
 		}
 	#elif OS_WINDOWS
@@ -1612,7 +1656,20 @@ group( window_event_type, n2 )
 
 		when( window_event_resize )
 		{
-			_window_set_size( this, PICK( OS_LINUX, e->xconfigure.width, LOWORD( lp ) ), PICK( OS_LINUX, e->xconfigure.height, HIWORD( lp ) ) );
+			#if OS_LINUX
+				temp n2 w = e->xconfigure.width;
+				temp n2 h = e->xconfigure.height;
+				// drain to get latest
+				os_event next_resize;
+				while( XCheckTypedWindowEvent( windows_display, this->handle, ConfigureNotify, ref_of( next_resize ) ) )
+				{
+					w = next_resize.xconfigure.width;
+					h = next_resize.xconfigure.height;
+				}
+				_window_set_size( this, w, h );
+			#elif OS_WINDOWS
+				_window_set_size( this, LOWORD( lp ), HIWORD( lp ) );
+			#endif
 			_window_resize( this );
 			_window_draw( this );
 		} // fall through
@@ -1631,6 +1688,11 @@ group( window_event_type, n2 )
 
 		when( window_event_mouse_move )
 		{
+			#if OS_LINUX
+				// drain to get latest
+				os_event next_move;
+				while( XCheckTypedWindowEvent( windows_display, this->handle, MotionNotify, ref_of( next_move ) ) );
+			#endif
 			is_input = yes;
 			skip;
 		}
