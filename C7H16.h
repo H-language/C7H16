@@ -951,6 +951,8 @@ global n8 windows_time_tick = 0;
 
 #if OS_LINUX
 	global Display ref windows_display = nothing;
+#elif OS_WINDOWS
+	global HICON windows_icon = nothing;
 #endif
 
 ////////
@@ -1924,7 +1926,10 @@ new_object_fn( window, byte const ref const name, n2 const width, n2 const heigh
 		out_window->image.bmiHeader.biPlanes = 1;
 		out_window->image.bmiHeader.biBitCount = 32;
 		out_window->image.bmiHeader.biCompression = BI_RGB;
+
 		SetWindowLongPtr( out_window->handle, GWLP_USERDATA, to( LONG_PTR, out_window ) );
+		SendMessage( out_window->handle, WM_SETICON, ICON_SMALL, ( LPARAM ) windows_icon );
+		SendMessage( out_window->handle, WM_SETICON, ICON_BIG, ( LPARAM ) windows_icon );
 	#endif
 
 	current_window = out_window;
@@ -1996,6 +2001,8 @@ fn _C7H16_init()
 	#if OS_LINUX
 		windows_display = XOpenDisplay( nothing );
 		XkbSetDetectableAutoRepeat( windows_display, yes, nothing );
+	#elif OS_WINDOWS
+		windows_icon = LoadIcon( GetModuleHandle( NULL ), MAKEINTRESOURCE( 1 ) );
 	#endif
 }
 
@@ -2004,13 +2011,22 @@ fn _C7H16_loop()
 	windows_time_start = get_nano();
 	windows_time_next_draw = windows_time_start;
 
-	temp const nano frame_nano_tick = pick( windows_fps_tick > 0, nano_per_sec / windows_fps_tick, 0 );
-	temp const nano frame_nano_draw = pick( windows_fps_draw > 0, nano_per_sec / windows_fps_draw, 0 );
-	temp const flag event_driven = frame_nano_tick is 0 and frame_nano_draw is 0;
+	temp nano prev_frame_nano_tick = 0;
 
 	loop
 	{
 		out_if( windows->count is 0 );
+
+		temp const nano frame_nano_tick = pick( windows_fps_tick > 0, nano_per_sec / windows_fps_tick, 0 );
+		temp const nano frame_nano_draw = pick( windows_fps_draw > 0, nano_per_sec / windows_fps_draw, 0 );
+		temp const flag event_driven = frame_nano_tick is 0 and frame_nano_draw is 0;
+
+		if( frame_nano_tick > 0 and prev_frame_nano_tick is 0 )
+		{
+			windows_time_start = get_nano();
+			windows_time_tick = 0;
+		}
+		prev_frame_nano_tick = frame_nano_tick;
 
 		// process
 		iter_list( windows, window_id )
