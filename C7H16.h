@@ -17,6 +17,17 @@
 #define C7H16
 #include <H.h>
 
+#if OS_LINUX
+//#include <alsa/asoundlib.h>
+		#include <X11/Xlib.h>
+		#include <X11/Xutil.h>
+		#include <X11/extensions/Xrender.h>
+		#include <X11/extensions/Xpresent.h>
+		#include <X11/XKBlib.h>
+#elif OS_WINDOWS
+__declspec(dllimport) i4 __stdcall timeBeginPeriod( i4 );
+#endif
+
 ////////////////////////////////
 /// version
 
@@ -319,6 +330,9 @@ DECLARE_TYPE_MULTI( r8 );
 #define r8x4( X_Y_Z_W... ) _x4( r8, X_Y_Z_W )
 DECLARE_TYPE_MULTI_R( 8 );
 
+#define grid_area( X, Y ) ( ( X ) * ( Y ) )
+#define grid_index( X, Y, WIDTH ) ( ( X ) + ( ( Y ) * ( WIDTH ) ) )
+
 ////////
 // dimensional flags
 
@@ -366,6 +380,89 @@ type_from( i4 ) d4;
 #define d4_div( A, B ) d4( ( i8( A ) << d4_bits ) / i8( B ) )
 
 type_from( i4x2 ) d4x2;
+
+////////////////////////////////
+/// time
+
+#define nano_per_micro 1000
+#define nano_per_milli 1000000
+#define nano_per_sec 1000000000
+#define nano_per_min 60000000000
+#define nano_per_hour 3600000000000
+#define micro_per_milli 1000
+#define micro_per_sec 1000000
+#define micro_per_min 60000000
+#define micro_per_hour 3600000000
+#define milli_per_sec 1000
+#define milli_per_min 60000
+#define milli_per_hour 3600000
+#define sec_per_min 60
+#define sec_per_hour 3600
+#define min_per_hour 60
+
+type_from( n8 ) nano;
+#define nano( VAL ) n8( VAL )
+
+embed nano _get_nano()
+{
+	#if OS_WINDOWS
+		perm LARGE_INTEGER frequency;
+		perm LARGE_INTEGER freq_start;
+		LARGE_INTEGER current;
+
+		once
+		{
+			QueryPerformanceFrequency( ref_of( frequency ) );
+			QueryPerformanceCounter( ref_of( freq_start ) );
+		}
+
+		QueryPerformanceCounter( ref_of( current ) );
+
+		out( ( current.QuadPart - freq_start.QuadPart ) * 1000000000ULL ) / frequency.QuadPart;
+	#else
+		struct timespec ts;
+		clock_gettime( CLOCK_MONOTONIC, ref_of( ts ) );
+		out to( nano, ts.tv_sec * nano_per_sec + ts.tv_nsec );
+	#endif
+}
+
+embed nano get_nano()
+{
+	perm nano epoch = 0;
+	once
+	{
+		epoch = _get_nano();
+	}
+	out _get_nano() - epoch;
+}
+
+fn nano_sleep( nano const time )
+{
+	#if OS_WINDOWS
+		static flag timer_init = no;
+		static HANDLE timer = nothing;
+		if( not timer_init )
+		{
+			timer_init = yes;
+			timeBeginPeriod( 1 );
+			timer = CreateWaitableTimer( nothing, TRUE, nothing );
+		}
+
+		LARGE_INTEGER li = { .QuadPart = -( time / 100 ) };
+		SetWaitableTimer( timer, ref_of( li ), 0, nothing, nothing, FALSE );
+		WaitForSingleObject( timer, INFINITE );
+
+		// Optional: spin-wait only the final microseconds for extra precision
+		//LARGE_INTEGER freq, target, now;
+		///QueryPerformanceFrequency( ref_of( freq ) );
+		//QueryPerformanceCounter( ref_of( target ) );
+		//target.QuadPart += ( time * freq.QuadPart ) / nano_per_sec;
+		//while( QueryPerformanceCounter( ref_of( now ) ), now.QuadPart < target.QuadPart );
+	#else
+		struct timespec ts = { time / nano_per_sec, time mod nano_per_sec };
+		nanosleep( ref_of( ts ), nothing );
+	#endif
+}
 
 ////////
 // pixel
@@ -494,7 +591,7 @@ object_fn( canvas, fill, pixel const color )
 
 #define canvas_get_pixel_index( CANVAS, INDEX ) CANVAS->pixels[ ( INDEX ) ]
 #define canvas_get_pixel_index_safe( CANVAS, INDEX ) pick( canvas_check_pixel_index( INDEX ), canvas_get_pixel_index( CANVAS, INDEX ), pixel_invalid )
-#define canvas_get_pixel( CANVAS, X, Y ) canvas_get_pixel_index( CANVAS, index_2d( X, Y, CANVAS->size.w ) )
+#define canvas_get_pixel( CANVAS, X, Y ) canvas_get_pixel_index( CANVAS, grid_index( X, Y, CANVAS->size.w ) )
 #define canvas_get_pixel_safe( CANVAS, X, Y ) pick( canvas_check_pixel( CANVAS, X, Y ), canvas_get_pixel( CANVAS, X, Y ), pixel_invalid )
 
 ////////
@@ -516,7 +613,7 @@ object_fn( canvas, fill, pixel const color )
 		skip_if( _PIXEL.a is 0 );\
 		if( _PIXEL.a is max_n1 )\
 		{\
-			_canvas_draw_pixel_index_( CANVAS, _INDEX, _PIXEL );\
+			canvas_set_pixel_index( CANVAS, _INDEX, _PIXEL );\
 		}\
 		else\
 		{\
@@ -574,7 +671,92 @@ object_fn( canvas, fill, pixel const color )
 	END_DEF
 
 #define canvas_draw_pixel_index( CANVAS, INDEX, PIXEL, BLEND... ) _canvas_draw_pixel_index_##BLEND( CANVAS, INDEX, PIXEL )
-#define canvas_draw_pixel( CANVAS, X, Y, PIXEL, BLEND... ) canvas_draw_pixel_index( CANVAS, index_2d( X, Y, CANVAS->size.w ), PIXEL, BLEND )
+#define canvas_draw_pixel( CANVAS, X, Y, PIXEL, BLEND... ) canvas_draw_pixel_index( CANVAS, grid_index( X, Y, CANVAS->size.w ), PIXEL, BLEND )
+
+#define canvas_draw_pixel_safe( CANVAS, X, Y, PIXEL, BLEND... ) if( canvas_check_pixel( CANVAS, X, Y ) ) canvas_draw_pixel( CANVAS, X, Y, PIXEL, BLEND )
+
+////////////////////////////////
+/// line
+
+#define _line_fn( _LINE_FN, Ax, Ay, Bx, By, X_NAME, Y_NAME, CODE )\
+	START_DEF\
+	{\
+		temp i2 X_NAME = i2( Ax );\
+		temp i2 Y_NAME = i2( Ay );\
+		temp const i2 _LINE_FN##_x2 = i2( Bx );\
+		temp const i2 _LINE_FN##_y2 = i2( By );\
+		temp const i2 _LINE_FN##_xd = _LINE_FN##_x2 - X_NAME;\
+		temp const i2 _LINE_FN##_yd = _LINE_FN##_y2 - Y_NAME;\
+		temp i4 _LINE_FN##_hs = ( i4( X_NAME ) << 20 ) + 0x80000;\
+		temp i4 _LINE_FN##_vs = ( i4( Y_NAME ) << 20 ) + 0x80000;\
+		temp const i2 _LINE_FN##_ax = ABS( _LINE_FN##_xd );\
+		temp const i2 _LINE_FN##_ay = ABS( _LINE_FN##_yd );\
+		temp i2 _LINE_FN##_a = pick( _LINE_FN##_ax > _LINE_FN##_ay, _LINE_FN##_ax, _LINE_FN##_ay );\
+		temp const i4 _LINE_FN##_recip = 0x100000 / i4( MAX( _LINE_FN##_a, 1 ) );\
+		temp const i4 _LINE_FN##_xs = i4( _LINE_FN##_xd ) * _LINE_FN##_recip;\
+		temp const i4 _LINE_FN##_ys = i4( _LINE_FN##_yd ) * _LINE_FN##_recip;\
+		temp const i2 _LINE_FN##_i = 0;\
+		++_LINE_FN##_a;\
+		do\
+		{\
+			X_NAME = i2( _LINE_FN##_hs >> 20 );\
+			Y_NAME = i2( _LINE_FN##_vs >> 20 );\
+			CODE;\
+			_LINE_FN##_hs += _LINE_FN##_xs;\
+			_LINE_FN##_vs += _LINE_FN##_ys;\
+		}\
+		while( --_LINE_FN##_a );\
+	}\
+	END_DEF
+
+#define _line_fn_eval( _LINE_FN, Ax, Ay, Bx, By, X_NAME, Y_NAME, CODE ) _line_fn( _LINE_FN, Ax, Ay, Bx, By, X_NAME, Y_NAME, CODE )
+#define line_fn( Ax, Ay, Bx, By, X_NAME, Y_NAME, CODE ) _line_fn_eval( JOIN( _LINE_FN_, __COUNTER__ ), Ax, Ay, Bx, By, X_NAME, Y_NAME, CODE )
+
+#define _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, SUFFIX... ) line_fn( Ax, Ay, Bx, By, _X, _Y, canvas_draw_pixel##SUFFIX( CANVAS, _X, _Y, PIXEL ) );
+#define canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL )
+#define canvas_draw_line_safe( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, _safe )
+
+////////////////////////////////
+/// box
+
+#define _box_fn( _BOX_FN, TLx, TLy, BRx, BRy, X_NAME, Y_NAME, CODE )\
+	START_DEF\
+	{\
+		temp i2 _BOX_FN##_x1 = i2( TLx );\
+		temp i2 _BOX_FN##_y1 = i2( TLy );\
+		temp const i2 _BOX_FN##_x2 = i2( BRx );\
+		temp const i2 _BOX_FN##_y2 = i2( BRy );\
+		temp i2 X_NAME = _BOX_FN##_x1;\
+		temp i2 Y_NAME = _BOX_FN##_y1;\
+		temp i2 _BOX_FN##_w = _BOX_FN##_x2 - _BOX_FN##_x1 + 1;\
+		do\
+		{\
+			Y_NAME = _BOX_FN##_y1;\
+			CODE;\
+			Y_NAME = _BOX_FN##_y2;\
+			CODE;\
+			++X_NAME;\
+		}\
+		while( --_BOX_FN##_w );\
+		Y_NAME = _BOX_FN##_y1 + 1;\
+		temp i2 _BOX_FN##_h = _BOX_FN##_y2 - _BOX_FN##_y1 - 1;\
+		while( _BOX_FN##_h-- > 0 )\
+		{\
+			X_NAME = _BOX_FN##_x1;\
+			CODE;\
+			X_NAME = _BOX_FN##_x2;\
+			CODE;\
+			++Y_NAME;\
+		}\
+	}\
+	END_DEF
+
+#define _box_fn_eval( _BOX_FN, TLx, TLy, BRx, BRy, X_NAME, Y_NAME, CODE ) _box_fn( _BOX_FN, TLx, TLy, BRx, BRy, X_NAME, Y_NAME, CODE )
+#define box_fn( TLx, TLy, BRx, BRy, X_NAME, Y_NAME, CODE ) _box_fn_eval( JOIN( _BOX_FN_, __COUNTER__ ), TLx, TLy, BRx, BRy, X_NAME, Y_NAME, CODE )
+
+#define _canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL, SUFFIX... ) box_fn( TLx, TLy, BRx, BRy, _X, _Y, canvas_draw_pixel##SUFFIX( CANVAS, _X, _Y, PIXEL ) );
+#define canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL ) _canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL )
+#define canvas_draw_box_safe( CANVAS, TLx, TLy, BRx, BRy, PIXEL ) _canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL, _safe )
 
 ////////////////////////////////
 /// inputs
@@ -837,6 +1019,8 @@ object( window_canvas )
 	i4x2 pos;
 	r4x2 scale;
 
+	r4x2 mouse;
+
 	#if OS_LINUX
 		Pixmap pixmap;
 		Picture picture;
@@ -926,8 +1110,7 @@ object( window )
 	list inputs_pressed;
 	list inputs_released;
 	r4x2 scroll;
-	i4 mouse_x;
-	i4 mouse_y;
+	i4x2 mouse;
 
 	window_fn fn_start;
 	window_fn fn_resize;
@@ -1432,7 +1615,13 @@ fn _window_resize( window const this )
 
 fn _window_tick_once( window const this )
 {
-	window_get_mouse_position( this, ref_of( this->mouse_x ), ref_of( this->mouse_y ) );
+	window_get_mouse_position( this, ref_of( this->mouse.x ), ref_of( this->mouse.y ) );
+
+	iter_list( this->canvases, wc_index )
+	{
+		temp window_canvas const this_wc = list_get_iter( wc_index, window_canvas );
+		this_wc->mouse = r4x2(r4(this->mouse.x - this_wc->pos.x) / this_wc->scale.w, r4(this->mouse.y - this_wc->pos.y) / this_wc->scale.h);
+	}
 
 	call( this, fn_tick );
 
@@ -1982,6 +2171,7 @@ fn _window_process( window const this )
 	{
 		_window_resize( this );
 		window_center( this );
+		call(this, fn_start);
 	}
 	else if( this->tick is 2 )
 	{
@@ -2099,7 +2289,7 @@ fn _C7H16_loop()
 				if( list_get_iter( window_id, window )->tick < 3 )
 				{
 					all_ready = no;
-					break;
+					skip;
 				}
 			}
 
@@ -2138,18 +2328,7 @@ fn _C7H16_loop()
 			now = get_nano();
 			if( wake_time > now )
 			{
-				#if OS_LINUX
-					fd_set fds;
-					FD_ZERO( ref_of( fds ) );
-					temp i4 const fd = ConnectionNumber( windows_display );
-					FD_SET( fd, ref_of( fds ) );
-					temp nano const wait_ns = wake_time - now;
-					struct timeval tv = { wait_ns / nano_per_sec, ( wait_ns % nano_per_sec ) / 1000 };
-					select( fd + 1, ref_of( fds ), nothing, nothing, ref_of( tv ) );
-				#elif OS_WINDOWS
-					temp const n4 wait_ms = n4( ( wake_time - now ) / 1000000 );
-					MsgWaitForMultipleObjects( 0, nothing, FALSE, wait_ms, QS_ALLINPUT );
-				#endif
+					nano_sleep( wake_time - now );
 			}
 		}
 	}
