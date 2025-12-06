@@ -264,7 +264,8 @@ __declspec(dllimport) i4 __stdcall timeBeginPeriod( i4 );
 	{\
 		r##N cos_angle = 0;\
 		r##N sin_angle = 0;\
-		/*r##N##_sincos( R, ref_of( sin_angle ), ref_of( cos_angle ) );*/ out r##N##x##X( V.x * cos_angle - V.y * sin_angle, V.x * sin_angle + V.y * cos_angle );\
+		r##N##_sincos( R, ref_of( sin_angle ), ref_of( cos_angle ) );\
+		out r##N##x##X( V.x * cos_angle - V.y * sin_angle, V.x * sin_angle + V.y * cos_angle );\
 	}
 
 #define DECLARE_TYPE_MULTI( TYPE )\
@@ -1104,6 +1105,7 @@ object( window )
 	flag close;
 
 	n8 tick;
+	r8 delta_time;
 
 	byte inputs[ inputs_count ];
 	n1 inputs_active;
@@ -1623,6 +1625,12 @@ fn _window_tick_once( window const this )
 		this_wc->mouse = r4x2(r4(this->mouse.x - this_wc->pos.x) / this_wc->scale.w, r4(this->mouse.y - this_wc->pos.y) / this_wc->scale.h);
 	}
 
+	perm nano start_nano = 0;
+	once start_nano = get_nano();
+
+	this->delta_time = r8( get_nano() - start_nano ) / r8( nano_per_sec );
+	start_nano = get_nano();
+
 	call( this, fn_tick );
 
 	if( this->inputs_pressed->count > 0 )
@@ -1818,9 +1826,8 @@ group( window_event_type, n2 )
 			{
 				skip_if( wp isnt 1 );
 
-				call( this, fn_tick );
-				_window_draw( this );
-				skip;
+				_window_tick_once( this );
+				jump DRAW_AND_PRESENT;
 			}
 
 			when( WM_ERASEBKGND )
@@ -1869,6 +1876,8 @@ group( window_event_type, n2 )
 				_window_set_size( this, LOWORD( lp ), HIWORD( lp ) );
 			#endif
 			_window_resize( this );
+
+			DRAW_AND_PRESENT:
 			_window_draw( this );
 		} // fall through
 
@@ -2256,7 +2265,7 @@ fn _C7H16_loop()
 				++windows_time_tick;
 				iter_list( windows, window_id )
 				{
-					call( list_get_iter( window_id, window ), fn_tick );
+					//call( list_get_iter( window_id, window ), fn_tick );
 				}
 			}
 		}
