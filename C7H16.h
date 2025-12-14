@@ -18,14 +18,14 @@
 #include <H.h>
 
 #if OS_LINUX
-//#include <alsa/asoundlib.h>
-		#include <X11/Xlib.h>
-		#include <X11/Xutil.h>
-		#include <X11/extensions/Xrender.h>
-		#include <X11/extensions/Xpresent.h>
-		#include <X11/XKBlib.h>
+	//#include <alsa/asoundlib.h>
+	#include <X11/Xlib.h>
+	#include <X11/Xutil.h>
+	#include <X11/extensions/Xrender.h>
+	#include <X11/extensions/Xpresent.h>
+	#include <X11/XKBlib.h>
 #elif OS_WINDOWS
-__declspec(dllimport) i4 __stdcall timeBeginPeriod( i4 );
+	__declspec( dllimport ) i4 __stdcall timeBeginPeriod( i4 );
 #endif
 
 ////////////////////////////////
@@ -1008,19 +1008,18 @@ group( scaling_mode )
 	scaling_rational_stretch
 };
 
-object( window_canvas )
+object( view )
 {
 	canvas canvas;
 
 	sizing_mode sizing;
 	scaling_mode scaling;
 
-	window_canvas_fn fn_draw;
+	view_fn fn_draw;
 
-	i4x2 pos;
-	r4x2 scale;
-
-	r4x2 mouse;
+	r8x2 pos;
+	r8x2 scale;
+	r8x2 mouse;
 
 	#if OS_LINUX
 		Pixmap pixmap;
@@ -1031,44 +1030,40 @@ object( window_canvas )
 }
 packed;
 
-new_object_fn( window_canvas, canvas const canvas, sizing_mode const sizing, scaling_mode const scaling, window_canvas_fn const fn_draw )
+new_object_fn( view, canvas const canvas, sizing_mode const sizing, scaling_mode const scaling, view_fn const fn_draw )
 {
-	temp window_canvas out_window_canvas = new_object( window_canvas );
-	out_window_canvas->canvas = canvas;
-	out_window_canvas->sizing = sizing;
-	out_window_canvas->scaling = scaling;
-	out_window_canvas->fn_draw = fn_draw;
-	out_window_canvas->scale = r4x2( 1.0, 1.0 );
-	out out_window_canvas;
+	temp view out_view = new_object( view );
+	out_view->canvas = canvas;
+	out_view->sizing = sizing;
+	out_view->scaling = scaling;
+	out_view->fn_draw = fn_draw;
+	out_view->scale = r8x2( 1.0, 1.0 );
+	out out_view;
 }
 
-delete_object_fn( window_canvas )
+delete_object_fn( view )
 {
 	delete_canvas( this->canvas );
 
 	delete_object( this );
 }
 
-fn window_canvas_get_scaled_size( window_canvas const this, n4 ref const out_scaled_w, n4 ref const out_scaled_h )
-{
-	val_of( out_scaled_w ) = n4( r4_round( r4( this->canvas->size.w ) * this->scale.w ) );
-	val_of( out_scaled_h ) = n4( r4_round( r4( this->canvas->size.h ) * this->scale.h ) );
-}
+#define view_get_scaled_size( VIEW ) r8x2( r8( VIEW->canvas->size.w ) * VIEW->scale.w, r8( VIEW->canvas->size.h ) * VIEW->scale.h )
 
-object_fn( window_canvas, set_scale, r4x2 const scale )
+object_fn( view, set_scale, r8x2 const scale )
 {
 	this->scale = scale;
 	this->scaling = scaling_manual;
 }
-#define window_canvas_set_scale( WINDOW_CANVAS, WIDTH_SCALE, HEIGHT_SCALE... ) window_canvas_set_scale( WINDOW_CANVAS, r4x2( WIDTH_SCALE, DEFAULT( WIDTH_SCALE, HEIGHT_SCALE ) ) )
+#define view_set_scale( WINDOW_CANVAS, WIDTH_SCALE, HEIGHT_SCALE... ) view_set_scale( WINDOW_CANVAS, r8x2( WIDTH_SCALE, DEFAULT( WIDTH_SCALE, HEIGHT_SCALE ) ) )
 
-object_fn( window_canvas, zoom, i4 const x, i4 const y, r4 const factor )
+object_fn( view, zoom, i4 const x, i4 const y, r8 const factor )
 {
-	temp r4 const new_scale = r4_clamp( this->scale.w * factor, 0.2, 200.0 );
-	temp r4 const actual_factor = new_scale / this->scale.w;
-	this->pos.x = i4( r4_round( r4( x ) - r4( x - this->pos.x ) * actual_factor ) );
-	this->pos.y = i4( r4_round( r4( y ) - r4( y - this->pos.y ) * actual_factor ) );
-	window_canvas_set_scale( this, new_scale, new_scale );
+	temp r8 const new_scale = r8_clamp( this->scale.w * factor, 0.2, 200.0 );
+	temp r8 const actual_factor = new_scale / this->scale.w;
+	this->pos.x = r8( x ) - r8( x - this->pos.x ) * actual_factor;
+	this->pos.y = r8( y ) - r8( y - this->pos.y ) * actual_factor;
+	view_set_scale( this, new_scale, new_scale );
 }
 
 ////////
@@ -1096,10 +1091,10 @@ object( window )
 		HDC window_dc;
 	#endif
 
-	list canvases;
+	list views;
 	n2x2 size;
 
-	flag clear_before_present;
+	flag clear;
 	flag visible;
 	flag bordered;
 	flag close;
@@ -1117,14 +1112,13 @@ object( window )
 	window_fn fn_start;
 	window_fn fn_resize;
 	window_fn fn_tick;
-	window_fn fn_draw;
 };
 
 global window current_window = nothing;
 global list windows = nothing;
 
-global r4 windows_fps_tick = 60;
-global r4 windows_fps_draw = 60;
+global r4 windows_fps_tick = 0;
+global r4 windows_fps_draw = 0;
 global nano windows_time_start = 0;
 global nano windows_time_next_draw = 0;
 global n8 windows_time_tick = 0;
@@ -1132,7 +1126,6 @@ global n8 windows_time_tick = 0;
 #define window_set_fn_start( WINDOW, FN ) WINDOW->fn_start = to( window_fn, FN )
 #define window_set_fn_resize( WINDOW, FN ) WINDOW->fn_resize = to( window_fn, FN )
 #define window_set_fn_tick( WINDOW, FN ) WINDOW->fn_tick = to( window_fn, FN )
-#define window_set_fn_draw( WINDOW, FN ) WINDOW->fn_draw = to( window_fn, FN )
 
 #if OS_LINUX
 	global Display ref windows_display = nothing;
@@ -1178,52 +1171,65 @@ fn display_get_mouse_position( i4 ref const out_x, i4 ref const out_y )
 	#endif
 }
 
+embed n2 const display_get_fps()
+{
+	#if OS_LINUX
+		temp XRRScreenConfiguration * config = XRRGetScreenInfo( windows_display, DefaultRootWindow( windows_display ) );
+		temp n2 const hz = n2( XRRConfigCurrentRate( config ) );
+		XRRFreeScreenConfigInfo( config );
+		out hz;
+	#elif OS_WINDOWS
+		DEVMODE dm = { };
+		dm.dmSize = sizeof( dm );
+		EnumDisplaySettings( nothing, ENUM_CURRENT_SETTINGS, ref_of( dm ) );
+		out n2( dm.dmDisplayFrequency );
+	#endif
+}
+
 ////////
 // visible window functions
 
-// window_canvas via window
+// view via window
 
-object_fn( window_canvas, center )
+object_fn( view, center )
 {
 	temp i4 const scaled_w = i4( r4_round( r4( this->canvas->size.w ) * this->scale.w ) );
 	temp i4 const scaled_h = i4( r4_round( r4( this->canvas->size.h ) * this->scale.h ) );
-	this->pos.x = ( current_window->size.w - scaled_w ) / 2;
-	this->pos.y = ( current_window->size.h - scaled_h ) / 2;
+	this->pos.x = r8( i4( current_window->size.w ) - scaled_w ) * 0.5;
+	this->pos.y = r8( i4( current_window->size.h ) - scaled_h ) * 0.5;
 }
 
-object_fn( window_canvas, clamp )
+object_fn( view, clamp )
 {
-	n4 scaled_w;
-	n4 scaled_h;
-	window_canvas_get_scaled_size( this, ref_of( scaled_w ), ref_of( scaled_h ) );
+	temp r8x2 const scaled_size = view_get_scaled_size( this );
 
 	with( this->scaling )
 	{
 		when( scaling_rational_fit, scaling_integer_fit_floor, scaling_integer_fit_round, scaling_integer_fit_ceil )
 		{
-			this->pos.x = i4_clamp( this->pos.x, 0, current_window->size.w - scaled_w );
-			this->pos.y = i4_clamp( this->pos.y, 0, current_window->size.h - scaled_h );
+			this->pos.x = r8_clamp( this->pos.x, 0, r8( current_window->size.w ) - scaled_size.w );
+			this->pos.y = r8_clamp( this->pos.y, 0, r8( current_window->size.h ) - scaled_size.h );
 			skip;
 		}
 
 		when( scaling_rational_fill, scaling_integer_fill_floor, scaling_integer_fill_round, scaling_integer_fill_ceil )
 		{
-			this->pos.x = i4_clamp( this->pos.x, current_window->size.w - scaled_w, 0 );
-			this->pos.y = i4_clamp( this->pos.y, current_window->size.h - scaled_h, 0 );
+			this->pos.x = r8_clamp( this->pos.x, r8( current_window->size.w ) - scaled_size.w, 0 );
+			this->pos.y = r8_clamp( this->pos.y, r8( current_window->size.h ) - scaled_size.h, 0 );
 			skip;
 		}
 
 		when( scaling_manual )
 		{
-			temp i4 const margin = i4_min( current_window->size.w, current_window->size.h ) / 4;
-			this->pos.x = i4_clamp( this->pos.x, -scaled_w + margin, current_window->size.w - margin );
-			this->pos.y = i4_clamp( this->pos.y, -scaled_h + margin, current_window->size.h - margin );
+			temp i4 const margin = i4_min( current_window->size.w, current_window->size.h ) >> 2;
+			this->pos.x = r8_clamp( this->pos.x, -scaled_size.w + r8( margin ), r8( i4( current_window->size.w ) - margin ) );
+			this->pos.y = r8_clamp( this->pos.y, -scaled_size.h + r8( margin ), r8( i4( current_window->size.h ) - margin ) );
 			skip;
 		}
 
 		when( scaling_rational_stretch )
 		{
-			this->pos = i4x2();
+			this->pos = r8x2();
 			skip;
 		}
 
@@ -1231,19 +1237,22 @@ object_fn( window_canvas, clamp )
 	}
 }
 
-object_fn( window, add_window_canvas, window_canvas in_window_canvas )
+object_fn( window, add_view, view in_view )
 {
-	list_add( this->canvases, in_window_canvas );
+	list_add( this->views, in_view );
 }
 
 // window
+
+#define window_clear( WINDOW ) WINDOW->clear = yes
 
 object_fn( window, refresh )
 {
 	#if OS_LINUX
 		XClearArea( windows_display, this->handle, 0, 0, 0, 0, yes );
 	#elif OS_WINDOWS
-		InvalidateRect( this->handle, nothing, no );
+		InvalidateRect( this->handle, nothing, this->clear );
+		UpdateWindow( this->handle );
 	#endif
 }
 
@@ -1470,7 +1479,7 @@ fn _window_resize( window const this )
 {
 	out_if_any( this is nothing, this->size.w <= 1, this->size.h <= 1 );
 
-	this->using_buffer = this->using_buffer or( this->canvases->count > 1 ) or this->clear_before_present;
+	this->using_buffer = this->using_buffer or( this->views->count > 1 ); // or this->clear_before_present;
 
 	#if OS_LINUX
 		temp n4 const screen = DefaultScreen( windows_display );
@@ -1518,82 +1527,82 @@ fn _window_resize( window const this )
 		}
 	#endif
 
-	iter_list( this->canvases, wc_index )
+	iter_list( this->views, view_index )
 	{
-		temp window_canvas const this_wc = list_get_iter( wc_index, window_canvas );
+		temp view const this_view = list_get_iter( view_index, view );
 
-		with( this_wc->scaling )
+		with( this_view->scaling )
 		{
 			when( scaling_integer_fit_floor, scaling_integer_fit_round, scaling_integer_fit_ceil, scaling_rational_fit )
 			{
-				temp r4 const scale = r4_min( r4( this->size.w ) / r4( this_wc->canvas->size.w ), r4( this->size.h ) / r4( this_wc->canvas->size.h ) );
-				this_wc->scale.w = scale;
-				this_wc->scale.h = scale;
+				temp r4 const scale = r4_min( r4( this->size.w ) / r4( this_view->canvas->size.w ), r4( this->size.h ) / r4( this_view->canvas->size.h ) );
+				this_view->scale.w = scale;
+				this_view->scale.h = scale;
 				skip;
 			}
 
 			when( scaling_integer_fill_floor, scaling_integer_fill_round, scaling_integer_fill_ceil, scaling_rational_fill )
 			{
-				temp r4 const scale = r4_max( r4( this->size.w ) / r4( this_wc->canvas->size.w ), r4( this->size.h ) / r4( this_wc->canvas->size.h ) );
-				this_wc->scale.w = scale;
-				this_wc->scale.h = scale;
+				temp r4 const scale = r4_max( r4( this->size.w ) / r4( this_view->canvas->size.w ), r4( this->size.h ) / r4( this_view->canvas->size.h ) );
+				this_view->scale.w = scale;
+				this_view->scale.h = scale;
 				skip;
 			}
 
 			when( scaling_integer_stretch_floor, scaling_integer_stretch_round, scaling_integer_stretch_ceil, scaling_rational_stretch )
 			{
-				this_wc->scale.w = r4( this->size.w ) / r4( this_wc->canvas->size.w );
-				this_wc->scale.h = r4( this->size.h ) / r4( this_wc->canvas->size.h );
+				this_view->scale.w = r4( this->size.w ) / r4( this_view->canvas->size.w );
+				this_view->scale.h = r4( this->size.h ) / r4( this_view->canvas->size.h );
 				skip;
 			}
 
 			other skip;
 		}
 
-		with( this_wc->scaling )
+		with( this_view->scaling )
 		{
 			when( scaling_integer_stretch_floor )
 			{
-				this_wc->scale.w = r4_floor( this_wc->scale.w );
-				this_wc->scale.h = r4_floor( this_wc->scale.h );
+				this_view->scale.w = r4_floor( this_view->scale.w );
+				this_view->scale.h = r4_floor( this_view->scale.h );
 				skip;
 			}
 
 			when( scaling_integer_stretch_ceil )
 			{
-				this_wc->scale.w = r4_ceil( this_wc->scale.w );
-				this_wc->scale.h = r4_ceil( this_wc->scale.h );
+				this_view->scale.w = r4_ceil( this_view->scale.w );
+				this_view->scale.h = r4_ceil( this_view->scale.h );
 				skip;
 			}
 
 			when( scaling_integer_stretch_round )
 			{
-				this_wc->scale.w = r4_round( this_wc->scale.w );
-				this_wc->scale.h = r4_round( this_wc->scale.h );
+				this_view->scale.w = r4_round( this_view->scale.w );
+				this_view->scale.h = r4_round( this_view->scale.h );
 				skip;
 			}
 
 			when( scaling_integer_fit_floor, scaling_integer_fill_floor )
 			{
-				temp r4 const scale = r4_floor( this_wc->scale.w );
-				this_wc->scale.w = scale;
-				this_wc->scale.h = scale;
+				temp r4 const scale = r4_floor( this_view->scale.w );
+				this_view->scale.w = scale;
+				this_view->scale.h = scale;
 				skip;
 			}
 
 			when( scaling_integer_fit_ceil, scaling_integer_fill_ceil )
 			{
-				temp r4 const scale = r4_ceil( this_wc->scale.w );
-				this_wc->scale.w = scale;
-				this_wc->scale.h = scale;
+				temp r4 const scale = r4_ceil( this_view->scale.w );
+				this_view->scale.w = scale;
+				this_view->scale.h = scale;
 				skip;
 			}
 
 			when( scaling_integer_fit_round, scaling_integer_fill_round )
 			{
-				temp r4 const scale = r4_round( this_wc->scale.w );
-				this_wc->scale.w = scale;
-				this_wc->scale.h = scale;
+				temp r4 const scale = r4_round( this_view->scale.w );
+				this_view->scale.w = scale;
+				this_view->scale.h = scale;
 				skip;
 			}
 
@@ -1601,14 +1610,14 @@ fn _window_resize( window const this )
 		}
 
 		#if OS_LINUX
-			if( this_wc->pixmap )
+			if( this_view->pixmap )
 			{
-				XRenderFreePicture( windows_display, this_wc->picture );
-				XFreePixmap( windows_display, this_wc->pixmap );
+				XRenderFreePicture( windows_display, this_view->picture );
+				XFreePixmap( windows_display, this_view->pixmap );
 			}
 
-			this_wc->pixmap = XCreatePixmap( windows_display, this->handle, this_wc->canvas->size.w, this_wc->canvas->size.h, depth );
-			this_wc->picture = XRenderCreatePicture( windows_display, this_wc->pixmap, format, 0, 0 );
+			this_view->pixmap = XCreatePixmap( windows_display, this->handle, this_view->canvas->size.w, this_view->canvas->size.h, depth );
+			this_view->picture = XRenderCreatePicture( windows_display, this_view->pixmap, format, 0, 0 );
 		#endif
 	}
 
@@ -1619,10 +1628,10 @@ fn _window_tick_once( window const this )
 {
 	window_get_mouse_position( this, ref_of( this->mouse.x ), ref_of( this->mouse.y ) );
 
-	iter_list( this->canvases, wc_index )
+	iter_list( this->views, view_index )
 	{
-		temp window_canvas const this_wc = list_get_iter( wc_index, window_canvas );
-		this_wc->mouse = r4x2(r4(this->mouse.x - this_wc->pos.x) / this_wc->scale.w, r4(this->mouse.y - this_wc->pos.y) / this_wc->scale.h);
+		temp view const this_view = list_get_iter( view_index, view );
+		this_view->mouse = r8x2( r8( this->mouse.x - this_view->pos.x ) / this_view->scale.w, r8( this->mouse.y - this_view->pos.y ) / this_view->scale.h );
 	}
 
 	perm nano start_nano = 0;
@@ -1661,16 +1670,16 @@ fn _window_tick_once( window const this )
 
 fn _window_draw( window const this )
 {
-	iter_list( this->canvases, wc_index )
+	iter_list( this->views, view_index )
 	{
-		temp window_canvas const this_wc = list_get_iter( wc_index, window_canvas );
-		call( this_wc, fn_draw );
+		temp view const this_view = list_get_iter( view_index, view );
+		call( this_view, fn_draw );
 	}
 }
 
 fn _window_present( window const this )
 {
-	this->using_buffer = this->using_buffer or( this->canvases->count > 1 ) or this->clear_before_present;
+	this->using_buffer = this->using_buffer or this->views->count > 1;
 
 	#if OS_LINUX
 		perm GC gc = nothing;
@@ -1688,36 +1697,51 @@ fn _window_present( window const this )
 			transform.matrix[ 2 ][ 2 ] = XDoubleToFixed( 1.0 );
 			XPresentSelectInput( windows_display, this->handle, PresentCompleteNotifyMask );
 		}
+		temp Picture const target_picture = pick( this->using_buffer, this->buffer_picture, window_picture );
+		temp Drawable const target_drawable = pick( this->using_buffer, this->buffer, this->handle );
 	#elif OS_WINDOWS
 		temp HDC const target_dc = pick( this->using_buffer, this->buffer_dc, this->window_dc );
+		perm HBRUSH black_brush = nothing;
+		once black_brush = to( HBRUSH, GetStockObject( BLACK_BRUSH ) );
 	#endif
 
-	if( this->clear_before_present )
+	temp i4 const win_w = this->size.w;
+	temp i4 const win_h = this->size.h;
+	temp flag const needs_clear = this->clear;
+
+	this->clear = no;
+
+	if( needs_clear and this->using_buffer is yes )
 	{
 		#if OS_LINUX
-			XRenderFillRectangle( windows_display, PictOpSrc, pick( this->using_buffer, this->buffer_picture, window_picture ), ref_of( black ), 0, 0, this->size.w, this->size.h );
+			XRenderFillRectangle( windows_display, PictOpSrc, target_picture, ref_of( black ), 0, 0, win_w, win_h );
 		#elif OS_WINDOWS
-			PatBlt( target_dc, 0, 0, this->size.w, this->size.h, BLACKNESS );
+			PatBlt( target_dc, 0, 0, win_w, win_h, BLACKNESS );
 		#endif
 	}
 
-	iter_list( this->canvases, wc_index )
+	temp i4 view_l = 0;
+	temp i4 view_t = 0;
+	temp i4 view_r = win_w;
+	temp i4 view_b = win_h;
+
+	iter_list( this->views, view_index )
 	{
-		temp window_canvas const this_wc = list_get_iter( wc_index, window_canvas );
+		temp view const this_view = list_get_iter( view_index, view );
+		temp r8x2 const scaled_size = view_get_scaled_size( this_view );
 
-		temp i4 const pos_x = this_wc->pos.x;
-		temp i4 const pos_y = this_wc->pos.y;
-		temp r4 const scale_w = this_wc->scale.w;
-		temp r4 const scale_h = this_wc->scale.h;
-		temp i4 const canvas_w = this_wc->canvas->size.w;
-		temp i4 const canvas_h = this_wc->canvas->size.h;
+		skip_if( scaled_size.w is 0 or scaled_size.h is 0 );
 
-		temp i4 const scaled_w = i4( r4_round( r4( canvas_w ) * scale_w ) );
-		temp i4 const scaled_h = i4( r4_round( r4( canvas_h ) * scale_h ) );
-		skip_if( scaled_w is 0 or scaled_h is 0 );
+		temp i4 const canvas_w = this_view->canvas->size.w;
+		temp i4 const canvas_h = this_view->canvas->size.h;
+
+		view_l = i4( r8_round( this_view->pos.x ) );
+		view_t = i4( r8_round( this_view->pos.y ) );
+		view_r = i4( r8_round( this_view->pos.x + scaled_size.w ) );
+		view_b = i4( r8_round( this_view->pos.y + scaled_size.h ) );
 
 		#if OS_LINUX
-			this->image->data = to( byte ref, this_wc->canvas->pixels );
+			this->image->data = to( byte ref, this_view->canvas->pixels );
 			this->image->width = canvas_w;
 			this->image->height = canvas_h;
 			this->image->bytes_per_line = canvas_w << pixel_shift;
@@ -1726,58 +1750,108 @@ fn _window_present( window const this )
 			this->image.bmiHeader.biHeight = -canvas_h;
 		#endif
 
+		temp r8 const scale_w = this_view->scale.w;
+		temp r8 const scale_h = this_view->scale.h;
+
 		if( scale_w is 1.0 and scale_h is 1.0 )
 		{
 			#if OS_LINUX
-				XPutImage( windows_display, pick( this->using_buffer, this->buffer, this->handle ), gc, this->image, 0, 0, pos_x, pos_y, canvas_w, canvas_h );
+				XPutImage( windows_display, target_drawable, gc, this->image, 0, 0, view_l, view_t, canvas_w, canvas_h );
 			#elif OS_WINDOWS
-				SetDIBitsToDevice( target_dc, pos_x, pos_y, canvas_w, canvas_h, 0, 0, 0, canvas_h, this_wc->canvas->pixels, ref_of( this->image ), DIB_RGB_COLORS );
+				SetDIBitsToDevice( target_dc, view_l, view_t, canvas_w, canvas_h, 0, 0, 0, canvas_h, this_view->canvas->pixels, ref_of( this->image ), DIB_RGB_COLORS );
 			#endif
 		}
 		else
 		{
-			temp i4 const clip_x = i4_max( 0, pos_x );
-			temp i4 const clip_y = i4_max( 0, pos_y );
-			temp i4 const clip_r = i4_min( this->size.w, pos_x + scaled_w );
-			temp i4 const clip_b = i4_min( this->size.h, pos_y + scaled_h );
-			skip_if( clip_r <= clip_x or clip_b <= clip_y );
+			temp r8 const clip_l = r8_max( 0, this_view->pos.x );
+			temp r8 const clip_t = r8_max( 0, this_view->pos.y );
+			temp r8 const clip_r = r8_min( r8( win_w ), this_view->pos.x + scaled_size.w );
+			temp r8 const clip_b = r8_min( r8( win_h ), this_view->pos.y + scaled_size.h );
+			skip_if( clip_r <= clip_l or clip_b <= clip_t );
+
+			temp r8 const off_l = clip_l - this_view->pos.x;
+			temp r8 const off_t = clip_t - this_view->pos.y;
+			temp r8 const off_r = clip_r - this_view->pos.x;
+			temp r8 const off_b = clip_b - this_view->pos.y;
 
 			#if OS_LINUX
-				XPutImage( windows_display, this_wc->pixmap, gc, this->image, 0, 0, 0, 0, canvas_w, canvas_h );
-
-				transform.matrix[ 0 ][ 0 ] = XDoubleToFixed( 1.0 / r8( scale_w ) );
-				transform.matrix[ 1 ][ 1 ] = XDoubleToFixed( 1.0 / r8( scale_h ) );
-				XRenderSetPictureTransform( windows_display, this_wc->picture, ref_of( transform ) );
-
-				XRenderComposite( windows_display, PictOpSrc, this_wc->picture, None, pick( this->using_buffer, this->buffer_picture, window_picture ), clip_x - pos_x, clip_y - pos_y, 0, 0, clip_x, clip_y, clip_r - clip_x, clip_b - clip_y );
+				XPutImage( windows_display, this_view->pixmap, gc, this->image, 0, 0, 0, 0, canvas_w, canvas_h );
+				transform.matrix[ 0 ][ 0 ] = XDoubleToFixed( 1.0 / scale_w );
+				transform.matrix[ 1 ][ 1 ] = XDoubleToFixed( 1.0 / scale_h );
+				XRenderSetPictureTransform( windows_display, this_view->picture, ref_of( transform ) );
+				XRenderComposite( windows_display, PictOpSrc, this_view->picture, None, target_picture, i4( r8_round( off_l ) ), i4( r8_round( off_t ) ), 0, 0, i4( r8_round( clip_l ) ), i4( r8_round( clip_t ) ), i4( r8_round( clip_r - clip_l ) ), i4( r8_round( clip_b - clip_t ) ) );
 			#elif OS_WINDOWS
-				temp i4 const src_x = i4( r4_floor( r4( clip_x - pos_x ) / scale_w ) );
-				temp i4 const src_y = i4( r4_floor( r4( clip_y - pos_y ) / scale_h ) );
-				temp i4 const src_w = i4( r4_ceil( r4( clip_r - pos_x ) / scale_w ) ) - src_x;
-				temp i4 const src_h = i4( r4_ceil( r4( clip_b - pos_y ) / scale_h ) ) - src_y;
+				temp r8 const src_l = r8_floor( off_l / scale_w );
+				temp r8 const src_t = r8_floor( off_t / scale_h );
+				temp r8 const src_r = r8_ceil( off_r / scale_w );
+				temp r8 const src_b = r8_ceil( off_b / scale_h );
 
-				if( scale_w < 1.0 or scale_h < 1.0 )
-				{
-					SetStretchBltMode( target_dc, HALFTONE );
-					SetBrushOrgEx( target_dc, 0, 0, nothing );
-				}
-				else
-				{
-					SetStretchBltMode( target_dc, COLORONCOLOR );
-				}
-				StretchDIBits( target_dc, pos_x + i4( r4( src_x ) * scale_w ), pos_y + i4( r4( src_y ) * scale_h ), i4( r4( src_w ) * scale_w ), i4( r4( src_h ) * scale_h ), src_x, canvas_h - src_y - src_h, src_w, src_h, this_wc->canvas->pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
+				SetStretchBltMode( target_dc, pick( scale_w < 1.0 or scale_h < 1.0, HALFTONE, COLORONCOLOR ) );
+				StretchDIBits( target_dc, i4( r8_round( this_view->pos.x + src_l * scale_w ) ), i4( r8_round( this_view->pos.y + src_t * scale_h ) ), i4( r8_round( ( src_r - src_l ) * scale_w ) ), i4( r8_round( ( src_b - src_t ) * scale_h ) ), i4( src_l ), i4( r8( canvas_h ) - src_b ), i4( src_r - src_l ), i4( src_b - src_t ), this_view->canvas->pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
 			#endif
 		}
 	}
 
-	if( this->using_buffer )
+	if( needs_clear and this->using_buffer is no )
+	{
+		temp i4 const ct = i4_max( 0, view_t );
+		temp i4 const cb = i4_min( win_h, view_b );
+
+		if( view_t > 0 )
+		{
+			#if OS_LINUX
+				XRenderFillRectangle( windows_display, PictOpSrc, window_picture, ref_of( black ), 0, 0, win_w, view_t );
+			#elif OS_WINDOWS
+				RECT rc = { 0, 0, win_w, view_t };
+				FillRect( target_dc, ref_of( rc ), black_brush );
+			#endif
+		}
+
+		if( view_b < win_h )
+		{
+			#if OS_LINUX
+				XRenderFillRectangle( windows_display, PictOpSrc, window_picture, ref_of( black ), 0, view_b, win_w, win_h - view_b );
+			#elif OS_WINDOWS
+				RECT rc = { 0, view_b, win_w, win_h };
+				FillRect( target_dc, ref_of( rc ), black_brush );
+			#endif
+		}
+
+		if( view_l > 0 )
+		{
+			#if OS_LINUX
+				XRenderFillRectangle( windows_display, PictOpSrc, window_picture, ref_of( black ), 0, ct, view_l, cb - ct );
+			#elif OS_WINDOWS
+				RECT rc = { 0, ct, view_l, cb };
+				FillRect( target_dc, ref_of( rc ), black_brush );
+			#endif
+		}
+
+		if( view_r < win_w )
+		{
+			#if OS_LINUX
+				XRenderFillRectangle( windows_display, PictOpSrc, window_picture, ref_of( black ), view_r, ct, win_w - view_r, cb - ct );
+			#elif OS_WINDOWS
+				RECT rc = { view_r, ct, win_w, cb };
+				FillRect( target_dc, ref_of( rc ), black_brush );
+			#endif
+		}
+	}
+
+	if( this->using_buffer is yes )
 	{
 		#if OS_LINUX
 			XPresentPixmap( windows_display, this->handle, this->buffer, 0, 0, 0, 0, 0, 0, 0, 0, PresentOptionAsync, 0, 0, 0, 0, 0 );
 		#elif OS_WINDOWS
-			BitBlt( this->window_dc, 0, 0, this->size.w, this->size.h, this->buffer_dc, 0, 0, SRCCOPY );
+			BitBlt( this->window_dc, 0, 0, win_w, win_h, this->buffer_dc, 0, 0, SRCCOPY );
 		#endif
 	}
+	#if OS_WINDOWS
+		else
+		{
+			GdiFlush();
+		}
+	#endif
 }
 
 ////////
@@ -1832,7 +1906,6 @@ group( window_event_type, n2 )
 
 			when( WM_ERASEBKGND )
 			{
-				skip_if( this->clear_before_present is yes );
 				out 1;
 			}
 
@@ -1887,7 +1960,17 @@ group( window_event_type, n2 )
 				skip_if( e->xexpose.count isnt 0 );
 			#endif
 
+			#if OS_WINDOWS
+				PAINTSTRUCT ps;
+				BeginPaint( this->handle, & ps );
+			#endif
+			//ValidateRect(this->handle, nothing);
 			_window_present( this );
+
+			#if OS_WINDOWS
+
+				EndPaint( this->handle, & ps );
+			#endif
 			skip;
 		}
 
@@ -2088,7 +2171,7 @@ new_object_fn( window, byte const ref const name, n2 const width, n2 const heigh
 	out_window->size.w = width;
 	out_window->size.h = height;
 
-	out_window->canvases = new_list( window_canvas );
+	out_window->views = new_list( view );
 
 	out_window->bordered = yes;
 
@@ -2106,12 +2189,11 @@ new_object_fn( window, byte const ref const name, n2 const width, n2 const heigh
 
 		out_window->image = XCreateImage( windows_display, DefaultVisual( windows_display, screen ), DefaultDepth( windows_display, screen ), ZPixmap, 0, nothing, width, height, 32, 0 );
 	#elif OS_WINDOWS
-		WNDCLASS wc = { 0 };
-		wc.lpfnWndProc = to( type_of( wc.lpfnWndProc ), window_process_event );
-		wc.hInstance = GetModuleHandle( nothing );
-		wc.lpszClassName = out_window->name->bytes;
-		wc.hbrBackground = to( type_of( wc.hbrBackground ), GetStockObject( BLACK_BRUSH ) );
-		RegisterClass( ref_of( wc ) );
+		WNDCLASS wclass = { 0 };
+		wclass.lpfnWndProc = to( type_of( wclass.lpfnWndProc ), window_process_event );
+		wclass.hInstance = GetModuleHandle( nothing );
+		wclass.lpszClassName = out_window->name->bytes;
+		RegisterClass( ref_of( wclass ) );
 
 		RECT rect = { 0, 0, width, height };
 		AdjustWindowRect( ref_of( rect ), WS_OVERLAPPEDWINDOW, FALSE );
@@ -2138,11 +2220,11 @@ new_object_fn( window, byte const ref const name, n2 const width, n2 const heigh
 delete_object_fn( window )
 {
 	delete_text( this->name );
-	iter_list( this->canvases, canvas_id )
+	iter_list( this->views, canvas_id )
 	{
-		delete_window_canvas( list_get_iter( canvas_id, window_canvas ) );
+		delete_view( list_get_iter( canvas_id, view ) );
 	}
-	delete_list( this->canvases );
+	delete_list( this->views );
 	delete_list( this->inputs_pressed );
 	delete_list( this->inputs_released );
 
@@ -2180,7 +2262,7 @@ fn _window_process( window const this )
 	{
 		_window_resize( this );
 		window_center( this );
-		call(this, fn_start);
+		call( this, fn_start );
 	}
 	else if( this->tick is 2 )
 	{
@@ -2337,7 +2419,7 @@ fn _C7H16_loop()
 			now = get_nano();
 			if( wake_time > now )
 			{
-					nano_sleep( wake_time - now );
+				nano_sleep( wake_time - now );
 			}
 		}
 	}
