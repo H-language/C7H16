@@ -465,8 +465,38 @@ fn nano_sleep( nano const time )
 	#endif
 }
 
-////////
-// pixel
+////////////////////////////////
+/// anchor
+
+group( anchor )
+{
+	anchor_top_left = 0x00, // 0000 0000
+	anchor_top_center = 0x01, // 0000 0001
+	anchor_top_right = 0x02, // 0000 0010
+	anchor_middle_left = 0x10, // 0001 0000
+	anchor_middle_center = 0x11, // 0001 0001
+	anchor_middle_right = 0x12, // 0001 0010
+	anchor_bottom_left = 0x20, // 0010 0000
+	anchor_bottom_center = 0x21, // 0010 0001
+	anchor_bottom_right = 0x22 // 0010 0010
+};
+
+embed n2 anchor_get_x( anchor const anchor, n2 const region_width, n2 const object_width )
+{
+	temp n1 const h_align = anchor & 0x0F;
+	temp n2 const offset = region_width - object_width;
+	out pick( h_align is 1, offset >> 1, pick( h_align is 2, offset, 0 ) );
+}
+
+embed n2 anchor_get_y( anchor const anchor, n2 const region_height, n2 const object_height )
+{
+	temp const n1 v_align = anchor >> 4;
+	temp n2 const offset = region_height - object_height;
+	out pick( v_align is 1, offset >> 1, pick( v_align is 2, offset, 0 ) );
+}
+
+////////////////////////////////
+/// pixel
 
 // BGRA for X11/Windows (little-endian)
 #if IS_BIG_ENDIAN
@@ -679,6 +709,10 @@ object_fn( canvas, fill, pixel const color )
 ////////////////////////////////
 /// line
 
+#define LINE_FN_SHIFT 20
+#define LINE_FN_HALF ( 1 << ( LINE_FN_SHIFT - 1 ) )
+#define LINE_FN_SCALE ( 1 << LINE_FN_SHIFT )
+
 #define _line_fn( _LINE_FN, Ax, Ay, Bx, By, X_NAME, Y_NAME, CODE )\
 	START_DEF\
 	{\
@@ -688,20 +722,20 @@ object_fn( canvas, fill, pixel const color )
 		temp const i2 _LINE_FN##_y2 = i2( By );\
 		temp const i2 _LINE_FN##_xd = _LINE_FN##_x2 - X_NAME;\
 		temp const i2 _LINE_FN##_yd = _LINE_FN##_y2 - Y_NAME;\
-		temp i4 _LINE_FN##_hs = ( i4( X_NAME ) << 20 ) + 0x80000;\
-		temp i4 _LINE_FN##_vs = ( i4( Y_NAME ) << 20 ) + 0x80000;\
+		temp i4 _LINE_FN##_hs = ( i4( X_NAME ) << LINE_FN_SHIFT ) + LINE_FN_HALF;\
+		temp i4 _LINE_FN##_vs = ( i4( Y_NAME ) << LINE_FN_SHIFT ) + LINE_FN_HALF;\
 		temp const i2 _LINE_FN##_ax = ABS( _LINE_FN##_xd );\
 		temp const i2 _LINE_FN##_ay = ABS( _LINE_FN##_yd );\
 		temp i2 _LINE_FN##_a = pick( _LINE_FN##_ax > _LINE_FN##_ay, _LINE_FN##_ax, _LINE_FN##_ay );\
-		temp const i4 _LINE_FN##_recip = 0x100000 / i4( MAX( _LINE_FN##_a, 1 ) );\
+		temp const i4 _LINE_FN##_recip = LINE_FN_SCALE / i4( MAX( _LINE_FN##_a, 1 ) );\
 		temp const i4 _LINE_FN##_xs = i4( _LINE_FN##_xd ) * _LINE_FN##_recip;\
 		temp const i4 _LINE_FN##_ys = i4( _LINE_FN##_yd ) * _LINE_FN##_recip;\
 		temp const i2 _LINE_FN##_i = 0;\
 		++_LINE_FN##_a;\
 		do\
 		{\
-			X_NAME = i2( _LINE_FN##_hs >> 20 );\
-			Y_NAME = i2( _LINE_FN##_vs >> 20 );\
+			X_NAME = i2( _LINE_FN##_hs >> LINE_FN_SHIFT );\
+			Y_NAME = i2( _LINE_FN##_vs >> LINE_FN_SHIFT );\
 			CODE;\
 			_LINE_FN##_hs += _LINE_FN##_xs;\
 			_LINE_FN##_vs += _LINE_FN##_ys;\
@@ -713,9 +747,57 @@ object_fn( canvas, fill, pixel const color )
 #define _line_fn_eval( _LINE_FN, Ax, Ay, Bx, By, X_NAME, Y_NAME, CODE ) _line_fn( _LINE_FN, Ax, Ay, Bx, By, X_NAME, Y_NAME, CODE )
 #define line_fn( Ax, Ay, Bx, By, X_NAME, Y_NAME, CODE ) _line_fn_eval( JOIN( _LINE_FN_, __COUNTER__ ), Ax, Ay, Bx, By, X_NAME, Y_NAME, CODE )
 
+#define _line_h_fn( _LINE_H_FN, Ax, Ay, Bx, X_NAME, Y_NAME, CODE )\
+	START_DEF\
+	{\
+		temp i2 X_NAME = i2( Ax );\
+		temp const i2 Y_NAME = i2( Ay );\
+		temp const i2 _LINE_H_FN##_x2 = i2( Bx );\
+		temp const i2 _LINE_H_FN##_step = pick( _LINE_H_FN##_x2 >= X_NAME, 1, -1 );\
+		temp i2 _LINE_H_FN##_count = ABS( _LINE_H_FN##_x2 - X_NAME ) + 1;\
+		do\
+		{\
+			CODE;\
+			X_NAME += _LINE_H_FN##_step;\
+		}\
+		while( --_LINE_H_FN##_count );\
+	}\
+	END_DEF
+
+#define _line_h_fn_eval( _LINE_H_FN, Ax, Ay, Bx, X_NAME, Y_NAME, CODE ) _line_h_fn( _LINE_H_FN, Ax, Ay, Bx, X_NAME, Y_NAME, CODE )
+#define line_h_fn( Ax, Ay, Bx, X_NAME, Y_NAME, CODE ) _line_h_fn_eval( JOIN( _LINE_H_FN_, __COUNTER__ ), Ax, Ay, Bx, X_NAME, Y_NAME, CODE )
+
+#define _line_v_fn( _LINE_V_FN, Ax, Ay, By, X_NAME, Y_NAME, CODE )\
+	START_DEF\
+	{\
+		temp const i2 X_NAME = i2( Ax );\
+		temp i2 Y_NAME = i2( Ay );\
+		temp const i2 _LINE_V_FN##_y2 = i2( By );\
+		temp const i2 _LINE_V_FN##_step = pick( _LINE_V_FN##_y2 >= Y_NAME, 1, -1 );\
+		temp i2 _LINE_V_FN##_count = ABS( _LINE_V_FN##_y2 - Y_NAME ) + 1;\
+		do\
+		{\
+			CODE;\
+			Y_NAME += _LINE_V_FN##_step;\
+		}\
+		while( --_LINE_V_FN##_count );\
+	}\
+	END_DEF
+
+#define _line_v_fn_eval( _LINE_V_FN, Ax, Ay, By, X_NAME, Y_NAME, CODE ) _line_v_fn( _LINE_V_FN, Ax, Ay, By, X_NAME, Y_NAME, CODE )
+#define line_v_fn( Ax, Ay, By, X_NAME, Y_NAME, CODE ) _line_v_fn_eval( JOIN( _LINE_V_FN_, __COUNTER__ ), Ax, Ay, By, X_NAME, Y_NAME, CODE )
+
 #define _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, SUFFIX... ) line_fn( Ax, Ay, Bx, By, _X, _Y, canvas_draw_pixel##SUFFIX( CANVAS, _X, _Y, PIXEL ) );
 #define canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL )
 #define canvas_draw_line_safe( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, _safe )
+
+#define _canvas_draw_line_h( CANVAS, Ax, Ay, Bx, PIXEL, SUFFIX... ) line_h_fn( Ax, Ay, Bx, _X, _Y, canvas_draw_pixel##SUFFIX( CANVAS, _X, _Y, PIXEL ) );
+#define canvas_draw_line_h( CANVAS, Ax, Ay, Bx, PIXEL ) _canvas_draw_line_h( CANVAS, Ax, Ay, Bx, PIXEL )
+#define canvas_draw_line_h_safe( CANVAS, Ax, Ay, Bx, PIXEL ) _canvas_draw_line_h( CANVAS, Ax, Ay, Bx, PIXEL, _safe )
+
+#define _canvas_draw_line_v( CANVAS, Ax, Ay, By, PIXEL, SUFFIX... ) line_v_fn( Ax, Ay, By, _X, _Y, canvas_draw_pixel##SUFFIX( CANVAS, _X, _Y, PIXEL ) );
+#define canvas_draw_line_v( CANVAS, Ax, Ay, By, PIXEL ) _canvas_draw_line_v( CANVAS, Ax, Ay, By, PIXEL )
+#define canvas_draw_line_v_safe( CANVAS, Ax, Ay, By, PIXEL ) _canvas_draw_line_v( CANVAS, Ax, Ay, By, PIXEL, _safe )
 
 ////////////////////////////////
 /// box
@@ -758,6 +840,170 @@ object_fn( canvas, fill, pixel const color )
 #define _canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL, SUFFIX... ) box_fn( TLx, TLy, BRx, BRy, _X, _Y, canvas_draw_pixel##SUFFIX( CANVAS, _X, _Y, PIXEL ) );
 #define canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL ) _canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL )
 #define canvas_draw_box_safe( CANVAS, TLx, TLy, BRx, BRy, PIXEL ) _canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL, _safe )
+
+////////////////////////////////
+/// canvas to canvas
+
+#define canvas_draw_canvas( TO_CANVAS, FROM_CANVAS, TLx, TLy )\
+	START_DEF\
+	{\
+		temp const n2 _bytes_per_row = FROM_CANVAS->size.w << pixel_shift;\
+		temp pixel ref _to_ref = TO_CANVAS->pixels + ( TLx ) + ( ( TLy ) * TO_CANVAS->size.w );\
+		temp const pixel ref _from_ref = FROM_CANVAS->pixels;\
+		temp const i4 _to_step = TO_CANVAS->size.w;\
+		temp const i4 _from_step = FROM_CANVAS->size.w;\
+		temp i2 _h = FROM_CANVAS->size.h;\
+		do\
+		{\
+			bytes_copy( _to_ref, _from_ref, _bytes_per_row );\
+			_to_ref += _to_step;\
+			_from_ref += _from_step;\
+		}\
+		while( --_h );\
+	}\
+	END_DEF
+
+#define canvas_draw_canvas_safe( TO_CANVAS, FROM_CANVAS, TLx, TLy )\
+	START_DEF\
+	{\
+		temp const i2 _TLx = TLx;\
+		temp const i2 _X = MAX( 0, _TLx );\
+		temp const i2 _OFFX = _X - _TLx;\
+		temp const i2 _W = i2_min( TO_CANVAS->size.w - _X, FROM_CANVAS->size.w - _OFFX );\
+		skip_if( _W <= 0 );\
+		temp const i2 _TLy = TLy;\
+		temp const i2 _start_y = MAX( 0, _TLy );\
+		temp const i2 _H = i2_min( TO_CANVAS->size.h, _TLy + FROM_CANVAS->size.h ) - _start_y;\
+		skip_if( _H <= 0 );\
+		temp const i2 _bytes_per_row = _W << pixel_shift;\
+		temp pixel ref _to_ref = TO_CANVAS->pixels + _start_y * TO_CANVAS->size.w + _X;\
+		temp const pixel ref _from_ref = FROM_CANVAS->pixels + ( _start_y - _TLy ) * FROM_CANVAS->size.w + _OFFX;\
+		temp const i4 _to_step = TO_CANVAS->size.w;\
+		temp const i4 _from_step = FROM_CANVAS->size.w;\
+		temp i2 _h = _H;\
+		do\
+		{\
+			bytes_copy( _to_ref, _from_ref, _bytes_per_row );\
+			_to_ref += _to_step;\
+			_from_ref += _from_step;\
+		}\
+		while( --_h );\
+	}\
+	END_DEF
+
+#define canvas_draw_canvas_trans( TO_CANVAS, FROM_CANVAS, TLx, TLy )\
+	START_DEF\
+	{\
+		temp pixel ref _to_ref = TO_CANVAS->pixels + ( TLy ) * TO_CANVAS->size.w + ( TLx );\
+		temp const pixel ref _from_ref = FROM_CANVAS->pixels;\
+		temp const i2 _width = FROM_CANVAS->size.w;\
+		temp const i4 _to_step = TO_CANVAS->size.w - _width;\
+		temp i2 _h = FROM_CANVAS->size.h;\
+		do\
+		{\
+			temp i2 _w = _width;\
+			do\
+			{\
+				if( _from_ref->a )\
+				{\
+					val_of( _to_ref ) = val_of( _from_ref );\
+				}\
+				++_to_ref;\
+				++_from_ref;\
+			}\
+			while( --_w );\
+			_to_ref += _to_step;\
+		}\
+		while( --_h );\
+	}\
+	END_DEF
+
+#define canvas_draw_canvas_trans_safe( TO_CANVAS, FROM_CANVAS, TLx, TLy )\
+	START_DEF\
+	{\
+		temp const i2 _TLx = TLx;\
+		temp const i2 _X = MAX( 0, _TLx );\
+		temp const i2 _OFFX = _X - _TLx;\
+		temp const i2 _W = i2_min( TO_CANVAS->size.w - _X, FROM_CANVAS->size.w - _OFFX );\
+		skip_if( _W <= 0 );\
+		temp const i2 _TLy = TLy;\
+		temp const i2 _start_y = MAX( 0, _TLy );\
+		temp const i2 _H = i2_min( TO_CANVAS->size.h, _TLy + FROM_CANVAS->size.h ) - _start_y;\
+		skip_if( _H <= 0 );\
+		temp pixel ref _to_ref = TO_CANVAS->pixels + _start_y * TO_CANVAS->size.w + _X;\
+		temp const pixel ref _from_ref = FROM_CANVAS->pixels + ( _start_y - _TLy ) * FROM_CANVAS->size.w + _OFFX;\
+		temp const i4 _to_step = TO_CANVAS->size.w - _W;\
+		temp const i4 _from_step = FROM_CANVAS->size.w - _W;\
+		temp i2 _h = _H;\
+		do\
+		{\
+			temp i2 _w = _W;\
+			do\
+			{\
+				if( _from_ref->a )\
+				{\
+					val_of( _to_ref ) = val_of( _from_ref );\
+				}\
+				++_to_ref;\
+				++_from_ref;\
+			}\
+			while( --_w );\
+			_to_ref += _to_step;\
+			_from_ref += _from_step;\
+		}\
+		while( --_h );\
+	}\
+	END_DEF
+
+#define canvas_draw_canvas_part( TO_CANVAS, FROM_CANVAS, TLx, TLy, PART_TLx, PART_TLy, PART_SIZEw, PART_SIZEh )\
+	START_DEF\
+	{\
+		temp const n2 _bytes_per_row = ( PART_SIZEw ) << pixel_shift;\
+		temp pixel ref _to_ref = TO_CANVAS->pixels + ( TLy ) * TO_CANVAS->size.w + ( TLx );\
+		temp const pixel ref _from_ref = FROM_CANVAS->pixels + ( PART_TLy ) * FROM_CANVAS->size.w + ( PART_TLx );\
+		temp const i4 _to_step = TO_CANVAS->size.w;\
+		temp const i4 _from_step = FROM_CANVAS->size.w;\
+		temp i2 _y = PART_SIZEh;\
+		do\
+		{\
+			bytes_copy( _to_ref, _from_ref, _bytes_per_row );\
+			_to_ref += _to_step;\
+			_from_ref += _from_step;\
+		}\
+		while( --_y );\
+	}\
+	END_DEF
+
+#define canvas_draw_canvas_part_safe( TO_CANVAS, FROM_CANVAS, TLx, TLy, PART_TLx, PART_TLy, PART_SIZEw, PART_SIZEh )\
+	START_DEF\
+	{\
+		temp const i2 _TLx = TLx;\
+		temp const i2 _to_x = MAX( 0, _TLx );\
+		temp const i2 _offset_x = _to_x - _TLx;\
+		temp const i2 _from_x = PART_TLx + _offset_x;\
+		temp const i2 _W = i2_min3( TO_CANVAS->size.w - _to_x, FROM_CANVAS->size.w - _from_x, PART_SIZEw - _offset_x );\
+		skip_if( _W <= 0 );\
+		temp const i2 _TLy = TLy;\
+		temp const i2 _to_y = MAX( 0, _TLy );\
+		temp const i2 _offset_y = _to_y - _TLy;\
+		temp const i2 _from_y = PART_TLy + _offset_y;\
+		temp const i2 _H = i2_min3( TO_CANVAS->size.h - _to_y, FROM_CANVAS->size.h - _from_y, PART_SIZEh - _offset_y );\
+		skip_if( _H <= 0 );\
+		temp const i2 _bytes_per_row = _W << pixel_shift;\
+		temp pixel ref _to_ref = TO_CANVAS->pixels + ( _to_y * TO_CANVAS->size.w ) + _to_x;\
+		temp const pixel ref _from_ref = FROM_CANVAS->pixels + ( _from_y * FROM_CANVAS->size.w ) + _from_x;\
+		temp const i4 _to_step = TO_CANVAS->size.w;\
+		temp const i4 _from_step = FROM_CANVAS->size.w;\
+		temp i2 _h = _H;\
+		do\
+		{\
+			bytes_copy( _to_ref, _from_ref, _bytes_per_row );\
+			_to_ref += _to_step;\
+			_from_ref += _from_step;\
+		}\
+		while( --_h );\
+	}\
+	END_DEF
 
 ////////////////////////////////
 /// inputs
@@ -1015,11 +1261,12 @@ object( view )
 	sizing_mode sizing;
 	scaling_mode scaling;
 
+	flag update;
 	view_fn fn_draw;
 
-	r8x2 pos;
-	r8x2 scale;
-	r8x2 mouse;
+	r4x2 pos;
+	r4x2 scale;
+	r4x2 mouse;
 
 	#if OS_LINUX
 		Pixmap pixmap;
@@ -1036,8 +1283,9 @@ new_object_fn( view, canvas const canvas, sizing_mode const sizing, scaling_mode
 	out_view->canvas = canvas;
 	out_view->sizing = sizing;
 	out_view->scaling = scaling;
+	out_view->update = yes;
 	out_view->fn_draw = fn_draw;
-	out_view->scale = r8x2( 1.0, 1.0 );
+	out_view->scale = r4x2( 1.0, 1.0 );
 	out out_view;
 }
 
@@ -1048,22 +1296,27 @@ delete_object_fn( view )
 	delete_object( this );
 }
 
-#define view_get_scaled_size( VIEW ) r8x2( r8( VIEW->canvas->size.w ) * VIEW->scale.w, r8( VIEW->canvas->size.h ) * VIEW->scale.h )
+#define view_get_scaled_size( VIEW ) r4x2( r4( VIEW->canvas->size.w ) * VIEW->scale.w, r4( VIEW->canvas->size.h ) * VIEW->scale.h )
 
-object_fn( view, set_scale, r8x2 const scale )
+object_fn( view, set_scale, r4x2 const scale )
 {
 	this->scale = scale;
 	this->scaling = scaling_manual;
 }
-#define view_set_scale( WINDOW_CANVAS, WIDTH_SCALE, HEIGHT_SCALE... ) view_set_scale( WINDOW_CANVAS, r8x2( WIDTH_SCALE, DEFAULT( WIDTH_SCALE, HEIGHT_SCALE ) ) )
+#define view_set_scale( WINDOW_CANVAS, WIDTH_SCALE, HEIGHT_SCALE... ) view_set_scale( WINDOW_CANVAS, r4x2( WIDTH_SCALE, DEFAULT( WIDTH_SCALE, HEIGHT_SCALE ) ) )
 
-object_fn( view, zoom, i4 const x, i4 const y, r8 const factor )
+object_fn( view, zoom, i4 const x, i4 const y, r4 const factor )
 {
-	temp r8 const new_scale = r8_clamp( this->scale.w * factor, 0.2, 200.0 );
-	temp r8 const actual_factor = new_scale / this->scale.w;
-	this->pos.x = r8( x ) - r8( x - this->pos.x ) * actual_factor;
-	this->pos.y = r8( y ) - r8( y - this->pos.y ) * actual_factor;
+	temp r4 const new_scale = r4_clamp( this->scale.w * factor, 0.2, 200.0 );
+	temp r4 const actual_factor = new_scale / this->scale.w;
+	this->pos.x = r4( x ) - r4( x - this->pos.x ) * actual_factor;
+	this->pos.y = r4( y ) - r4( y - this->pos.y ) * actual_factor;
 	view_set_scale( this, new_scale, new_scale );
+}
+
+object_fn( view, update )
+{
+	this->update = yes;
 }
 
 ////////
@@ -1094,13 +1347,14 @@ object( window )
 	list views;
 	n2x2 size;
 
-	flag clear;
-	flag visible;
-	flag bordered;
-	flag close;
+	flag clear : 1;
+	flag visible : 1;
+	flag bordered : 1;
+	flag close : 1;
+	flag changed_cursor : 1;
 
 	n8 tick;
-	r8 delta_time;
+	r4 delta_time;
 
 	byte inputs[ inputs_count ];
 	n1 inputs_active;
@@ -1112,7 +1366,8 @@ object( window )
 	window_fn fn_start;
 	window_fn fn_resize;
 	window_fn fn_tick;
-};
+}
+packed;
 
 global window current_window = nothing;
 global list windows = nothing;
@@ -1193,43 +1448,45 @@ embed n2 const display_get_fps()
 
 object_fn( view, center )
 {
+	out_if_nothing( this->canvas );
+	//
 	temp i4 const scaled_w = i4( r4_round( r4( this->canvas->size.w ) * this->scale.w ) );
 	temp i4 const scaled_h = i4( r4_round( r4( this->canvas->size.h ) * this->scale.h ) );
-	this->pos.x = r8( i4( current_window->size.w ) - scaled_w ) * 0.5;
-	this->pos.y = r8( i4( current_window->size.h ) - scaled_h ) * 0.5;
+	this->pos.x = r4( i4( current_window->size.w ) - scaled_w ) * 0.5;
+	this->pos.y = r4( i4( current_window->size.h ) - scaled_h ) * 0.5;
 }
 
 object_fn( view, clamp )
 {
-	temp r8x2 const scaled_size = view_get_scaled_size( this );
+	temp r4x2 const scaled_size = view_get_scaled_size( this );
 
 	with( this->scaling )
 	{
 		when( scaling_rational_fit, scaling_integer_fit_floor, scaling_integer_fit_round, scaling_integer_fit_ceil )
 		{
-			this->pos.x = r8_clamp( this->pos.x, 0, r8( current_window->size.w ) - scaled_size.w );
-			this->pos.y = r8_clamp( this->pos.y, 0, r8( current_window->size.h ) - scaled_size.h );
+			this->pos.x = r4_clamp( this->pos.x, 0, r4( current_window->size.w ) - scaled_size.w );
+			this->pos.y = r4_clamp( this->pos.y, 0, r4( current_window->size.h ) - scaled_size.h );
 			skip;
 		}
 
 		when( scaling_rational_fill, scaling_integer_fill_floor, scaling_integer_fill_round, scaling_integer_fill_ceil )
 		{
-			this->pos.x = r8_clamp( this->pos.x, r8( current_window->size.w ) - scaled_size.w, 0 );
-			this->pos.y = r8_clamp( this->pos.y, r8( current_window->size.h ) - scaled_size.h, 0 );
+			this->pos.x = r4_clamp( this->pos.x, r4( current_window->size.w ) - scaled_size.w, 0 );
+			this->pos.y = r4_clamp( this->pos.y, r4( current_window->size.h ) - scaled_size.h, 0 );
 			skip;
 		}
 
 		when( scaling_manual )
 		{
 			temp i4 const margin = i4_min( current_window->size.w, current_window->size.h ) >> 2;
-			this->pos.x = r8_clamp( this->pos.x, -scaled_size.w + r8( margin ), r8( i4( current_window->size.w ) - margin ) );
-			this->pos.y = r8_clamp( this->pos.y, -scaled_size.h + r8( margin ), r8( i4( current_window->size.h ) - margin ) );
+			this->pos.x = r4_clamp( this->pos.x, -scaled_size.w + r4( margin ), r4( i4( current_window->size.w ) - margin ) );
+			this->pos.y = r4_clamp( this->pos.y, -scaled_size.h + r4( margin ), r4( i4( current_window->size.h ) - margin ) );
 			skip;
 		}
 
 		when( scaling_rational_stretch )
 		{
-			this->pos = r8x2();
+			this->pos = r4x2();
 			skip;
 		}
 
@@ -1246,13 +1503,13 @@ object_fn( window, add_view, view in_view )
 
 #define window_clear( WINDOW ) WINDOW->clear = yes
 
-object_fn( window, refresh )
+object_fn( window, update )
 {
 	#if OS_LINUX
 		XClearArea( windows_display, this->handle, 0, 0, 0, 0, yes );
 	#elif OS_WINDOWS
 		InvalidateRect( this->handle, nothing, this->clear );
-		UpdateWindow( this->handle );
+		//UpdateWindow( this->handle );
 	#endif
 }
 
@@ -1458,6 +1715,39 @@ object_fn( window, center )
 }
 
 ////////
+// cursor
+
+group( cursor_type, i4 )
+{
+	cursor_arrow = PICK( OS_LINUX, XC_left_ptr, 32512 ),
+	cursor_hand = PICK( OS_LINUX, XC_hand2, 32649 ),
+	cursor_text = PICK( OS_LINUX, XC_xterm, 32513 ),
+	cursor_crosshair = PICK( OS_LINUX, XC_crosshair, 32515 ),
+	cursor_move = PICK( OS_LINUX, XC_fleur, 32646 ),
+	cursor_size_horizontal = PICK( OS_LINUX, XC_sb_h_double_arrow, 32644 ),
+	cursor_size_vertical = PICK( OS_LINUX, XC_sb_v_double_arrow, 32645 ),
+	cursor_size_nwse = PICK( OS_LINUX, XC_bottom_right_corner, 32642 ),
+	cursor_size_nesw = PICK( OS_LINUX, XC_bottom_left_corner, 32643 ),
+	cursor_wait = PICK( OS_LINUX, XC_watch, 32514 ),
+	cursor_not_allowed = PICK( OS_LINUX, XC_X_cursor, 32648 )
+};
+
+object_fn( window, set_cursor, cursor_type const cursor )
+{
+	this->changed_cursor = yes;
+	#if OS_LINUX
+		perm Cursor cache[ 256 ] = { 0 };
+		if( not cache[ cursor ] )
+		{
+			cache[ cursor ] = XCreateFontCursor( this->display, cursor );
+		}
+		XDefineCursor( this->display, this->handle, cache[ cursor ] );
+	#else
+		SetCursor( LoadCursor( NULL, MAKEINTRESOURCE( cursor ) ) );
+	#endif
+}
+
+////////
 // hidden window functions
 
 fn _window_clear_inputs( window const this )
@@ -1527,7 +1817,7 @@ fn _window_resize( window const this )
 		}
 	#endif
 
-	iter_list( this->views, view_index )
+	list_iter( this->views, view_index )
 	{
 		temp view const this_view = list_get_iter( view_index, view );
 
@@ -1628,23 +1918,23 @@ fn _window_tick_once( window const this )
 {
 	window_get_mouse_position( this, ref_of( this->mouse.x ), ref_of( this->mouse.y ) );
 
-	iter_list( this->views, view_index )
+	list_iter( this->views, view_index )
 	{
 		temp view const this_view = list_get_iter( view_index, view );
-		this_view->mouse = r8x2( r8( this->mouse.x - this_view->pos.x ) / this_view->scale.w, r8( this->mouse.y - this_view->pos.y ) / this_view->scale.h );
+		this_view->mouse = r4x2( r4( this->mouse.x - this_view->pos.x ) / this_view->scale.w, r4( this->mouse.y - this_view->pos.y ) / this_view->scale.h );
 	}
 
 	perm nano start_nano = 0;
 	once start_nano = get_nano();
 
-	this->delta_time = r8( get_nano() - start_nano ) / r8( nano_per_sec );
+	this->delta_time = r4( get_nano() - start_nano ) / r4( nano_per_sec );
 	start_nano = get_nano();
 
 	call( this, fn_tick );
 
 	if( this->inputs_pressed->count > 0 )
 	{
-		iter_list( this->inputs_pressed, input_index )
+		list_iter( this->inputs_pressed, input_index )
 		{
 			temp byte ref const input_ref = ref_of( list_get_iter( input_index, byte ) );
 			this->inputs[ val_of( input_ref ) ] = INPUT_MASK_HELD;
@@ -1655,7 +1945,7 @@ fn _window_tick_once( window const this )
 
 	if( this->inputs_released->count > 0 )
 	{
-		iter_list( this->inputs_released, input_index )
+		list_iter( this->inputs_released, input_index )
 		{
 			temp byte ref const input_ref = ref_of( list_get_iter( input_index, byte ) );
 			this->inputs[ val_of( input_ref ) ] = 0;
@@ -1670,10 +1960,12 @@ fn _window_tick_once( window const this )
 
 fn _window_draw( window const this )
 {
-	iter_list( this->views, view_index )
+	list_iter( this->views, view_index )
 	{
 		temp view const this_view = list_get_iter( view_index, view );
+		next_if( this_view->update is no );
 		call( this_view, fn_draw );
+		this_view->update = no;
 	}
 }
 
@@ -1725,20 +2017,20 @@ fn _window_present( window const this )
 	temp i4 view_r = win_w;
 	temp i4 view_b = win_h;
 
-	iter_list( this->views, view_index )
+	list_iter( this->views, view_index )
 	{
 		temp view const this_view = list_get_iter( view_index, view );
-		temp r8x2 const scaled_size = view_get_scaled_size( this_view );
+		temp r4x2 const scaled_size = view_get_scaled_size( this_view );
 
 		skip_if( scaled_size.w is 0 or scaled_size.h is 0 );
 
 		temp i4 const canvas_w = this_view->canvas->size.w;
 		temp i4 const canvas_h = this_view->canvas->size.h;
 
-		view_l = i4( r8_round( this_view->pos.x ) );
-		view_t = i4( r8_round( this_view->pos.y ) );
-		view_r = i4( r8_round( this_view->pos.x + scaled_size.w ) );
-		view_b = i4( r8_round( this_view->pos.y + scaled_size.h ) );
+		view_l = i4( r4_round( this_view->pos.x ) );
+		view_t = i4( r4_round( this_view->pos.y ) );
+		view_r = view_l + i4( r4_round( scaled_size.w ) );
+		view_b = view_t + i4( r4_round( scaled_size.h ) );
 
 		#if OS_LINUX
 			this->image->data = to( byte ref, this_view->canvas->pixels );
@@ -1750,8 +2042,8 @@ fn _window_present( window const this )
 			this->image.bmiHeader.biHeight = -canvas_h;
 		#endif
 
-		temp r8 const scale_w = this_view->scale.w;
-		temp r8 const scale_h = this_view->scale.h;
+		temp r4 const scale_w = this_view->scale.w;
+		temp r4 const scale_h = this_view->scale.h;
 
 		if( scale_w is 1.0 and scale_h is 1.0 )
 		{
@@ -1763,31 +2055,31 @@ fn _window_present( window const this )
 		}
 		else
 		{
-			temp r8 const clip_l = r8_max( 0, this_view->pos.x );
-			temp r8 const clip_t = r8_max( 0, this_view->pos.y );
-			temp r8 const clip_r = r8_min( r8( win_w ), this_view->pos.x + scaled_size.w );
-			temp r8 const clip_b = r8_min( r8( win_h ), this_view->pos.y + scaled_size.h );
+			temp r4 const clip_l = r4_max( 0, this_view->pos.x );
+			temp r4 const clip_t = r4_max( 0, this_view->pos.y );
+			temp r4 const clip_r = r4_min( r4( win_w ), this_view->pos.x + scaled_size.w );
+			temp r4 const clip_b = r4_min( r4( win_h ), this_view->pos.y + scaled_size.h );
 			skip_if( clip_r <= clip_l or clip_b <= clip_t );
 
-			temp r8 const off_l = clip_l - this_view->pos.x;
-			temp r8 const off_t = clip_t - this_view->pos.y;
-			temp r8 const off_r = clip_r - this_view->pos.x;
-			temp r8 const off_b = clip_b - this_view->pos.y;
+			temp r4 const off_l = clip_l - this_view->pos.x;
+			temp r4 const off_t = clip_t - this_view->pos.y;
+			temp r4 const off_r = clip_r - this_view->pos.x;
+			temp r4 const off_b = clip_b - this_view->pos.y;
 
 			#if OS_LINUX
 				XPutImage( windows_display, this_view->pixmap, gc, this->image, 0, 0, 0, 0, canvas_w, canvas_h );
 				transform.matrix[ 0 ][ 0 ] = XDoubleToFixed( 1.0 / scale_w );
 				transform.matrix[ 1 ][ 1 ] = XDoubleToFixed( 1.0 / scale_h );
 				XRenderSetPictureTransform( windows_display, this_view->picture, ref_of( transform ) );
-				XRenderComposite( windows_display, PictOpSrc, this_view->picture, None, target_picture, i4( r8_round( off_l ) ), i4( r8_round( off_t ) ), 0, 0, i4( r8_round( clip_l ) ), i4( r8_round( clip_t ) ), i4( r8_round( clip_r - clip_l ) ), i4( r8_round( clip_b - clip_t ) ) );
+				XRenderComposite( windows_display, PictOpSrc, this_view->picture, None, target_picture, i4( r4_round( off_l ) ), i4( r4_round( off_t ) ), 0, 0, i4( r4_round( clip_l ) ), i4( r4_round( clip_t ) ), i4( r4_round( clip_r - clip_l ) ), i4( r4_round( clip_b - clip_t ) ) );
 			#elif OS_WINDOWS
-				temp r8 const src_l = r8_floor( off_l / scale_w );
-				temp r8 const src_t = r8_floor( off_t / scale_h );
-				temp r8 const src_r = r8_ceil( off_r / scale_w );
-				temp r8 const src_b = r8_ceil( off_b / scale_h );
+				temp r4 const src_l = r4_floor( off_l / scale_w );
+				temp r4 const src_t = r4_floor( off_t / scale_h );
+				temp r4 const src_r = r4_ceil( off_r / scale_w );
+				temp r4 const src_b = r4_ceil( off_b / scale_h );
 
 				SetStretchBltMode( target_dc, pick( scale_w < 1.0 or scale_h < 1.0, HALFTONE, COLORONCOLOR ) );
-				StretchDIBits( target_dc, i4( r8_round( this_view->pos.x + src_l * scale_w ) ), i4( r8_round( this_view->pos.y + src_t * scale_h ) ), i4( r8_round( ( src_r - src_l ) * scale_w ) ), i4( r8_round( ( src_b - src_t ) * scale_h ) ), i4( src_l ), i4( r8( canvas_h ) - src_b ), i4( src_r - src_l ), i4( src_b - src_t ), this_view->canvas->pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
+				StretchDIBits( target_dc, i4( r4_round( this_view->pos.x + src_l * scale_w ) ), i4( r4_round( this_view->pos.y + src_t * scale_h ) ), i4( r4_round( ( src_r - src_l ) * scale_w ) ), i4( r4_round( ( src_b - src_t ) * scale_h ) ), i4( src_l ), i4( r4( canvas_h ) - src_b ), i4( src_r - src_l ), i4( src_b - src_t ), this_view->canvas->pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
 			#endif
 		}
 	}
@@ -1846,12 +2138,6 @@ fn _window_present( window const this )
 			BitBlt( this->window_dc, 0, 0, win_w, win_h, this->buffer_dc, 0, 0, SRCCOPY );
 		#endif
 	}
-	#if OS_WINDOWS
-		else
-		{
-			GdiFlush();
-		}
-	#endif
 }
 
 ////////
@@ -1901,7 +2187,7 @@ group( window_event_type, n2 )
 				skip_if( wp isnt 1 );
 
 				_window_tick_once( this );
-				jump DRAW_AND_PRESENT;
+				jump WINDOW_PRESENT;
 			}
 
 			when( WM_ERASEBKGND )
@@ -1913,7 +2199,14 @@ group( window_event_type, n2 )
 			{
 				if( LOWORD( lp ) is HTCLIENT )
 				{
-					SetCursor( LoadCursor( nothing, IDC_ARROW ) );
+					if( this->changed_cursor is no )
+					{
+						SetCursor( LoadCursor( nothing, IDC_ARROW ) );
+					}
+					else
+					{
+						this->changed_cursor = no;
+					}
 					out yes;
 				}
 				skip;
@@ -1950,8 +2243,8 @@ group( window_event_type, n2 )
 			#endif
 			_window_resize( this );
 
-			DRAW_AND_PRESENT:
-			_window_draw( this );
+			//DRAW_AND_PRESENT:
+			//_window_draw( this );
 		} // fall through
 
 		when( window_event_draw )
@@ -1961,15 +2254,18 @@ group( window_event_type, n2 )
 			#endif
 
 			#if OS_WINDOWS
-				PAINTSTRUCT ps;
-				BeginPaint( this->handle, & ps );
+				//PAINTSTRUCT ps;
+				//BeginPaint( this->handle, & ps );
 			#endif
 			//ValidateRect(this->handle, nothing);
+
+			WINDOW_PRESENT:
+			_window_draw( this );
 			_window_present( this );
 
 			#if OS_WINDOWS
 
-				EndPaint( this->handle, & ps );
+				//EndPaint( this->handle, & ps );
 			#endif
 			skip;
 		}
@@ -2220,7 +2516,7 @@ new_object_fn( window, byte const ref const name, n2 const width, n2 const heigh
 delete_object_fn( window )
 {
 	delete_text( this->name );
-	iter_list( this->views, canvas_id )
+	list_iter( this->views, canvas_id )
 	{
 		delete_view( list_get_iter( canvas_id, view ) );
 	}
@@ -2284,6 +2580,10 @@ fn _C7H16_init()
 		XkbSetDetectableAutoRepeat( windows_display, yes, nothing );
 	#elif OS_WINDOWS
 		windows_icon = LoadIcon( GetModuleHandle( NULL ), MAKEINTRESOURCE( 1 ) );
+		#if DEBUG
+			AllocConsole();
+			freopen( "CONOUT$", "w", stdout );
+		#endif
 	#endif
 }
 
@@ -2310,7 +2610,7 @@ fn _C7H16_loop()
 		prev_frame_nano_tick = frame_nano_tick;
 
 		// process
-		iter_list( windows, window_id )
+		list_iter( windows, window_id )
 		{
 			temp window const this_window = list_get_iter( window_id, window );
 			_window_process( this_window );
@@ -2335,7 +2635,7 @@ fn _C7H16_loop()
 			if( windows_time_tick <= target_frames )
 			{
 				++windows_time_tick;
-				iter_list( windows, window_id )
+				list_iter( windows, window_id )
 				{
 					_window_tick_once( list_get_iter( window_id, window ) );
 				}
@@ -2345,7 +2645,7 @@ fn _C7H16_loop()
 			while( windows_time_tick <= target_frames )
 			{
 				++windows_time_tick;
-				iter_list( windows, window_id )
+				list_iter( windows, window_id )
 				{
 					//call( list_get_iter( window_id, window ), fn_tick );
 				}
@@ -2356,11 +2656,11 @@ fn _C7H16_loop()
 		temp nano now = get_nano();
 		if( frame_nano_draw > 0 and now >= windows_time_next_draw )
 		{
-			iter_list( windows, window_id )
+			list_iter( windows, window_id )
 			{
 				temp window const this_window = list_get_iter( window_id, window );
-				_window_draw( this_window );
-				window_refresh( this_window );
+				//_window_draw( this_window );
+				window_update( this_window );
 				_window_process_events( this_window );
 			}
 
@@ -2375,7 +2675,7 @@ fn _C7H16_loop()
 		if( event_driven )
 		{
 			temp flag all_ready = yes;
-			iter_list( windows, window_id )
+			list_iter( windows, window_id )
 			{
 				if( list_get_iter( window_id, window )->tick < 3 )
 				{
@@ -2427,7 +2727,7 @@ fn _C7H16_loop()
 
 fn _C7H16_close()
 {
-	iter_list( windows, window_index )
+	list_iter( windows, window_index )
 	{
 		delete_window( list_get_iter( window_index, window ) );
 	}
