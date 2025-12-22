@@ -14,19 +14,20 @@
 ////////////////////////////////
 /// include(s)
 
-#define C7H16
-#include <H.h>
-
-#if OS_LINUX
+#if __linux__
 	//#include <alsa/asoundlib.h>
 	#include <X11/Xlib.h>
 	#include <X11/Xutil.h>
 	#include <X11/extensions/Xrender.h>
 	#include <X11/extensions/Xpresent.h>
 	#include <X11/XKBlib.h>
-#elif OS_WINDOWS
+	#include <X11/cursorfont.h>
+#else
 	__declspec( dllimport ) i4 __stdcall timeBeginPeriod( i4 );
 #endif
+
+#define C7H16
+#include <H.h>
 
 ////////////////////////////////
 /// version
@@ -1263,6 +1264,7 @@ object( view )
 
 	flag update;
 	view_fn fn_draw;
+	anon ref draw_ref;
 
 	r4x2 pos;
 	r4x2 scale;
@@ -1739,9 +1741,9 @@ object_fn( window, set_cursor, cursor_type const cursor )
 		perm Cursor cache[ 256 ] = { 0 };
 		if( not cache[ cursor ] )
 		{
-			cache[ cursor ] = XCreateFontCursor( this->display, cursor );
+			cache[ cursor ] = XCreateFontCursor( windows_display, cursor );
 		}
-		XDefineCursor( this->display, this->handle, cache[ cursor ] );
+		XDefineCursor( windows_display, this->handle, cache[ cursor ] );
 	#else
 		SetCursor( LoadCursor( NULL, MAKEINTRESOURCE( cursor ) ) );
 	#endif
