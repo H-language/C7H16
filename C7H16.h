@@ -23,7 +23,7 @@
 	#include <X11/XKBlib.h>
 	#include <X11/cursorfont.h>
 #else
-	__declspec( dllimport ) i4 __stdcall timeBeginPeriod( i4 );
+	__declspec( dllimport ) int __stdcall timeBeginPeriod( int );
 #endif
 
 #define C7H16
