@@ -1255,6 +1255,13 @@ group( scaling_mode )
 	scaling_rational_stretch
 };
 
+type( view_line )
+{
+	i2x2 a;
+	i2x2 b;
+	pixel color;
+};
+
 object( view )
 {
 	canvas canvas;
@@ -1263,8 +1270,10 @@ object( view )
 	scaling_mode scaling;
 
 	flag update;
+	pixel outline;
 	view_fn fn_draw;
 	anon ref draw_ref;
+	list lines;
 
 	r4x2 pos;
 	r4x2 scale;
@@ -1287,6 +1296,7 @@ new_object_fn( view, canvas const canvas, sizing_mode const sizing, scaling_mode
 	out_view->scaling = scaling;
 	out_view->update = yes;
 	out_view->fn_draw = fn_draw;
+	out_view->lines = new_list( view_line );
 	out_view->scale = r4x2( 1.0, 1.0 );
 	out out_view;
 }
@@ -1294,6 +1304,7 @@ new_object_fn( view, canvas const canvas, sizing_mode const sizing, scaling_mode
 delete_object_fn( view )
 {
 	delete_canvas( this->canvas );
+	delete_list( this->lines );
 
 	delete_object( this );
 }
@@ -1771,7 +1782,7 @@ fn _window_resize( window const this )
 {
 	out_if_any( this is nothing, this->size.w <= 1, this->size.h <= 1 );
 
-	this->using_buffer = this->using_buffer or( this->views->count > 1 ); // or this->clear_before_present;
+	this->using_buffer = this->using_buffer or( this->views->count > 1 );
 
 	#if OS_LINUX
 		temp n4 const screen = DefaultScreen( windows_display );
@@ -2084,6 +2095,55 @@ fn _window_present( window const this )
 				StretchDIBits( target_dc, i4( r4_round( this_view->pos.x + src_l * scale_w ) ), i4( r4_round( this_view->pos.y + src_t * scale_h ) ), i4( r4_round( ( src_r - src_l ) * scale_w ) ), i4( r4_round( ( src_b - src_t ) * scale_h ) ), i4( src_l ), i4( r4( canvas_h ) - src_b ), i4( src_r - src_l ), i4( src_b - src_t ), this_view->canvas->pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
 			#endif
 		}
+
+		if( this_view->outline.a isnt 0 )
+{
+    temp i4 const outline_l = view_l - 1;
+    temp i4 const outline_t = view_t - 1;
+    temp i4 const outline_r = view_r;
+    temp i4 const outline_b = view_b;
+
+    #if OS_LINUX
+        XSetForeground( windows_display, gc, ( n4( this_view->outline.r ) << 16 ) | ( n4( this_view->outline.g ) << 8 ) | n4( this_view->outline.b ) );
+        XDrawRectangle( windows_display, target_drawable, gc, outline_l, outline_t, outline_r - outline_l, outline_b - outline_t );
+    #elif OS_WINDOWS
+        perm HBRUSH null_brush = nothing;
+        once null_brush = to( HBRUSH, GetStockObject( NULL_BRUSH ) );
+
+				temp HPEN color_pen = CreatePen( PS_SOLID, 1, RGB( this_view->outline.r, this_view->outline.g, this_view->outline.b ) );
+        HPEN old_pen = to( HPEN, SelectObject( target_dc, color_pen ) );
+        HBRUSH old_brush = to( HBRUSH, SelectObject( target_dc, null_brush ) );
+        Rectangle( target_dc, outline_l, outline_t, outline_r + 1, outline_b + 1 );
+        SelectObject( target_dc, old_pen );
+        SelectObject( target_dc, old_brush );
+    #endif
+}
+
+		// lines
+		list_iter( this_view->lines, line_id )
+		{
+			temp view_line const this_line = list_get_iter( line_id, view_line );
+
+			temp i4 const ax = view_l + i4( r4_round( r4( this_line.a.x ) * scale_w ) );
+			temp i4 const ay = view_t + i4( r4_round( r4( this_line.a.y ) * scale_h ) );
+			temp i4 const bx = view_l + i4( r4_round( r4( this_line.b.x ) * scale_w ) );
+			temp i4 const by = view_t + i4( r4_round( r4( this_line.b.y ) * scale_h ) );
+
+			temp pixel const color = this_line.color;
+
+			#if OS_LINUX
+				XSetForeground( windows_display, gc, ( n4( color.r ) << 16 ) | ( n4( color.g ) << 8 ) | n4( color.b ) );
+				XDrawLine( windows_display, target_drawable, gc, ax, ay, bx, by );
+			#elif OS_WINDOWS
+				temp HPEN color_pen = CreatePen( PS_SOLID, 1, RGB( color.r, color.g, color.b ) );
+				temp HPEN old_pen = to( HPEN, SelectObject( target_dc, color_pen ) );
+				MoveToEx( target_dc, ax, ay, nothing );
+				LineTo( target_dc, bx, by );
+				SelectObject( target_dc, old_pen );
+				DeleteObject( color_pen );
+			#endif
+		}
+		list_clear( this_view->lines );
 	}
 
 	if( needs_clear and this->using_buffer is no )
