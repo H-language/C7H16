@@ -1813,14 +1813,16 @@ fn _window_resize( window const this )
 	#elif OS_WINDOWS
 		if( this->using_buffer )
 		{
-			if( this->buffer )
-			{
-				DeleteObject( this->buffer );
-			}
-
 			if( this->buffer_dc )
 			{
 				DeleteDC( this->buffer_dc );
+				this->buffer_dc = nothing;
+			}
+
+			if( this->buffer )
+			{
+				DeleteObject( this->buffer );
+				this->buffer = nothing;
 			}
 
 			BITMAPINFO bmi = { sizeof( bmi.bmiHeader ), this->size.w, -this->size.h, 1, 32, BI_RGB };
@@ -2072,52 +2074,55 @@ fn _window_present( window const this )
 			temp r4 const clip_t = r4_max( 0, this_view->pos.y );
 			temp r4 const clip_r = r4_min( r4( win_w ), this_view->pos.x + scaled_size.w );
 			temp r4 const clip_b = r4_min( r4( win_h ), this_view->pos.y + scaled_size.h );
-			skip_if( clip_r <= clip_l or clip_b <= clip_t );
 
-			temp r4 const off_l = clip_l - this_view->pos.x;
-			temp r4 const off_t = clip_t - this_view->pos.y;
-			temp r4 const off_r = clip_r - this_view->pos.x;
-			temp r4 const off_b = clip_b - this_view->pos.y;
+			if( clip_r > clip_l and clip_b > clip_t )
+			{
+				temp r4 const off_l = clip_l - this_view->pos.x;
+				temp r4 const off_t = clip_t - this_view->pos.y;
+				temp r4 const off_r = clip_r - this_view->pos.x;
+				temp r4 const off_b = clip_b - this_view->pos.y;
 
-			#if OS_LINUX
-				XPutImage( windows_display, this_view->pixmap, gc, this->image, 0, 0, 0, 0, canvas_w, canvas_h );
-				transform.matrix[ 0 ][ 0 ] = XDoubleToFixed( 1.0 / scale_w );
-				transform.matrix[ 1 ][ 1 ] = XDoubleToFixed( 1.0 / scale_h );
-				XRenderSetPictureTransform( windows_display, this_view->picture, ref_of( transform ) );
-				XRenderComposite( windows_display, PictOpSrc, this_view->picture, None, target_picture, i4( r4_round( off_l ) ), i4( r4_round( off_t ) ), 0, 0, i4( r4_round( clip_l ) ), i4( r4_round( clip_t ) ), i4( r4_round( clip_r - clip_l ) ), i4( r4_round( clip_b - clip_t ) ) );
-			#elif OS_WINDOWS
-				temp r4 const src_l = r4_floor( off_l / scale_w );
-				temp r4 const src_t = r4_floor( off_t / scale_h );
-				temp r4 const src_r = r4_ceil( off_r / scale_w );
-				temp r4 const src_b = r4_ceil( off_b / scale_h );
+				#if OS_LINUX
+					XPutImage( windows_display, this_view->pixmap, gc, this->image, 0, 0, 0, 0, canvas_w, canvas_h );
+					transform.matrix[ 0 ][ 0 ] = XDoubleToFixed( 1.0 / scale_w );
+					transform.matrix[ 1 ][ 1 ] = XDoubleToFixed( 1.0 / scale_h );
+					XRenderSetPictureTransform( windows_display, this_view->picture, ref_of( transform ) );
+					XRenderComposite( windows_display, PictOpSrc, this_view->picture, None, target_picture, i4( r4_round( off_l ) ), i4( r4_round( off_t ) ), 0, 0, i4( r4_round( clip_l ) ), i4( r4_round( clip_t ) ), i4( r4_round( clip_r - clip_l ) ), i4( r4_round( clip_b - clip_t ) ) );
+				#elif OS_WINDOWS
+					temp r4 const src_l = r4_floor( off_l / scale_w );
+					temp r4 const src_t = r4_floor( off_t / scale_h );
+					temp r4 const src_r = r4_ceil( off_r / scale_w );
+					temp r4 const src_b = r4_ceil( off_b / scale_h );
 
-				SetStretchBltMode( target_dc, pick( scale_w < 1.0 or scale_h < 1.0, HALFTONE, COLORONCOLOR ) );
-				StretchDIBits( target_dc, i4( r4_round( this_view->pos.x + src_l * scale_w ) ), i4( r4_round( this_view->pos.y + src_t * scale_h ) ), i4( r4_round( ( src_r - src_l ) * scale_w ) ), i4( r4_round( ( src_b - src_t ) * scale_h ) ), i4( src_l ), i4( r4( canvas_h ) - src_b ), i4( src_r - src_l ), i4( src_b - src_t ), this_view->canvas->pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
-			#endif
+					SetStretchBltMode( target_dc, pick( scale_w < 1.0 or scale_h < 1.0, HALFTONE, COLORONCOLOR ) );
+					StretchDIBits( target_dc, i4( r4_round( this_view->pos.x + src_l * scale_w ) ), i4( r4_round( this_view->pos.y + src_t * scale_h ) ), i4( r4_round( ( src_r - src_l ) * scale_w ) ), i4( r4_round( ( src_b - src_t ) * scale_h ) ), i4( src_l ), i4( r4( canvas_h ) - src_b ), i4( src_r - src_l ), i4( src_b - src_t ), this_view->canvas->pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
+				#endif
+			}
 		}
 
 		if( this_view->outline.a isnt 0 )
-{
-    temp i4 const outline_l = view_l - 1;
-    temp i4 const outline_t = view_t - 1;
-    temp i4 const outline_r = view_r;
-    temp i4 const outline_b = view_b;
+		{
+			temp i4 const outline_l = view_l - 1;
+			temp i4 const outline_t = view_t - 1;
+			temp i4 const outline_r = view_r;
+			temp i4 const outline_b = view_b;
 
-    #if OS_LINUX
-        XSetForeground( windows_display, gc, ( n4( this_view->outline.r ) << 16 ) | ( n4( this_view->outline.g ) << 8 ) | n4( this_view->outline.b ) );
-        XDrawRectangle( windows_display, target_drawable, gc, outline_l, outline_t, outline_r - outline_l, outline_b - outline_t );
-    #elif OS_WINDOWS
-        perm HBRUSH null_brush = nothing;
-        once null_brush = to( HBRUSH, GetStockObject( NULL_BRUSH ) );
+			#if OS_LINUX
+				XSetForeground( windows_display, gc, ( n4( this_view->outline.r ) << 16 ) | ( n4( this_view->outline.g ) << 8 ) | n4( this_view->outline.b ) );
+				XDrawRectangle( windows_display, target_drawable, gc, outline_l, outline_t, outline_r - outline_l, outline_b - outline_t );
+			#elif OS_WINDOWS
+				perm HBRUSH null_brush = nothing;
+				once null_brush = to( HBRUSH, GetStockObject( NULL_BRUSH ) );
 
 				temp HPEN color_pen = CreatePen( PS_SOLID, 1, RGB( this_view->outline.r, this_view->outline.g, this_view->outline.b ) );
-        HPEN old_pen = to( HPEN, SelectObject( target_dc, color_pen ) );
-        HBRUSH old_brush = to( HBRUSH, SelectObject( target_dc, null_brush ) );
-        Rectangle( target_dc, outline_l, outline_t, outline_r + 1, outline_b + 1 );
-        SelectObject( target_dc, old_pen );
-        SelectObject( target_dc, old_brush );
-    #endif
-}
+				HPEN old_pen = to( HPEN, SelectObject( target_dc, color_pen ) );
+				HBRUSH old_brush = to( HBRUSH, SelectObject( target_dc, null_brush ) );
+				Rectangle( target_dc, outline_l, outline_t, outline_r + 1, outline_b + 1 );
+				SelectObject( target_dc, old_pen );
+				SelectObject( target_dc, old_brush );
+				DeleteObject( color_pen );
+			#endif
+		}
 
 		// lines
 		list_iter( this_view->lines, line_id )
@@ -2147,9 +2152,14 @@ fn _window_present( window const this )
 	}
 
 	if( needs_clear and this->using_buffer is no )
-	{
-		temp i4 const ct = i4_max( 0, view_t );
-		temp i4 const cb = i4_min( win_h, view_b );
+	{ // Clamp view bounds to window area for clearing logic
+		temp i4 const safe_view_l = i4_clamp( view_l, 0, win_w );
+		temp i4 const safe_view_t = i4_clamp( view_t, 0, win_h );
+		temp i4 const safe_view_r = i4_clamp( view_r, 0, win_w );
+		temp i4 const safe_view_b = i4_clamp( view_b, 0, win_h );
+
+		temp i4 const ct = safe_view_t;
+		temp i4 const cb = safe_view_b;
 
 		if( view_t > 0 )
 		{
