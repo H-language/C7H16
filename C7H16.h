@@ -843,6 +843,42 @@ object_fn( canvas, fill, pixel const color )
 #define canvas_draw_box_safe( CANVAS, TLx, TLy, BRx, BRy, PIXEL ) _canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL, _safe )
 
 ////////////////////////////////
+/// rect
+
+#define _rect_fn( _RECT_FN, TLx, TLy, BRx, BRy, X_NAME, Y_NAME, CODE )\
+	START_DEF\
+	{\
+		temp i2 _RECT_FN##_x1 = i2( TLx );\
+		temp i2 _RECT_FN##_y1 = i2( TLy );\
+		temp const i2 _RECT_FN##_x2 = i2( BRx );\
+		temp const i2 _RECT_FN##_y2 = i2( BRy );\
+		temp i2 X_NAME = _RECT_FN##_x1;\
+		temp i2 Y_NAME = _RECT_FN##_y1;\
+		temp i2 _RECT_FN##_w = _RECT_FN##_x2 - _RECT_FN##_x1 + 1;\
+		do\
+		{\
+			Y_NAME = _RECT_FN##_y1;\
+			temp i2 _RECT_FN##_h = _RECT_FN##_y2 - _RECT_FN##_y1 + 1;\
+			do\
+			{\
+				CODE;\
+				++Y_NAME;\
+			}\
+			while( --_RECT_FN##_h );\
+			++X_NAME;\
+		}\
+		while( --_RECT_FN##_w );\
+	}\
+	END_DEF
+
+#define _rect_fn_eval( _RECT_FN, TLx, TLy, BRx, BRy, X_NAME, Y_NAME, CODE ) _rect_fn( _RECT_FN, TLx, TLy, BRx, BRy, X_NAME, Y_NAME, CODE )
+#define rect_fn( TLx, TLy, BRx, BRy, X_NAME, Y_NAME, CODE ) _rect_fn_eval( JOIN( _RECT_FN_, __COUNTER__ ), TLx, TLy, BRx, BRy, X_NAME, Y_NAME, CODE )
+
+#define _canvas_draw_rect( CANVAS, TLx, TLy, BRx, BRy, PIXEL, SUFFIX... ) rect_fn( TLx, TLy, BRx, BRy, _X, _Y, canvas_draw_pixel##SUFFIX( CANVAS, _X, _Y, PIXEL ) );
+#define canvas_draw_rect( CANVAS, TLx, TLy, BRx, BRy, PIXEL ) _canvas_draw_rect( CANVAS, TLx, TLy, BRx, BRy, PIXEL )
+#define canvas_draw_rect_safe( CANVAS, TLx, TLy, BRx, BRy, PIXEL ) _canvas_draw_rect( CANVAS, TLx, TLy, BRx, BRy, PIXEL, _safe )
+
+////////////////////////////////
 /// canvas to canvas
 
 #define canvas_draw_canvas( TO_CANVAS, FROM_CANVAS, TLx, TLy )\
