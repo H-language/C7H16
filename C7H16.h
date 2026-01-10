@@ -1,6 +1,6 @@
-////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-//  Heptane Renderer (C7H16)
+//  heptane (C7H16)
 //
 //  author(s):
 //  ENDESGA - https://x.com/ENDESGA | https://bsky.app/profile/endesga.bsky.social
@@ -10,9 +10,11 @@
 //
 
 #pragma once
+#define C7H16
 
-////////////////////////////////
-/// include(s)
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////// dependencies
+/// dependencies
+//
 
 #if __linux__
 	//#include <alsa/asoundlib.h>
@@ -26,22 +28,24 @@
 	__declspec( dllimport ) int __stdcall timeBeginPeriod( int );
 #endif
 
-#define C7H16
 #include <H.h>
 
-////////////////////////////////
+//
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////// version
 /// version
+//
 
 #define C7H16_VERSION_MAJOR 0
 #define C7H16_VERSION_MINOR 1
 #define C7H16_VERSION_PATCH 0
 #define C7H16_VERSION AS_BYTES( C7H16_VERSION_MAJOR ) "." AS_BYTES( C7H16_VERSION_MINOR ) "." AS_BYTES( C7H16_VERSION_PATCH )
 
-////////////////////////////////
-/// types
+//
 
-////////
-// multi-dimensional
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////// dimensional
+/// dimensional
+//
 
 #define DECLARE_TYPE_2D( TYPE )\
 	fusion( TYPE##x2 )\
@@ -335,7 +339,7 @@ DECLARE_TYPE_MULTI_R( 8 );
 #define grid_area( X, Y ) ( ( X ) * ( Y ) )
 #define grid_index( X, Y, WIDTH ) ( ( X ) + ( ( Y ) * ( WIDTH ) ) )
 
-////////
+////////////////////////////////
 // dimensional flags
 
 #define point_in_size( X, Y, W, H ) all( X >= 0, Y >= 0, X < W, Y < H )
@@ -350,8 +354,11 @@ DECLARE_TYPE_MULTI_R( 8 );
 #define box_in_box( TL1_X, TL1_Y, BR1_X, BR1_Y, TL2_X, TL2_Y, BR2_X, BR2_Y ) all( point_in_box( TL1_X, TL1_Y, TL2_X, TL2_Y, BR2_X, BR2_Y ), point_in_box( BR1_X, BR1_Y, TL2_X, TL2_Y, BR2_X, BR2_Y ) )
 #define box_not_in_box( TL1_X, TL1_Y, BR1_X, BR1_Y, TL2_X, TL2_Y, BR2_X, BR2_Y ) any( point_not_in_box( TL1_X, TL1_Y, TL2_X, TL2_Y, BR2_X, BR2_Y ), point_not_in_box( BR1_X, BR1_Y, TL2_X, TL2_Y, BR2_X, BR2_Y ) )
 
-////////
-// dyadic n/2^k
+//
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////// dyadic
+/// dyadic
+//
 
 type_from( i4 ) d4;
 #define d4( VAL ) to( d4, VAL )
@@ -383,8 +390,11 @@ type_from( i4 ) d4;
 
 type_from( i4x2 ) d4x2;
 
-////////////////////////////////
-/// time
+//
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////// nano
+/// nano
+//
 
 #define nano_per_micro 1000
 #define nano_per_milli 1000000
@@ -453,21 +463,17 @@ fn nano_sleep( nano const time )
 		LARGE_INTEGER li = { .QuadPart = -( time / 100 ) };
 		SetWaitableTimer( timer, ref_of( li ), 0, nothing, nothing, FALSE );
 		WaitForSingleObject( timer, INFINITE );
-
-		// Optional: spin-wait only the final microseconds for extra precision
-		//LARGE_INTEGER freq, target, now;
-		///QueryPerformanceFrequency( ref_of( freq ) );
-		//QueryPerformanceCounter( ref_of( target ) );
-		//target.QuadPart += ( time * freq.QuadPart ) / nano_per_sec;
-		//while( QueryPerformanceCounter( ref_of( now ) ), now.QuadPart < target.QuadPart );
 	#else
 		struct timespec ts = { time / nano_per_sec, time mod nano_per_sec };
 		nanosleep( ref_of( ts ), nothing );
 	#endif
 }
 
-////////////////////////////////
+//
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////// anchor
 /// anchor
+//
 
 group( anchor )
 {
@@ -496,8 +502,11 @@ embed n2 anchor_get_y( anchor const anchor, n2 const region_height, n2 const obj
 	out pick( v_align is 1, offset >> 1, pick( v_align is 2, offset, 0 ) );
 }
 
-////////////////////////////////
+//
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////// pixel
 /// pixel
+//
 
 // BGRA for X11/Windows (little-endian)
 #if IS_BIG_ENDIAN
@@ -546,63 +555,64 @@ embed n2 anchor_get_y( anchor const anchor, n2 const region_height, n2 const obj
 #define pixel_blue pixel( 0x00, 0x00, 0xff )
 #define pixel_magenta pixel( 0xff, 0x00, 0xff )
 
-////////////////////////////////
-/// canvas
+//
 
-object( canvas )
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////// canvas
+/// canvas
+//
+
+type( canvas )
 {
-	pixel ref pixels;
 	n2x2 size;
 	n4 area;
+	pixel ref pixels;
 };
 
-new_object_fn( canvas, n2 const width, n2 const height )
+embed canvas new_canvas( n2 const width, n2 const height )
 {
-	temp const canvas out_canvas = new_object( canvas );
-	out_canvas->size = n2x2( width, height );
-	out_canvas->area = n4( out_canvas->size.w ) * n4( out_canvas->size.h );
-	out_canvas->pixels = to( pixel ref, new_ref( pixel, out_canvas->area ) );
-
-	out out_canvas;
+	temp canvas this = { 0 };
+	this.size = n2x2( width, height );
+	this.area = n4( this.size.w ) * n4( this.size.h );
+	this.pixels = to( pixel ref, new_ref( pixel, this.area ) );
+	out this;
 }
 
-delete_object_fn( canvas )
+fn delete_canvas( canvas ref const canvas_ref )
 {
-	delete_ref( this->pixels );
-
-	delete_object( this );
+	delete_ref( canvas_ref->pixels );
+	val_of( canvas_ref ) = make( canvas );
 }
 
-object_fn( canvas, resize, n2 const width, n2 const height )
+fn canvas_resize( canvas ref const canvas_ref, n2 const width, n2 const height )
 {
-	out_if( this->size.w is width and this->size.h is height );
+	out_if( canvas_ref->size.w is width and canvas_ref->size.h is height );
 
-	temp const n2x2 size_old = this->size;
-	temp n4 const area_old = this->area;
-	this->size = n2x2( width, height );
-	this->area = n4( this->size.w ) * n4( this->size.h );
-	this->pixels = ref_resize( this->pixels, area_old << pixel_shift, this->area << pixel_shift );
+	temp const n2x2 size_old = canvas_ref->size;
+	temp n4 const area_old = canvas_ref->area;
+	canvas_ref->size = n2x2( width, height );
+	canvas_ref->area = n4( canvas_ref->size.w ) * n4( canvas_ref->size.h );
+	canvas_ref->pixels = ref_resize( canvas_ref->pixels, area_old << pixel_shift, canvas_ref->area << pixel_shift );
 }
 
-object_fn( canvas, fill, pixel const color )
+fn canvas_fill( canvas ref const canvas_ref, pixel const color )
 {
 	if_all( color.r is color.g, color.g is color.b, color.b is color.a )
 	{
-		bytes_fill( this->pixels, color.r, this->area << pixel_shift );
+		bytes_fill( canvas_ref->pixels, color.r, canvas_ref->area << pixel_shift );
 	}
 	else
 	{
-		temp i4 filled = i4( this->size.w );
+		temp i4 filled = i4( canvas_ref->size.w );
 		iter( first_row_index, filled )
 		{
-			this->pixels[ first_row_index ] = color;
+			canvas_ref->pixels[ first_row_index ] = color;
 		}
 
-		temp i4 remaining = this->area - filled;
+		temp i4 remaining = canvas_ref->area - filled;
 		do
 		{
 			temp i4 const count = pick( remaining < filled, remaining, filled );
-			bytes_copy( ref_of( this->pixels[ filled ] ), ref_of( this->pixels[ 0 ] ), count << pixel_shift );
+			bytes_copy( ref_of( canvas_ref->pixels[ filled ] ), ref_of( canvas_ref->pixels[ 0 ] ), count << pixel_shift );
 			filled += count;
 			remaining -= count;
 		}
@@ -612,13 +622,13 @@ object_fn( canvas, fill, pixel const color )
 
 #define canvas_clear( CANVAS ) bytes_clear( CANVAS->pixels, CANVAS->area << pixel_shift )
 
-////////
+////////////////////////////////
 // check
 
 #define canvas_check_pixel( CANVAS, X, Y ) ( point_in_size( X, Y, CANVAS->size.w, CANVAS->size.h ) )
 #define canvas_check_pixel_index( CANVAS, INDEX ) ( INDEX >= 0 and INDEX < CANVAS->area )
 
-////////
+////////////////////////////////
 // get
 
 #define canvas_get_pixel_index( CANVAS, INDEX ) CANVAS->pixels[ ( INDEX ) ]
@@ -626,7 +636,7 @@ object_fn( canvas, fill, pixel const color )
 #define canvas_get_pixel( CANVAS, X, Y ) canvas_get_pixel_index( CANVAS, grid_index( X, Y, CANVAS->size.w ) )
 #define canvas_get_pixel_safe( CANVAS, X, Y ) pick( canvas_check_pixel( CANVAS, X, Y ), canvas_get_pixel( CANVAS, X, Y ), pixel_invalid )
 
-////////
+////////////////////////////////
 // set
 
 #define canvas_set_pixel_index( CANVAS, INDEX, PIXEL ) ( canvas_get_pixel_index( CANVAS, INDEX ) ) = ( PIXEL )
@@ -635,7 +645,7 @@ object_fn( canvas, fill, pixel const color )
 #define canvas_set_pixel_safe( CANVAS, X, Y, PIXEL ) if( canvas_check_pixel( CANVAS, X, Y ) ) canvas_set_pixel( CANVAS, X, Y, PIXEL )
 
 ////////////////////////////////
-/// draw
+// draw
 
 #define _canvas_draw_pixel_index_( CANVAS, INDEX, PIXEL )\
 	START_DEF\
@@ -708,7 +718,7 @@ object_fn( canvas, fill, pixel const color )
 #define canvas_draw_pixel_safe( CANVAS, X, Y, PIXEL, BLEND... ) if( canvas_check_pixel( CANVAS, X, Y ) ) canvas_draw_pixel( CANVAS, X, Y, PIXEL, BLEND )
 
 ////////////////////////////////
-/// line
+// line
 
 #define LINE_FN_SHIFT 20
 #define LINE_FN_HALF ( 1 << ( LINE_FN_SHIFT - 1 ) )
@@ -801,7 +811,7 @@ object_fn( canvas, fill, pixel const color )
 #define canvas_draw_line_v_safe( CANVAS, Ax, Ay, By, PIXEL ) _canvas_draw_line_v( CANVAS, Ax, Ay, By, PIXEL, _safe )
 
 ////////////////////////////////
-/// box
+// box
 
 #define _box_fn( _BOX_FN, TLx, TLy, BRx, BRy, X_NAME, Y_NAME, CODE )\
 	START_DEF\
@@ -843,7 +853,7 @@ object_fn( canvas, fill, pixel const color )
 #define canvas_draw_box_safe( CANVAS, TLx, TLy, BRx, BRy, PIXEL ) _canvas_draw_box( CANVAS, TLx, TLy, BRx, BRy, PIXEL, _safe )
 
 ////////////////////////////////
-/// rect
+// rect
 
 #define _rect_fn( _RECT_FN, TLx, TLy, BRx, BRy, X_NAME, Y_NAME, CODE )\
 	START_DEF\
@@ -879,7 +889,7 @@ object_fn( canvas, fill, pixel const color )
 #define canvas_draw_rect_safe( CANVAS, TLx, TLy, BRx, BRy, PIXEL ) _canvas_draw_rect( CANVAS, TLx, TLy, BRx, BRy, PIXEL, _safe )
 
 ////////////////////////////////
-/// canvas to canvas
+// canvas to canvas
 
 #define canvas_draw_canvas( TO_CANVAS, FROM_CANVAS, TLx, TLy )\
 	START_DEF\
@@ -1042,8 +1052,11 @@ object_fn( canvas, fill, pixel const color )
 	}\
 	END_DEF
 
-////////////////////////////////
+//
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////// inputs
 /// inputs
+//
 
 group( input_type )
 {
@@ -1149,7 +1162,7 @@ group( input_type )
 #define _INPUT_SET( NAME, LINUX_KEY, WINDOWS_KEY )[ PICK( OS_LINUX, LINUX_KEY, WINDOWS_KEY ) ] = input_##NAME
 #define _INPUT_SET_MASKED( NAME, LINUX_KEY, WINDOWS_KEY )[ PICK( OS_LINUX, LINUX_KEY & 0x1ff, WINDOWS_KEY ) ] = input_##NAME
 
-global byte const _INPUT_MAP[] =
+perm byte const _INPUT_MAP[] =
 	{
 		_INPUT_SET( a, XK_a, 'A' ),
 		_INPUT_SET( b, XK_b, 'B' ),
@@ -1238,33 +1251,36 @@ global byte const _INPUT_MAP[] =
 		_INPUT_SET_MASKED( menu, XK_Menu, VK_APPS ),
 	};
 
-#define key_pressed( KEY ) ( current_window->inputs[ input_##KEY ] & INPUT_MASK_PRESSED )
-#define key_held( KEY ) ( current_window->inputs[ input_##KEY ] & INPUT_MASK_HELD )
-#define key_released( KEY ) ( current_window->inputs[ input_##KEY ] & INPUT_MASK_RELEASED )
+#define key_pressed( KEY ) ( current_window_ref->inputs[ input_##KEY ] & INPUT_MASK_PRESSED )
+#define key_held( KEY ) ( current_window_ref->inputs[ input_##KEY ] & INPUT_MASK_HELD )
+#define key_released( KEY ) ( current_window_ref->inputs[ input_##KEY ] & INPUT_MASK_RELEASED )
 
 #define mouse_pressed( BUTTON ) key_pressed( mouse_##BUTTON )
 #define mouse_held( BUTTON ) key_held( mouse_##BUTTON )
 #define mouse_released( BUTTON ) key_released( mouse_##BUTTON )
 
 #define _window_add_input_pressed( VALUE )\
-	if( not( this->inputs[ VALUE ] & INPUT_MASK_HELD ) )\
+	if( not( window_ref->inputs[ VALUE ] & INPUT_MASK_HELD ) )\
 	{\
-		this->inputs[ VALUE ] |= INPUT_MASK_PRESSED | INPUT_MASK_HELD;\
-		++this->inputs_active;\
-		list_add( this->inputs_pressed, byte( VALUE ) );\
+		window_ref->inputs[ VALUE ] |= INPUT_MASK_PRESSED | INPUT_MASK_HELD;\
+		++window_ref->inputs_active;\
+		list_add( ref_of( window_ref->inputs_pressed ), byte( VALUE ) );\
 		is_input = yes;\
 	}
 
 #define _window_add_input_released( VALUE )\
-	this->inputs[ VALUE ] = INPUT_MASK_RELEASED;\
-	list_add( this->inputs_released, byte( VALUE ) );\
+	window_ref->inputs[ VALUE ] = INPUT_MASK_RELEASED;\
+	list_add( ref_of( window_ref->inputs_released ), byte( VALUE ) );\
 	is_input = yes
 
-////////////////////////////////
-/// windows
+//
 
-////////
-// window canvas
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////// windows
+/// windows
+//
+
+////////////////////////////////
+// view
 
 group( sizing_mode )
 {
@@ -1296,9 +1312,12 @@ type( view_line )
 	i2x2 a;
 	i2x2 b;
 	pixel color;
-};
+}
+packed;
 
-object( view )
+//fn_type(, anon ref ) view_ref_fn;
+
+type( view )
 {
 	canvas canvas;
 
@@ -1307,13 +1326,14 @@ object( view )
 
 	flag update;
 	pixel outline;
-	view_fn fn_draw;
+	view_ref_fn fn_draw;
 	anon ref draw_ref;
 	list lines;
 
 	r4x2 pos;
 	r4x2 scale;
 	r4x2 mouse;
+	r4x2 mouse_prev;
 
 	#if OS_LINUX
 		Pixmap pixmap;
@@ -1324,58 +1344,57 @@ object( view )
 }
 packed;
 
-new_object_fn( view, canvas const canvas, sizing_mode const sizing, scaling_mode const scaling, view_fn const fn_draw )
+embed view new_view( canvas const canvas, sizing_mode const sizing, scaling_mode const scaling, view_ref_fn const fn_draw )
 {
-	temp view out_view = new_object( view );
-	out_view->canvas = canvas;
-	out_view->sizing = sizing;
-	out_view->scaling = scaling;
-	out_view->update = yes;
-	out_view->fn_draw = fn_draw;
-	out_view->lines = new_list( view_line );
-	out_view->scale = r4x2( 1.0, 1.0 );
-	out out_view;
+	temp view this = { 0 };
+	this.canvas = canvas;
+	this.sizing = sizing;
+	this.scaling = scaling;
+	this.update = yes;
+	this.fn_draw = fn_draw;
+	this.lines = new_list( view_line );
+	this.scale = r4x2( 1.0, 1.0 );
+	out this;
 }
 
-delete_object_fn( view )
+fn delete_view( view ref const view_ref )
 {
-	delete_canvas( this->canvas );
-	delete_list( this->lines );
-
-	delete_object( this );
+	delete_canvas( ref_of( view_ref->canvas ) );
+	delete_list( ref_of( view_ref->lines ) );
+	val_of( view_ref ) = make( view );
 }
 
-#define view_get_scaled_size( VIEW ) r4x2( r4( VIEW->canvas->size.w ) * VIEW->scale.w, r4( VIEW->canvas->size.h ) * VIEW->scale.h )
+#define view_get_scaled_size( VIEW_REF ) r4x2( r4( VIEW_REF->canvas.size.w ) * VIEW_REF->scale.w, r4( VIEW_REF->canvas.size.h ) * VIEW_REF->scale.h )
 
-object_fn( view, set_scale, r4x2 const scale )
+fn view_set_scale( view ref const view_ref, r4x2 const scale )
 {
-	this->scale = scale;
-	this->scaling = scaling_manual;
+	view_ref->scale = scale;
+	view_ref->scaling = scaling_manual;
 }
-#define view_set_scale( WINDOW_CANVAS, WIDTH_SCALE, HEIGHT_SCALE... ) view_set_scale( WINDOW_CANVAS, r4x2( WIDTH_SCALE, DEFAULT( WIDTH_SCALE, HEIGHT_SCALE ) ) )
+#define view_set_scale( VIEW, WIDTH_SCALE, HEIGHT_SCALE... ) view_set_scale( VIEW, r4x2( WIDTH_SCALE, DEFAULT( WIDTH_SCALE, HEIGHT_SCALE ) ) )
 
-object_fn( view, zoom, i4 const x, i4 const y, r4 const factor )
+fn view_zoom( view ref const view_ref, i4 const x, i4 const y, r4 const factor )
 {
-	temp r4 const new_scale = r4_clamp( this->scale.w * factor, 0.2, 200.0 );
-	temp r4 const actual_factor = new_scale / this->scale.w;
-	this->pos.x = r4( x ) - r4( x - this->pos.x ) * actual_factor;
-	this->pos.y = r4( y ) - r4( y - this->pos.y ) * actual_factor;
-	view_set_scale( this, new_scale, new_scale );
-}
-
-object_fn( view, update )
-{
-	this->update = yes;
+	temp r4 const new_scale = r4_clamp( view_ref->scale.w * factor, 0.2, 200.0 );
+	temp r4 const actual_factor = new_scale / view_ref->scale.w;
+	view_ref->pos.x = r4( x ) - r4( x - view_ref->pos.x ) * actual_factor;
+	view_ref->pos.y = r4( y ) - r4( y - view_ref->pos.y ) * actual_factor;
+	view_set_scale( view_ref, new_scale, new_scale );
 }
 
-////////
+fn view_update( view ref const view_ref )
+{
+	view_ref->update = yes;
+}
+
+////////////////////////////////
 // window
 
 type_from( PICK( OS_LINUX, Window, HWND ) ) os_handle;
 type_from( PICK( OS_LINUX, XImage ref, BITMAPINFO ) ) os_image;
 type_from( PICK( OS_LINUX, XEvent, MSG ) ) os_event;
 
-object( window )
+type( window )
 {
 	text name;
 
@@ -1412,32 +1431,31 @@ object( window )
 	r4x2 scroll;
 	i4x2 mouse;
 
-	window_fn fn_start;
-	window_fn fn_resize;
-	window_fn fn_tick;
+	window_ref_fn fn_start;
+	window_ref_fn fn_resize;
+	window_ref_fn fn_tick;
 }
 packed;
 
-global window current_window = nothing;
-global list windows = nothing;
+perm list window_refs;
 
-global r4 windows_fps_tick = 0;
-global r4 windows_fps_draw = 0;
-global nano windows_time_start = 0;
-global nano windows_time_next_draw = 0;
-global n8 windows_time_tick = 0;
+perm r4 windows_fps_tick = 0;
+perm r4 windows_fps_draw = 0;
+perm nano windows_time_start = 0;
+perm nano windows_time_next_draw = 0;
+perm n8 windows_time_tick = 0;
 
 #define window_set_fn_start( WINDOW, FN ) WINDOW->fn_start = to( window_fn, FN )
 #define window_set_fn_resize( WINDOW, FN ) WINDOW->fn_resize = to( window_fn, FN )
 #define window_set_fn_tick( WINDOW, FN ) WINDOW->fn_tick = to( window_fn, FN )
 
 #if OS_LINUX
-	global Display ref windows_display = nothing;
+	perm Display ref windows_display = nothing;
 #elif OS_WINDOWS
-	global HICON windows_icon = nothing;
+	perm HICON windows_icon = nothing;
 #endif
 
-////////
+////////////////////////////////
 // display
 
 embed n2 const display_get_width()
@@ -1490,52 +1508,50 @@ embed n2 const display_get_fps()
 	#endif
 }
 
-////////
-// visible window functions
+////////////////////////////////
+// visible functions
 
-// view via window
-
-object_fn( view, center )
+fn view_center( window ref const window_ref, view ref const view_ref )
 {
-	out_if_nothing( this->canvas );
+	out_if_nothing( view_ref->canvas.pixels );
 	//
-	temp i4 const scaled_w = i4( r4_round( r4( this->canvas->size.w ) * this->scale.w ) );
-	temp i4 const scaled_h = i4( r4_round( r4( this->canvas->size.h ) * this->scale.h ) );
-	this->pos.x = r4( i4( current_window->size.w ) - scaled_w ) * 0.5;
-	this->pos.y = r4( i4( current_window->size.h ) - scaled_h ) * 0.5;
+	temp i4 const scaled_w = i4( r4_round( r4( view_ref->canvas.size.w ) * view_ref->scale.w ) );
+	temp i4 const scaled_h = i4( r4_round( r4( view_ref->canvas.size.h ) * view_ref->scale.h ) );
+	view_ref->pos.x = r4( i4( window_ref->size.w ) - scaled_w ) * 0.5;
+	view_ref->pos.y = r4( i4( window_ref->size.h ) - scaled_h ) * 0.5;
 }
 
-object_fn( view, clamp )
+fn view_clamp( window ref const window_ref, view ref const view_ref )
 {
-	temp r4x2 const scaled_size = view_get_scaled_size( this );
+	temp r4x2 const scaled_size = view_get_scaled_size( view_ref );
 
-	with( this->scaling )
+	with( view_ref->scaling )
 	{
 		when( scaling_rational_fit, scaling_integer_fit_floor, scaling_integer_fit_round, scaling_integer_fit_ceil )
 		{
-			this->pos.x = r4_clamp( this->pos.x, 0, r4( current_window->size.w ) - scaled_size.w );
-			this->pos.y = r4_clamp( this->pos.y, 0, r4( current_window->size.h ) - scaled_size.h );
+			view_ref->pos.x = r4_clamp( view_ref->pos.x, 0, r4( window_ref->size.w ) - scaled_size.w );
+			view_ref->pos.y = r4_clamp( view_ref->pos.y, 0, r4( window_ref->size.h ) - scaled_size.h );
 			skip;
 		}
 
 		when( scaling_rational_fill, scaling_integer_fill_floor, scaling_integer_fill_round, scaling_integer_fill_ceil )
 		{
-			this->pos.x = r4_clamp( this->pos.x, r4( current_window->size.w ) - scaled_size.w, 0 );
-			this->pos.y = r4_clamp( this->pos.y, r4( current_window->size.h ) - scaled_size.h, 0 );
+			view_ref->pos.x = r4_clamp( view_ref->pos.x, r4( window_ref->size.w ) - scaled_size.w, 0 );
+			view_ref->pos.y = r4_clamp( view_ref->pos.y, r4( window_ref->size.h ) - scaled_size.h, 0 );
 			skip;
 		}
 
 		when( scaling_manual )
 		{
-			temp i4 const margin = i4_min( current_window->size.w, current_window->size.h ) >> 2;
-			this->pos.x = r4_clamp( this->pos.x, -scaled_size.w + r4( margin ), r4( i4( current_window->size.w ) - margin ) );
-			this->pos.y = r4_clamp( this->pos.y, -scaled_size.h + r4( margin ), r4( i4( current_window->size.h ) - margin ) );
+			temp i4 const margin = i4_min( window_ref->size.w, window_ref->size.h ) >> 2;
+			view_ref->pos.x = r4_clamp( view_ref->pos.x, -scaled_size.w + r4( margin ), r4( i4( window_ref->size.w ) - margin ) );
+			view_ref->pos.y = r4_clamp( view_ref->pos.y, -scaled_size.h + r4( margin ), r4( i4( window_ref->size.h ) - margin ) );
 			skip;
 		}
 
 		when( scaling_rational_stretch )
 		{
-			this->pos = r4x2();
+			view_ref->pos = r4x2();
 			skip;
 		}
 
@@ -1543,68 +1559,66 @@ object_fn( view, clamp )
 	}
 }
 
-object_fn( window, add_view, view in_view )
+embed view ref const window_add_view( window ref const window_ref, view in_view )
 {
-	list_add( this->views, in_view );
+	list_add( ref_of( window_ref->views ), in_view );
+	out ref_of( list_last( window_ref->views, view ) );
 }
-
-// window
 
 #define window_clear( WINDOW ) WINDOW->clear = yes
 
-object_fn( window, update )
+fn window_update( window ref const window_ref )
 {
 	#if OS_LINUX
-		XClearArea( windows_display, this->handle, 0, 0, 0, 0, yes );
+		XClearArea( windows_display, window_ref->handle, 0, 0, 0, 0, yes );
 	#elif OS_WINDOWS
-		InvalidateRect( this->handle, nothing, this->clear );
-		//UpdateWindow( this->handle );
+		InvalidateRect( window_ref->handle, nothing, window_ref->clear );
 	#endif
 }
 
-object_fn( window, set_size, n2 const width, n2 const height )
+fn window_set_size( window ref const window_ref, n2 const width, n2 const height )
 {
 	#if OS_LINUX
-		XResizeWindow( windows_display, this->handle, width, height );
+		XResizeWindow( windows_display, window_ref->handle, width, height );
 		XSync( windows_display, no );
 	#elif OS_WINDOWS
-		if( this->bordered )
+		if( window_ref->bordered )
 		{
 			RECT rect = { 0, 0, width, height };
 			AdjustWindowRect( ref_of( rect ), WS_OVERLAPPEDWINDOW, FALSE );
-			SetWindowPos( this->handle, nothing, 0, 0, rect.right - rect.left, rect.bottom - rect.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE );
+			SetWindowPos( window_ref->handle, nothing, 0, 0, rect.right - rect.left, rect.bottom - rect.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE );
 		}
 		else
 		{
-			SetWindowPos( this->handle, nothing, 0, 0, width, height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE );
+			SetWindowPos( window_ref->handle, nothing, 0, 0, width, height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE );
 		}
 	#endif
 }
 
-object_fn( window, get_position, i4 ref const out_x, i4 ref const out_y )
+fn window_get_position( window ref const window_ref, i4 ref const out_x, i4 ref const out_y )
 {
 	#if OS_LINUX
 		Window child;
-		XTranslateCoordinates( windows_display, this->handle, DefaultRootWindow( windows_display ), 0, 0, out_x, out_y, ref_of( child ) );
+		XTranslateCoordinates( windows_display, window_ref->handle, DefaultRootWindow( windows_display ), 0, 0, out_x, out_y, ref_of( child ) );
 	#elif OS_WINDOWS
 		RECT rect;
-		GetWindowRect( this->handle, ref_of( rect ) );
+		GetWindowRect( window_ref->handle, ref_of( rect ) );
 		val_of( out_x ) = rect.left;
 		val_of( out_y ) = rect.top;
 	#endif
 }
 
-object_fn( window, set_position, i4 const x, i4 const y )
+fn window_set_position( window ref const window_ref, i4 const x, i4 const y )
 {
 	#if OS_LINUX
-		XMoveWindow( windows_display, this->handle, x, y );
+		XMoveWindow( windows_display, window_ref->handle, x, y );
 		XSync( windows_display, no );
 	#elif OS_WINDOWS
-		SetWindowPos( this->handle, nothing, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE );
+		SetWindowPos( window_ref->handle, nothing, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE );
 	#endif
 }
 
-object_fn( window, get_mouse_position, i4 ref const out_x, i4 ref const out_y )
+fn window_get_mouse_position( window ref const window_ref, i4 ref const out_x, i4 ref const out_y )
 {
 	#if OS_LINUX
 		Window root,
@@ -1612,102 +1626,102 @@ object_fn( window, get_mouse_position, i4 ref const out_x, i4 ref const out_y )
 		i4 root_x,
 		root_y;
 		n4 mask;
-		XQueryPointer( windows_display, this->handle, ref_of( root ), ref_of( child ), ref_of( root_x ), ref_of( root_y ), out_x, out_y, ref_of( mask ) );
+		XQueryPointer( windows_display, window_ref->handle, ref_of( root ), ref_of( child ), ref_of( root_x ), ref_of( root_y ), out_x, out_y, ref_of( mask ) );
 	#elif OS_WINDOWS
 		POINT cursor;
 		GetCursorPos( ref_of( cursor ) );
-		ScreenToClient( this->handle, ref_of( cursor ) );
+		ScreenToClient( window_ref->handle, ref_of( cursor ) );
 		val_of( out_x ) = cursor.x;
 		val_of( out_y ) = cursor.y;
 	#endif
 }
 
-object_fn( window, show )
+fn window_show( window ref const window_ref )
 {
-	out_if( this->visible is yes );
+	out_if( window_ref->visible is yes );
 
 	#if OS_LINUX
-		XMapRaised( windows_display, this->handle );
+		XMapRaised( windows_display, window_ref->handle );
 		XSync( windows_display, no );
 	#elif OS_WINDOWS
-		SetFocus( this->handle );
-		SetForegroundWindow( this->handle );
-		ShowWindow( this->handle, SW_SHOWNOACTIVATE );
+		SetFocus( window_ref->handle );
+		SetForegroundWindow( window_ref->handle );
+		ShowWindow( window_ref->handle, SW_SHOWNOACTIVATE );
 	#endif
 
-	this->visible = yes;
+	window_ref->visible = yes;
 }
 
-object_fn( window, hide )
+fn window_hide( window ref const window_ref )
 {
-	out_if( this->visible is no );
+	out_if( window_ref->visible is no );
 
 	#if OS_LINUX
-		XUnmapWindow( windows_display, this->handle );
+		XUnmapWindow( windows_display, window_ref->handle );
 	#elif OS_WINDOWS
-		ShowWindow( this->handle, SW_HIDE );
+		ShowWindow( window_ref->handle, SW_HIDE );
 	#endif
 
-	this->visible = no;
+	window_ref->visible = no;
 }
 
-object_fn( window, toggle_visible )
+fn window_toggle_visible( window ref const window_ref )
 {
-	if( this->visible )
+	if( window_ref->visible )
 	{
-		window_hide( this );
+		window_hide( window_ref );
 	}
 	else
 	{
-		window_show( this );
+		window_show( window_ref );
 	}
 }
 
-object_fn( window, show_border )
+fn window_show_border( window ref const window_ref )
 {
-	out_if( this->bordered is yes );
+	out_if( window_ref->bordered is yes );
 
 	#if OS_LINUX
 		i4 orig_x,
 		orig_y;
-		window_get_position( this, ref_of( orig_x ), ref_of( orig_y ) );
+		window_get_position( window_ref, ref_of( orig_x ), ref_of( orig_y ) );
 
 		Atom prop = XInternAtom( windows_display, "_MOTIF_WM_HINTS", False );
-		XDeleteProperty( windows_display, this->handle, prop );
-		XWithdrawWindow( windows_display, this->handle, DefaultScreen( windows_display ) );
-		XMapWindow( windows_display, this->handle );
+		XDeleteProperty( windows_display, window_ref->handle, prop );
+		XWithdrawWindow( windows_display, window_ref->handle, DefaultScreen( windows_display ) );
+		XMapWindow( windows_display, window_ref->handle );
 		XSync( windows_display, no );
 
-		window_set_position( this, orig_x, orig_y );
+		window_set_position( window_ref, orig_x, orig_y );
 	#elif OS_WINDOWS
-		temp n2 client_w = this->size.w;
-		temp n2 client_h = this->size.h;
+		temp n2 client_w = window_ref->size.w;
+		temp n2 client_h = window_ref->size.h;
 
 		POINT client_pos = { 0, 0 };
-		ClientToScreen( this->handle, ref_of( client_pos ) );
+		ClientToScreen( window_ref->handle, ref_of( client_pos ) );
 
-		temp LONG_PTR style = GetWindowLongPtr( this->handle, GWL_STYLE );
+		temp LONG_PTR style = GetWindowLongPtr( window_ref->handle, GWL_STYLE );
 		style |= WS_OVERLAPPEDWINDOW;
-		SetWindowLongPtr( this->handle, GWL_STYLE, style );
+		SetWindowLongPtr( window_ref->handle, GWL_STYLE, style );
 
 		RECT rect = { 0, 0, client_w, client_h };
 		AdjustWindowRect( ref_of( rect ), WS_OVERLAPPEDWINDOW, FALSE );
 
-		SetWindowPos( this->handle, nothing, client_pos.x + rect.left, client_pos.y + rect.top, rect.right - rect.left, rect.bottom - rect.top, SWP_FRAMECHANGED | SWP_NOZORDER );
+		SetWindowPos( window_ref->handle, nothing, client_pos.x + rect.left, client_pos.y + rect.top, rect.right - rect.left, rect.bottom - rect.top, SWP_FRAMECHANGED | SWP_NOZORDER );
 	#endif
 
-	this->bordered = yes;
+	window_ref->bordered = yes;
 }
 
-object_fn( window, hide_border )
+fn window_hide_border( window ref const window_ref )
 {
-	out_if( this->bordered is no );
+	out_if( window_ref->bordered is no );
 
 	#if OS_LINUX
 		Window child;
-		i4 x,
-		y;
-		XTranslateCoordinates( windows_display, this->handle, DefaultRootWindow( windows_display ), 0, 0, ref_of( x ), ref_of( y ), ref_of( child ) );
+		i4 x;
+		i4 y;
+		XTranslateCoordinates( windows_display, window_ref->handle, DefaultRootWindow( windows_display ), 0, 0, ref_of( x ), ref_of( y ), ref_of( child ) );
 
 		variant
 		{
@@ -1719,51 +1733,51 @@ object_fn( window, hide_border )
 		}
 		hints = { 2, 0, 0, 0, 0 };
 		Atom prop = XInternAtom( windows_display, "_MOTIF_WM_HINTS", False );
-		XChangeProperty( windows_display, this->handle, prop, prop, 32, PropModeReplace, to( n1 ref, ref_of( hints ) ), 5 );
-		XWithdrawWindow( windows_display, this->handle, DefaultScreen( windows_display ) );
-		XMapWindow( windows_display, this->handle );
-		XMoveWindow( windows_display, this->handle, x, y );
+		XChangeProperty( windows_display, window_ref->handle, prop, prop, 32, PropModeReplace, to( n1 ref, ref_of( hints ) ), 5 );
+		XWithdrawWindow( windows_display, window_ref->handle, DefaultScreen( windows_display ) );
+		XMapWindow( windows_display, window_ref->handle );
+		XMoveWindow( windows_display, window_ref->handle, x, y );
 		XSync( windows_display, no );
 	#elif OS_WINDOWS
-		temp n2 client_w = this->size.w;
-		temp n2 client_h = this->size.h;
+		temp n2 client_w = window_ref->size.w;
+		temp n2 client_h = window_ref->size.h;
 
 		POINT client_pos = { 0, 0 };
-		ClientToScreen( this->handle, ref_of( client_pos ) );
+		ClientToScreen( window_ref->handle, ref_of( client_pos ) );
 
-		temp LONG_PTR style = GetWindowLongPtr( this->handle, GWL_STYLE );
+		temp LONG_PTR style = GetWindowLongPtr( window_ref->handle, GWL_STYLE );
 		style &= ~ ( WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU );
-		SetWindowLongPtr( this->handle, GWL_STYLE, style );
+		SetWindowLongPtr( window_ref->handle, GWL_STYLE, style );
 
-		SetWindowPos( this->handle, nothing, client_pos.x, client_pos.y, client_w, client_h, SWP_FRAMECHANGED | SWP_NOZORDER );
+		SetWindowPos( window_ref->handle, nothing, client_pos.x, client_pos.y, client_w, client_h, SWP_FRAMECHANGED | SWP_NOZORDER );
 	#endif
 
-	this->bordered = no;
+	window_ref->bordered = no;
 }
 
-object_fn( window, toggle_border )
+fn window_toggle_border( window ref const window_ref )
 {
-	if( this->bordered )
+	if( window_ref->bordered )
 	{
-		window_hide_border( this );
+		window_hide_border( window_ref );
 	}
 	else
 	{
-		window_show_border( this );
+		window_show_border( window_ref );
 	}
 }
 
-object_fn( window, center )
+fn window_center( window ref const window_ref )
 {
 	#if OS_LINUX
-		XMoveWindow( windows_display, this->handle, ( display_get_width() - this->size.w ) >> 1, ( display_get_height() - this->size.h ) >> 1 );
+		XMoveWindow( windows_display, window_ref->handle, ( display_get_width() - window_ref->size.w ) >> 1, ( display_get_height() - window_ref->size.h ) >> 1 );
 		XSync( windows_display, no );
 	#elif OS_WINDOWS
-		SetWindowPos( this->handle, nothing, ( display_get_width() - this->size.w ) >> 1, ( display_get_height() - this->size.h ) >> 1, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE );
+		SetWindowPos( window_ref->handle, nothing, ( display_get_width() - window_ref->size.w ) >> 1, ( display_get_height() - window_ref->size.h ) >> 1, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE );
 	#endif
 }
 
-////////
+////////////////////////////////
 // cursor
 
 group( cursor_type, i4 )
@@ -1781,102 +1795,102 @@ group( cursor_type, i4 )
 	cursor_not_allowed = PICK( OS_LINUX, XC_X_cursor, 32648 )
 };
 
-object_fn( window, set_cursor, cursor_type const cursor )
+fn window_set_cursor( window ref const window_ref, cursor_type const cursor )
 {
-	this->changed_cursor = yes;
+	window_ref->changed_cursor = yes;
 	#if OS_LINUX
 		perm Cursor cache[ 256 ] = { 0 };
 		if( not cache[ cursor ] )
 		{
 			cache[ cursor ] = XCreateFontCursor( windows_display, cursor );
 		}
-		XDefineCursor( windows_display, this->handle, cache[ cursor ] );
+		XDefineCursor( windows_display, window_ref->handle, cache[ cursor ] );
 	#else
 		SetCursor( LoadCursor( NULL, MAKEINTRESOURCE( cursor ) ) );
 	#endif
 }
 
-////////
-// hidden window functions
+////////////////////////////////
+// hidden functions
 
-fn _window_clear_inputs( window const this )
+fn _window_clear_inputs( window ref const window_ref )
 {
-	bytes_clear( this->inputs, inputs_count );
-	this->inputs_active = 0;
-	list_clear( this->inputs_pressed );
-	list_clear( this->inputs_released );
+	bytes_clear( window_ref->inputs, inputs_count );
+	window_ref->inputs_active = 0;
+	list_clear( ref_of( window_ref->inputs_pressed ) );
+	list_clear( ref_of( window_ref->inputs_released ) );
 }
 
-fn _window_set_size( window const this, n2 const width, n2 const height )
+fn _window_set_size( window ref const window_ref, n2 const width, n2 const height )
 {
-	out_if( this->size.w is width and this->size.h is height );
-	this->size.w = width;
-	this->size.h = height;
+	out_if( window_ref->size.w is width and window_ref->size.h is height );
+	window_ref->size.w = width;
+	window_ref->size.h = height;
 }
 
-fn _window_resize( window const this )
+fn _window_resize( window ref const window_ref )
 {
-	out_if_any( this is nothing, this->size.w <= 1, this->size.h <= 1 );
+	out_if_any( window_ref is nothing, window_ref->size.w <= 1, window_ref->size.h <= 1 );
 
-	this->using_buffer = this->using_buffer or( this->views->count > 1 );
+	window_ref->using_buffer = window_ref->using_buffer or( window_ref->views.count > 1 );
 
 	#if OS_LINUX
 		temp n4 const screen = DefaultScreen( windows_display );
 		temp n4 const depth = DefaultDepth( windows_display, screen );
 		temp XRenderPictFormat ref format = XRenderFindVisualFormat( windows_display, DefaultVisual( windows_display, screen ) );
 
-		if( this->using_buffer )
+		if( window_ref->using_buffer )
 		{
-			if( this->buffer_picture )
+			if( window_ref->buffer_picture )
 			{
-				XRenderFreePicture( windows_display, this->buffer_picture );
+				XRenderFreePicture( windows_display, window_ref->buffer_picture );
 			}
 
-			if( this->buffer )
+			if( window_ref->buffer )
 			{
-				XFreePixmap( windows_display, this->buffer );
+				XFreePixmap( windows_display, window_ref->buffer );
 			}
 
-			this->buffer = XCreatePixmap( windows_display, this->handle, this->size.w, this->size.h, depth );
+			window_ref->buffer = XCreatePixmap( windows_display, window_ref->handle, window_ref->size.w, window_ref->size.h, depth );
 
-			temp GC temp_gc = XCreateGC( windows_display, this->buffer, 0, nothing );
+			temp GC temp_gc = XCreateGC( windows_display, window_ref->buffer, 0, nothing );
 			XSetForeground( windows_display, temp_gc, BlackPixel( windows_display, screen ) );
-			XFillRectangle( windows_display, this->buffer, temp_gc, 0, 0, this->size.w, this->size.h );
+			XFillRectangle( windows_display, window_ref->buffer, temp_gc, 0, 0, window_ref->size.w, window_ref->size.h );
 			XFreeGC( windows_display, temp_gc );
 
-			this->buffer_picture = XRenderCreatePicture( windows_display, this->buffer, format, 0, nothing );
+			window_ref->buffer_picture = XRenderCreatePicture( windows_display, window_ref->buffer, format, 0, nothing );
 		}
 	#elif OS_WINDOWS
-		if( this->using_buffer )
+		if( window_ref->using_buffer )
 		{
-			if( this->buffer_dc )
+			if( window_ref->buffer_dc )
 			{
-				DeleteDC( this->buffer_dc );
-				this->buffer_dc = nothing;
+				DeleteDC( window_ref->buffer_dc );
+				window_ref->buffer_dc = nothing;
 			}
 
-			if( this->buffer )
+			if( window_ref->buffer )
 			{
-				DeleteObject( this->buffer );
-				this->buffer = nothing;
+				DeleteObject( window_ref->buffer );
+				window_ref->buffer = nothing;
 			}
 
-			BITMAPINFO bmi = { sizeof( bmi.bmiHeader ), this->size.w, -this->size.h, 1, 32, BI_RGB };
-			this->buffer = CreateDIBSection( this->window_dc, ref_of( bmi ), DIB_RGB_COLORS, to( anon ref ref, ref_of( this->buffer_pixels ) ), nothing, 0 );
-			this->buffer_dc = CreateCompatibleDC( this->window_dc );
-			SelectObject( this->buffer_dc, this->buffer );
+			BITMAPINFO bmi = { sizeof( bmi.bmiHeader ), window_ref->size.w, -window_ref->size.h, 1, 32, BI_RGB };
+			window_ref->buffer = CreateDIBSection( window_ref->window_dc, ref_of( bmi ), DIB_RGB_COLORS, to( anon ref ref, ref_of( window_ref->buffer_pixels ) ), nothing, 0 );
+			window_ref->buffer_dc = CreateCompatibleDC( window_ref->window_dc );
+			SelectObject( window_ref->buffer_dc, window_ref->buffer );
 		}
 	#endif
 
-	list_iter( this->views, view_index )
+	list_iter( window_ref->views, view_index )
 	{
-		temp view const this_view = list_get_iter( view_index, view );
+		temp view ref const this_view = ref_of( list_get_iter( view_index, view ) );
 
 		with( this_view->scaling )
 		{
 			when( scaling_integer_fit_floor, scaling_integer_fit_round, scaling_integer_fit_ceil, scaling_rational_fit )
 			{
-				temp r4 const scale = r4_min( r4( this->size.w ) / r4( this_view->canvas->size.w ), r4( this->size.h ) / r4( this_view->canvas->size.h ) );
+				temp r4 const scale = r4_min( r4( window_ref->size.w ) / r4( this_view->canvas.size.w ), r4( window_ref->size.h ) / r4( this_view->canvas.size.h ) );
 				this_view->scale.w = scale;
 				this_view->scale.h = scale;
 				skip;
@@ -1884,7 +1898,7 @@ fn _window_resize( window const this )
 
 			when( scaling_integer_fill_floor, scaling_integer_fill_round, scaling_integer_fill_ceil, scaling_rational_fill )
 			{
-				temp r4 const scale = r4_max( r4( this->size.w ) / r4( this_view->canvas->size.w ), r4( this->size.h ) / r4( this_view->canvas->size.h ) );
+				temp r4 const scale = r4_max( r4( window_ref->size.w ) / r4( this_view->canvas.size.w ), r4( window_ref->size.h ) / r4( this_view->canvas.size.h ) );
 				this_view->scale.w = scale;
 				this_view->scale.h = scale;
 				skip;
@@ -1892,8 +1906,8 @@ fn _window_resize( window const this )
 
 			when( scaling_integer_stretch_floor, scaling_integer_stretch_round, scaling_integer_stretch_ceil, scaling_rational_stretch )
 			{
-				this_view->scale.w = r4( this->size.w ) / r4( this_view->canvas->size.w );
-				this_view->scale.h = r4( this->size.h ) / r4( this_view->canvas->size.h );
+				this_view->scale.w = r4( window_ref->size.w ) / r4( this_view->canvas.size.w );
+				this_view->scale.h = r4( window_ref->size.h ) / r4( this_view->canvas.size.h );
 				skip;
 			}
 
@@ -1957,72 +1971,73 @@ fn _window_resize( window const this )
 				XFreePixmap( windows_display, this_view->pixmap );
 			}
 
-			this_view->pixmap = XCreatePixmap( windows_display, this->handle, this_view->canvas->size.w, this_view->canvas->size.h, depth );
+			this_view->pixmap = XCreatePixmap( windows_display, window_ref->handle, this_view->canvas->size.w, this_view->canvas->size.h, depth );
 			this_view->picture = XRenderCreatePicture( windows_display, this_view->pixmap, format, 0, 0 );
 		#endif
 	}
 
-	call( this, fn_resize );
+	window_ref->fn_resize( window_ref );
 }
 
-fn _window_tick_once( window const this )
+fn _window_tick_once( window ref const window_ref )
 {
-	window_get_mouse_position( this, ref_of( this->mouse.x ), ref_of( this->mouse.y ) );
+	window_get_mouse_position( window_ref, ref_of( window_ref->mouse.x ), ref_of( window_ref->mouse.y ) );
 
-	list_iter( this->views, view_index )
+	list_iter( window_ref->views, view_index )
 	{
-		temp view const this_view = list_get_iter( view_index, view );
-		this_view->mouse = r4x2( r4( this->mouse.x - this_view->pos.x ) / this_view->scale.w, r4( this->mouse.y - this_view->pos.y ) / this_view->scale.h );
+		temp view ref const this_view = ref_of( list_get_iter( view_index, view ) );
+		this_view->mouse_prev = this_view->mouse;
+		this_view->mouse = r4x2( r4( window_ref->mouse.x - this_view->pos.x ) / this_view->scale.w, r4( window_ref->mouse.y - this_view->pos.y ) / this_view->scale.h );
 	}
 
 	perm nano start_nano = 0;
 	once start_nano = get_nano();
 
-	this->delta_time = r4( get_nano() - start_nano ) / r4( nano_per_sec );
+	window_ref->delta_time = r4( get_nano() - start_nano ) / r4( nano_per_sec );
 	start_nano = get_nano();
 
-	call( this, fn_tick );
+	window_ref->fn_tick( window_ref );
 
-	if( this->inputs_pressed->count > 0 )
+	if( window_ref->inputs_pressed.count > 0 )
 	{
-		list_iter( this->inputs_pressed, input_index )
+		list_iter( window_ref->inputs_pressed, input_index )
 		{
 			temp byte ref const input_ref = ref_of( list_get_iter( input_index, byte ) );
-			this->inputs[ val_of( input_ref ) ] = INPUT_MASK_HELD;
+			window_ref->inputs[ val_of( input_ref ) ] = INPUT_MASK_HELD;
 			val_of( input_ref ) = 0;
 		}
-		list_clear( this->inputs_pressed );
+		list_clear( ref_of( window_ref->inputs_pressed ) );
 	}
 
-	if( this->inputs_released->count > 0 )
+	if( window_ref->inputs_released.count > 0 )
 	{
-		list_iter( this->inputs_released, input_index )
+		list_iter( window_ref->inputs_released, input_index )
 		{
 			temp byte ref const input_ref = ref_of( list_get_iter( input_index, byte ) );
-			this->inputs[ val_of( input_ref ) ] = 0;
-			--this->inputs_active;
+			window_ref->inputs[ val_of( input_ref ) ] = 0;
+			--window_ref->inputs_active;
 			val_of( input_ref ) = 0;
 		}
-		list_clear( this->inputs_released );
+		list_clear( ref_of( window_ref->inputs_released ) );
 	}
 
-	this->scroll = r4x2();
+	window_ref->scroll = r4x2();
 }
 
-fn _window_draw( window const this )
+fn _window_draw( window ref const window_ref )
 {
-	list_iter( this->views, view_index )
+	list_iter( window_ref->views, view_index )
 	{
-		temp view const this_view = list_get_iter( view_index, view );
-		next_if( this_view->update is no );
-		call( this_view, fn_draw );
-		this_view->update = no;
+		temp view ref const view_ref = ref_of( list_get_iter( view_index, view ) );
+		next_if( view_ref->update is no );
+		view_ref->fn_draw( view_ref );
+		view_ref->update = no;
 	}
 }
 
-fn _window_present( window const this )
+fn _window_present( window ref const window_ref )
 {
-	this->using_buffer = this->using_buffer or this->views->count > 1;
+	window_ref->using_buffer = window_ref->using_buffer or window_ref->views.count > 1;
 
 	#if OS_LINUX
 		perm GC gc = nothing;
@@ -2033,28 +2048,28 @@ fn _window_present( window const this )
 
 		once
 		{
-			gc = XCreateGC( windows_display, this->handle, 0, nothing );
+			gc = XCreateGC( windows_display, window_ref->handle, 0, nothing );
 			XSetForeground( windows_display, gc, 0 );
 			format = XRenderFindVisualFormat( windows_display, DefaultVisual( windows_display, DefaultScreen( windows_display ) ) );
-			window_picture = XRenderCreatePicture( windows_display, this->handle, format, 0, nothing );
+			window_picture = XRenderCreatePicture( windows_display, window_ref->handle, format, 0, nothing );
 			transform.matrix[ 2 ][ 2 ] = XDoubleToFixed( 1.0 );
-			XPresentSelectInput( windows_display, this->handle, PresentCompleteNotifyMask );
+			XPresentSelectInput( windows_display, window_ref->handle, PresentCompleteNotifyMask );
 		}
-		temp Picture const target_picture = pick( this->using_buffer, this->buffer_picture, window_picture );
-		temp Drawable const target_drawable = pick( this->using_buffer, this->buffer, this->handle );
+		temp Picture const target_picture = pick( window_ref->using_buffer, window_ref->buffer_picture, window_picture );
+		temp Drawable const target_drawable = pick( window_ref->using_buffer, window_ref->buffer, window_ref->handle );
 	#elif OS_WINDOWS
-		temp HDC const target_dc = pick( this->using_buffer, this->buffer_dc, this->window_dc );
+		temp HDC const target_dc = pick( window_ref->using_buffer, window_ref->buffer_dc, window_ref->window_dc );
 		perm HBRUSH black_brush = nothing;
 		once black_brush = to( HBRUSH, GetStockObject( BLACK_BRUSH ) );
 	#endif
 
-	temp i4 const win_w = this->size.w;
-	temp i4 const win_h = this->size.h;
-	temp flag const needs_clear = this->clear;
+	temp i4 const win_w = window_ref->size.w;
+	temp i4 const win_h = window_ref->size.h;
+	temp flag const needs_clear = window_ref->clear;
 
-	this->clear = no;
+	window_ref->clear = no;
 
-	if( needs_clear and this->using_buffer is yes )
+	if( needs_clear and window_ref->using_buffer is yes )
 	{
 		#if OS_LINUX
 			XRenderFillRectangle( windows_display, PictOpSrc, target_picture, ref_of( black ), 0, 0, win_w, win_h );
@@ -2068,62 +2083,62 @@ fn _window_present( window const this )
 	temp i4 view_r = win_w;
 	temp i4 view_b = win_h;
 
-	list_iter( this->views, view_index )
+	list_iter( window_ref->views, view_index )
 	{
-		temp view const this_view = list_get_iter( view_index, view );
-		temp r4x2 const scaled_size = view_get_scaled_size( this_view );
+		temp view ref const view_ref = ref_of( list_get_iter( view_index, view ) );
+		temp r4x2 const scaled_size = view_get_scaled_size( view_ref );
 
 		skip_if( scaled_size.w is 0 or scaled_size.h is 0 );
 
-		temp i4 const canvas_w = this_view->canvas->size.w;
-		temp i4 const canvas_h = this_view->canvas->size.h;
+		temp i4 const canvas_w = view_ref->canvas.size.w;
+		temp i4 const canvas_h = view_ref->canvas.size.h;
 
-		view_l = i4( r4_round( this_view->pos.x ) );
-		view_t = i4( r4_round( this_view->pos.y ) );
+		view_l = i4( r4_round( view_ref->pos.x ) );
+		view_t = i4( r4_round( view_ref->pos.y ) );
 		view_r = view_l + i4( r4_round( scaled_size.w ) );
 		view_b = view_t + i4( r4_round( scaled_size.h ) );
 
 		#if OS_LINUX
-			this->image->data = to( byte ref, this_view->canvas->pixels );
-			this->image->width = canvas_w;
-			this->image->height = canvas_h;
-			this->image->bytes_per_line = canvas_w << pixel_shift;
+			window_ref->image->data = to( byte ref, view_ref->canvas.pixels );
+			window_ref->image->width = canvas_w;
+			window_ref->image->height = canvas_h;
+			window_ref->image->bytes_per_line = canvas_w << pixel_shift;
 		#elif OS_WINDOWS
-			this->image.bmiHeader.biWidth = canvas_w;
-			this->image.bmiHeader.biHeight = -canvas_h;
+			window_ref->image.bmiHeader.biWidth = canvas_w;
+			window_ref->image.bmiHeader.biHeight = -canvas_h;
 		#endif
 
-		temp r4 const scale_w = this_view->scale.w;
-		temp r4 const scale_h = this_view->scale.h;
+		temp r4 const scale_w = view_ref->scale.w;
+		temp r4 const scale_h = view_ref->scale.h;
 
 		if( scale_w is 1.0 and scale_h is 1.0 )
 		{
 			#if OS_LINUX
-				XPutImage( windows_display, target_drawable, gc, this->image, 0, 0, view_l, view_t, canvas_w, canvas_h );
+				XPutImage( windows_display, target_drawable, gc, window_ref->image, 0, 0, view_l, view_t, canvas_w, canvas_h );
 			#elif OS_WINDOWS
-				SetDIBitsToDevice( target_dc, view_l, view_t, canvas_w, canvas_h, 0, 0, 0, canvas_h, this_view->canvas->pixels, ref_of( this->image ), DIB_RGB_COLORS );
+				SetDIBitsToDevice( target_dc, view_l, view_t, canvas_w, canvas_h, 0, 0, 0, canvas_h, view_ref->canvas.pixels, ref_of( window_ref->image ), DIB_RGB_COLORS );
 			#endif
 		}
 		else
 		{
-			temp r4 const clip_l = r4_max( 0, this_view->pos.x );
-			temp r4 const clip_t = r4_max( 0, this_view->pos.y );
-			temp r4 const clip_r = r4_min( r4( win_w ), this_view->pos.x + scaled_size.w );
-			temp r4 const clip_b = r4_min( r4( win_h ), this_view->pos.y + scaled_size.h );
+			temp r4 const clip_l = r4_max( 0, view_ref->pos.x );
+			temp r4 const clip_t = r4_max( 0, view_ref->pos.y );
+			temp r4 const clip_r = r4_min( r4( win_w ), view_ref->pos.x + scaled_size.w );
+			temp r4 const clip_b = r4_min( r4( win_h ), view_ref->pos.y + scaled_size.h );
 
 			if( clip_r > clip_l and clip_b > clip_t )
 			{
-				temp r4 const off_l = clip_l - this_view->pos.x;
-				temp r4 const off_t = clip_t - this_view->pos.y;
-				temp r4 const off_r = clip_r - this_view->pos.x;
-				temp r4 const off_b = clip_b - this_view->pos.y;
+				temp r4 const off_l = clip_l - view_ref->pos.x;
+				temp r4 const off_t = clip_t - view_ref->pos.y;
+				temp r4 const off_r = clip_r - view_ref->pos.x;
+				temp r4 const off_b = clip_b - view_ref->pos.y;
 
 				#if OS_LINUX
-					XPutImage( windows_display, this_view->pixmap, gc, this->image, 0, 0, 0, 0, canvas_w, canvas_h );
+					XPutImage( windows_display, view_ref->pixmap, gc, window_ref->image, 0, 0, 0, 0, canvas_w, canvas_h );
 					transform.matrix[ 0 ][ 0 ] = XDoubleToFixed( 1.0 / scale_w );
 					transform.matrix[ 1 ][ 1 ] = XDoubleToFixed( 1.0 / scale_h );
-					XRenderSetPictureTransform( windows_display, this_view->picture, ref_of( transform ) );
-					XRenderComposite( windows_display, PictOpSrc, this_view->picture, None, target_picture, i4( r4_round( off_l ) ), i4( r4_round( off_t ) ), 0, 0, i4( r4_round( clip_l ) ), i4( r4_round( clip_t ) ), i4( r4_round( clip_r - clip_l ) ), i4( r4_round( clip_b - clip_t ) ) );
+					XRenderSetPictureTransform( windows_display, view_ref->picture, ref_of( transform ) );
+					XRenderComposite( windows_display, PictOpSrc, view_ref->picture, None, target_picture, i4( r4_round( off_l ) ), i4( r4_round( off_t ) ), 0, 0, i4( r4_round( clip_l ) ), i4( r4_round( clip_t ) ), i4( r4_round( clip_r - clip_l ) ), i4( r4_round( clip_b - clip_t ) ) );
 				#elif OS_WINDOWS
 					temp r4 const src_l = r4_floor( off_l / scale_w );
 					temp r4 const src_t = r4_floor( off_t / scale_h );
@@ -2131,12 +2146,12 @@ fn _window_present( window const this )
 					temp r4 const src_b = r4_ceil( off_b / scale_h );
 
 					SetStretchBltMode( target_dc, pick( scale_w < 1.0 or scale_h < 1.0, HALFTONE, COLORONCOLOR ) );
-					StretchDIBits( target_dc, i4( r4_round( this_view->pos.x + src_l * scale_w ) ), i4( r4_round( this_view->pos.y + src_t * scale_h ) ), i4( r4_round( ( src_r - src_l ) * scale_w ) ), i4( r4_round( ( src_b - src_t ) * scale_h ) ), i4( src_l ), i4( r4( canvas_h ) - src_b ), i4( src_r - src_l ), i4( src_b - src_t ), this_view->canvas->pixels, ref_of( this->image ), DIB_RGB_COLORS, SRCCOPY );
+					StretchDIBits( target_dc, i4( r4_round( view_ref->pos.x + src_l * scale_w ) ), i4( r4_round( view_ref->pos.y + src_t * scale_h ) ), i4( r4_round( ( src_r - src_l ) * scale_w ) ), i4( r4_round( ( src_b - src_t ) * scale_h ) ), i4( src_l ), i4( r4( canvas_h ) - src_b ), i4( src_r - src_l ), i4( src_b - src_t ), view_ref->canvas.pixels, ref_of( window_ref->image ), DIB_RGB_COLORS, SRCCOPY );
 				#endif
 			}
 		}
 
-		if( this_view->outline.a isnt 0 )
+		if( view_ref->outline.a isnt 0 )
 		{
 			temp i4 const outline_l = view_l - 1;
 			temp i4 const outline_t = view_t - 1;
@@ -2144,13 +2159,13 @@ fn _window_present( window const this )
 			temp i4 const outline_b = view_b;
 
 			#if OS_LINUX
-				XSetForeground( windows_display, gc, ( n4( this_view->outline.r ) << 16 ) | ( n4( this_view->outline.g ) << 8 ) | n4( this_view->outline.b ) );
+				XSetForeground( windows_display, gc, ( n4( view_ref->outline.r ) << 16 ) | ( n4( view_ref->outline.g ) << 8 ) | n4( view_ref->outline.b ) );
 				XDrawRectangle( windows_display, target_drawable, gc, outline_l, outline_t, outline_r - outline_l, outline_b - outline_t );
 			#elif OS_WINDOWS
 				perm HBRUSH null_brush = nothing;
 				once null_brush = to( HBRUSH, GetStockObject( NULL_BRUSH ) );
 
-				temp HPEN color_pen = CreatePen( PS_SOLID, 1, RGB( this_view->outline.r, this_view->outline.g, this_view->outline.b ) );
+				temp HPEN color_pen = CreatePen( PS_SOLID, 1, RGB( view_ref->outline.r, view_ref->outline.g, view_ref->outline.b ) );
 				HPEN old_pen = to( HPEN, SelectObject( target_dc, color_pen ) );
 				HBRUSH old_brush = to( HBRUSH, SelectObject( target_dc, null_brush ) );
 				Rectangle( target_dc, outline_l, outline_t, outline_r + 1, outline_b + 1 );
@@ -2160,8 +2175,7 @@ fn _window_present( window const this )
 			#endif
 		}
 
-		// lines
-		list_iter( this_view->lines, line_id )
+		list_iter( view_ref->lines, line_id )
 		{
 			temp view_line const this_line = list_get_iter( line_id, view_line );
 
@@ -2184,11 +2198,11 @@ fn _window_present( window const this )
 				DeleteObject( color_pen );
 			#endif
 		}
-		list_clear( this_view->lines );
+		list_clear( ref_of( view_ref->lines ) );
 	}
 
-	if( needs_clear and this->using_buffer is no )
-	{ // Clamp view bounds to window area for clearing logic
+	if( needs_clear and window_ref->using_buffer is no )
+	{
 		temp i4 const safe_view_l = i4_clamp( view_l, 0, win_w );
 		temp i4 const safe_view_t = i4_clamp( view_t, 0, win_h );
 		temp i4 const safe_view_r = i4_clamp( view_r, 0, win_w );
@@ -2238,17 +2252,17 @@ fn _window_present( window const this )
 		}
 	}
 
-	if( this->using_buffer is yes )
+	if( window_ref->using_buffer is yes )
 	{
 		#if OS_LINUX
-			XPresentPixmap( windows_display, this->handle, this->buffer, 0, 0, 0, 0, 0, 0, 0, 0, PresentOptionAsync, 0, 0, 0, 0, 0 );
+			XPresentPixmap( windows_display, window_ref->handle, window_ref->buffer, 0, 0, 0, 0, 0, 0, 0, 0, PresentOptionAsync, 0, 0, 0, 0, 0 );
 		#elif OS_WINDOWS
-			BitBlt( this->window_dc, 0, 0, win_w, win_h, this->buffer_dc, 0, 0, SRCCOPY );
+			BitBlt( window_ref->window_dc, 0, 0, win_w, win_h, window_ref->buffer_dc, 0, 0, SRCCOPY );
 		#endif
 	}
 }
 
-////////
+////////////////////////////////
 // window events
 
 group( window_event_type, n2 )
@@ -2269,9 +2283,9 @@ group( window_event_type, n2 )
 #endif
 {
 	#if OS_WINDOWS
-		temp window this = to( window, GetWindowLongPtr( h, GWLP_USERDATA ) );
+		temp window ref const window_ref = to( window ref const, GetWindowLongPtr( h, GWLP_USERDATA ) );
 	#endif
-	jump_if_nothing( this ) exit_events;
+	jump_if_nothing( window_ref ) exit_events;
 
 	temp flag is_input = no;
 
@@ -2294,7 +2308,7 @@ group( window_event_type, n2 )
 			{
 				skip_if( wp isnt 1 );
 
-				_window_tick_once( this );
+				_window_tick_once( window_ref );
 				jump WINDOW_PRESENT;
 			}
 
@@ -2307,13 +2321,13 @@ group( window_event_type, n2 )
 			{
 				if( LOWORD( lp ) is HTCLIENT )
 				{
-					if( this->changed_cursor is no )
+					if( window_ref->changed_cursor is no )
 					{
 						SetCursor( LoadCursor( nothing, IDC_ARROW ) );
 					}
 					else
 					{
-						this->changed_cursor = no;
+						window_ref->changed_cursor = no;
 					}
 					out yes;
 				}
@@ -2322,14 +2336,14 @@ group( window_event_type, n2 )
 
 			when( WM_NCPAINT )
 			{
-				skip_if( this->bordered is yes );
+				skip_if( window_ref->bordered is yes );
 				out 1;
 			}
 		#endif
 
 		when( window_event_focus_lost )
 		{
-			_window_clear_inputs( this );
+			_window_clear_inputs( window_ref );
 			skip;
 		}
 
@@ -2338,18 +2352,17 @@ group( window_event_type, n2 )
 			#if OS_LINUX
 				temp n2 w = e->xconfigure.width;
 				temp n2 h = e->xconfigure.height;
-				// drain to get latest
 				os_event next_resize;
-				while( XCheckTypedWindowEvent( windows_display, this->handle, ConfigureNotify, ref_of( next_resize ) ) )
+				while( XCheckTypedWindowEvent( windows_display, window_ref->handle, ConfigureNotify, ref_of( next_resize ) ) )
 				{
 					w = next_resize.xconfigure.width;
 					h = next_resize.xconfigure.height;
 				}
-				_window_set_size( this, w, h );
+				_window_set_size( window_ref, w, h );
 			#elif OS_WINDOWS
-				_window_set_size( this, LOWORD( lp ), HIWORD( lp ) );
+				_window_set_size( window_ref, LOWORD( lp ), HIWORD( lp ) );
 			#endif
-			_window_resize( this );
+			_window_resize( window_ref );
 
 			//DRAW_AND_PRESENT:
 			//_window_draw( this );
@@ -2368,8 +2381,8 @@ group( window_event_type, n2 )
 			//ValidateRect(this->handle, nothing);
 
 			WINDOW_PRESENT:
-			_window_draw( this );
-			_window_present( this );
+			_window_draw( window_ref );
+			_window_present( window_ref );
 
 			#if OS_WINDOWS
 
@@ -2383,7 +2396,6 @@ group( window_event_type, n2 )
 		when( window_event_mouse_move )
 		{
 			#if OS_LINUX
-				// drain to get latest
 				os_event next_move;
 				while( XCheckTypedWindowEvent( windows_display, this->handle, MotionNotify, ref_of( next_move ) ) );
 			#endif
@@ -2522,14 +2534,14 @@ group( window_event_type, n2 )
 
 			when( WM_MOUSEWHEEL )
 			{
-				this->scroll.y += r4_sign( GET_WHEEL_DELTA_WPARAM( wp ) );
+				window_ref->scroll.y += r4_sign( GET_WHEEL_DELTA_WPARAM( wp ) );
 				is_input = yes;
 				skip;
 			}
 
 			when( WM_MOUSEHWHEEL )
 			{
-				this->scroll.x += r4_sign( GET_WHEEL_DELTA_WPARAM( wp ) );
+				window_ref->scroll.x += r4_sign( GET_WHEEL_DELTA_WPARAM( wp ) );
 				is_input = yes;
 				skip;
 			}
@@ -2541,7 +2553,7 @@ group( window_event_type, n2 )
 				PostQuitMessage( 0 );
 			#endif
 
-			this->close = yes;
+			window_ref->close = yes;
 
 			out success;
 		}
@@ -2551,7 +2563,7 @@ group( window_event_type, n2 )
 
 	if( windows_fps_tick is 0 and is_input )
 	{
-		_window_tick_once( this );
+		_window_tick_once( window_ref );
 	}
 
 	exit_events:
@@ -2562,83 +2574,85 @@ group( window_event_type, n2 )
 	#endif
 }
 
-////////
-// new window
-
-new_object_fn( window, byte const ref const name, n2 const width, n2 const height )
+embed window new_window( byte const ref const name, n2 const width, n2 const height )
 {
-	temp window const out_window = new_object( window );
+	temp window this = { 0 };
 
 	temp n2 const name_size = bytes_measure( name );
-	out_window->name = new_text_bytes( name, name_size );
+	this.name = new_text_bytes( name, name_size );
 
-	out_window->size.w = width;
-	out_window->size.h = height;
+	this.size.w = width;
+	this.size.h = height;
 
-	out_window->views = new_list( view );
+	this.views = new_list( view );
 
-	out_window->bordered = yes;
+	this.bordered = yes;
 
-	out_window->inputs_pressed = new_list( byte );
-	out_window->inputs_released = new_list( byte );
+	this.inputs_pressed = new_list( byte );
+	this.inputs_released = new_list( byte );
 
 	#if OS_LINUX
 		temp i4 screen = DefaultScreen( windows_display );
 
-		out_window->handle = XCreateSimpleWindow( windows_display, RootWindow( windows_display, screen ), 0, 0, width, height, 0, 0, 0 );
+		this.handle = XCreateSimpleWindow( windows_display, RootWindow( windows_display, screen ), 0, 0, width, height, 0, 0, 0 );
 
-		XSetWindowBackgroundPixmap( windows_display, out_window->handle, None );
-		XSelectInput( windows_display, out_window->handle, ExposureMask | StructureNotifyMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | FocusChangeMask | PointerMotionMask );
-		XStoreName( windows_display, out_window->handle, out_window->name->bytes );
+		XSetWindowBackgroundPixmap( windows_display, this.handle, None );
+		XSelectInput( windows_display, this.handle, ExposureMask | StructureNotifyMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | FocusChangeMask | PointerMotionMask );
+		XStoreName( windows_display, this.handle, this.name.bytes );
 
-		out_window->image = XCreateImage( windows_display, DefaultVisual( windows_display, screen ), DefaultDepth( windows_display, screen ), ZPixmap, 0, nothing, width, height, 32, 0 );
+		this.image = XCreateImage( windows_display, DefaultVisual( windows_display, screen ), DefaultDepth( windows_display, screen ), ZPixmap, 0, nothing, width, height, 32, 0 );
 	#elif OS_WINDOWS
 		WNDCLASS wclass = { 0 };
 		wclass.lpfnWndProc = to( type_of( wclass.lpfnWndProc ), window_process_event );
 		wclass.hInstance = GetModuleHandle( nothing );
-		wclass.lpszClassName = out_window->name->bytes;
+		wclass.lpszClassName = this.name.bytes;
 		RegisterClass( ref_of( wclass ) );
 
 		RECT rect = { 0, 0, width, height };
 		AdjustWindowRect( ref_of( rect ), WS_OVERLAPPEDWINDOW, FALSE );
 
-		out_window->handle = CreateWindow( out_window->name->bytes, out_window->name->bytes, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top, nothing, nothing, GetModuleHandle( nothing ), nothing );
+		this.handle = CreateWindow( this.name.bytes, this.name.bytes, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top, nothing, nothing, GetModuleHandle( nothing ), nothing );
 
-		out_window->window_dc = GetDC( out_window->handle );
+		this.window_dc = GetDC( this.handle );
 
-		out_window->image.bmiHeader.biSize = size_of( out_window->image.bmiHeader );
-		out_window->image.bmiHeader.biPlanes = 1;
-		out_window->image.bmiHeader.biBitCount = 32;
-		out_window->image.bmiHeader.biCompression = BI_RGB;
+		this.image.bmiHeader.biSize = size_of( this.image.bmiHeader );
+		this.image.bmiHeader.biPlanes = 1;
+		this.image.bmiHeader.biBitCount = 32;
+		this.image.bmiHeader.biCompression = BI_RGB;
 
-		SetWindowLongPtr( out_window->handle, GWLP_USERDATA, to( LONG_PTR, out_window ) );
-		SendMessage( out_window->handle, WM_SETICON, ICON_SMALL, ( LPARAM ) windows_icon );
-		SendMessage( out_window->handle, WM_SETICON, ICON_BIG, ( LPARAM ) windows_icon );
+		SendMessage( this.handle, WM_SETICON, ICON_SMALL, ( LPARAM ) windows_icon );
+		SendMessage( this.handle, WM_SETICON, ICON_BIG, ( LPARAM ) windows_icon );
 	#endif
 
-	current_window = out_window;
-	list_add( windows, current_window );
-	out current_window;
+	out this;
 }
 
-delete_object_fn( window )
+fn window_register( window ref window_ref )
 {
-	delete_text( this->name );
-	list_iter( this->views, canvas_id )
-	{
-		delete_view( list_get_iter( canvas_id, view ) );
-	}
-	delete_list( this->views );
-	delete_list( this->inputs_pressed );
-	delete_list( this->inputs_released );
+	list_add( ref_of( window_refs ), window_ref );
 
-	delete_object( this );
+	#if OS_WINDOWS
+		SetWindowLongPtr( window_ref->handle, GWLP_USERDATA, to( LONG_PTR, window_ref ) );
+	#endif
 }
 
-////////
+fn delete_window( window ref const window_ref )
+{
+	delete_text( ref_of( window_ref->name ) );
+	list_iter( window_ref->views, canvas_id )
+	{
+		delete_view( ref_of( list_get_iter( canvas_id, view ) ) );
+	}
+	delete_list( ref_of( window_ref->views ) );
+	delete_list( ref_of( window_ref->inputs_pressed ) );
+	delete_list( ref_of( window_ref->inputs_released ) );
+	val_of( window_ref ) = make( window );
+}
+
+////////////////////////////////
 // window process
 
-fn _window_process_events( window const this )
+fn _window_process_events()
 {
 	os_event event;
 	#if OS_LINUX
@@ -2656,32 +2670,33 @@ fn _window_process_events( window const this )
 	#endif
 }
 
-fn _window_process( window const this )
+fn _window_process( window ref const window_ref )
 {
-	current_window = this;
+	++window_ref->tick;
 
-	++this->tick;
-
-	if( this->tick is 1 )
+	if( window_ref->tick is 1 )
 	{
-		_window_resize( this );
-		window_center( this );
-		call( this, fn_start );
+		_window_resize( window_ref );
+		window_center( window_ref );
+		window_ref->fn_start( window_ref );
 	}
-	else if( this->tick is 2 )
+	else if( window_ref->tick is 2 )
 	{
-		window_show( this );
+		window_show( window_ref );
 	}
 
-	_window_process_events( this );
+	_window_process_events();
 }
 
-////////////////////////////////
-/// Heptane system functions
+//
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////// heptane
+/// heptane
+//
 
 fn _C7H16_init()
 {
-	windows = new_list( window );
+	window_refs = new_list( window ref );
 
 	#if OS_LINUX
 		windows_display = XOpenDisplay( nothing );
@@ -2704,7 +2719,7 @@ fn _C7H16_loop()
 
 	loop
 	{
-		out_if( windows->count is 0 );
+		out_if( window_refs.count is 0 );
 
 		temp const nano frame_nano_tick = pick( windows_fps_tick > 0, nano_per_sec / windows_fps_tick, 0 );
 		temp const nano frame_nano_draw = pick( windows_fps_draw > 0, nano_per_sec / windows_fps_draw, 0 );
@@ -2718,16 +2733,14 @@ fn _C7H16_loop()
 		prev_frame_nano_tick = frame_nano_tick;
 
 		// process
-		list_iter( windows, window_id )
+		list_iter( window_refs, window_id )
 		{
-			temp window const this_window = list_get_iter( window_id, window );
+			temp window ref const this_window = list_get_iter( window_id, window ref const );
 			_window_process( this_window );
 
 			if( this_window->close )
 			{
 				out_if( window_id is 0 );
-
-				list_delete( windows, window_id );
 				--window_id;
 				skip_if( window_id < 0 );
 			}
@@ -2739,37 +2752,36 @@ fn _C7H16_loop()
 			temp const nano elapsed = get_nano() - windows_time_start;
 			temp const n8 target_frames = n8( elapsed / frame_nano_tick );
 
-			// main tick (inputs reset after fn_tick)
 			if( windows_time_tick <= target_frames )
 			{
 				++windows_time_tick;
-				list_iter( windows, window_id )
+				list_iter( window_refs, window_id )
 				{
-					_window_tick_once( list_get_iter( window_id, window ) );
+					_window_tick_once( list_get_iter( window_id, window ref const ) );
 				}
 			}
 
 			// catch up (no input processing)
-			while( windows_time_tick <= target_frames )
+			/*while( windows_time_tick <= target_frames )
 			{
 				++windows_time_tick;
-				list_iter( windows, window_id )
+				list_iter( window_refs, window_id )
 				{
 					//call( list_get_iter( window_id, window ), fn_tick );
 				}
-			}
+			}*/
 		}
 
 		// draw
 		temp nano now = get_nano();
 		if( frame_nano_draw > 0 and now >= windows_time_next_draw )
 		{
-			list_iter( windows, window_id )
+			list_iter( window_refs, window_id )
 			{
-				temp window const this_window = list_get_iter( window_id, window );
+				temp window ref const this_window = list_get_iter( window_id, window ref const );
 				//_window_draw( this_window );
 				window_update( this_window );
-				_window_process_events( this_window );
+				_window_process_events();
 			}
 
 			windows_time_next_draw += frame_nano_draw;
@@ -2783,9 +2795,9 @@ fn _C7H16_loop()
 		if( event_driven )
 		{
 			temp flag all_ready = yes;
-			list_iter( windows, window_id )
+			list_iter( window_refs, window_id )
 			{
-				if( list_get_iter( window_id, window )->tick < 3 )
+				if( list_get_iter( window_id, window ref const )->tick < 3 )
 				{
 					all_ready = no;
 					skip;
@@ -2835,11 +2847,11 @@ fn _C7H16_loop()
 
 fn _C7H16_close()
 {
-	list_iter( windows, window_index )
+	list_iter( window_refs, window_index )
 	{
-		delete_window( list_get_iter( window_index, window ) );
+		delete_window( list_get_iter( window_index, window ref const ) );
 	}
-	delete_list( windows );
+	delete_list( ref_of( window_refs ) );
 }
 
 #undef start
@@ -2855,4 +2867,6 @@ fn _C7H16_close()
 	}\
 	fn _C7H16_main( i4 const start_parameters_count, byte const ref const ref const start_parameters )
 
-////////////////////////////////////////////////////////////////
+//
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
