@@ -1349,7 +1349,8 @@ type( view_line )
 }
 packed;
 
-//fn_type(, anon ref ) view_ref_fn;
+type( view );
+type_fn( anon, view ref const ) view_ref_fn;
 
 type( view )
 {
@@ -1423,7 +1424,7 @@ fn view_update( view ref const view_ref )
 
 embed flag mouse_in_view( view ref const view_ref )
 {
-	out point_in_size( view_ref->mouse.x, view_ref->mouse.y, view_ref->canvas.size.w, view_ref->canvas.size.h );
+	out point_in_size( r4_trunc( view_ref->mouse.x ), r4_trunc( view_ref->mouse.y ), view_ref->canvas.size.w, view_ref->canvas.size.h );
 }
 
 ////////////////////////////////
@@ -1432,6 +1433,9 @@ embed flag mouse_in_view( view ref const view_ref )
 type_from( PICK( OS_LINUX, Window, HWND ) ) os_handle;
 type_from( PICK( OS_LINUX, XImage ref, BITMAPINFO ) ) os_image;
 type_from( PICK( OS_LINUX, XEvent, MSG ) ) os_event;
+
+type( window );
+type_fn( anon, window ref const ) window_ref_fn;
 
 type( window )
 {
@@ -1451,7 +1455,7 @@ type( window )
 		HDC window_dc;
 	#endif
 
-	list views;
+	list view_refs;
 	n2x2 size;
 
 	flag clear : 1;
@@ -1599,10 +1603,9 @@ fn view_clamp( window ref const window_ref, view ref const view_ref )
 	}
 }
 
-embed view ref const window_add_view( window ref const window_ref, view in_view )
+fn window_add_view_ref( window ref const window_ref, view ref view_ref )
 {
-	list_add( ref_of( window_ref->views ), in_view );
-	out ref_of( list_last( window_ref->views, view ) );
+	list_add( ref_of( window_ref->view_refs ), view_ref );
 }
 
 #define window_clear( WINDOW ) WINDOW->clear = yes
@@ -1872,7 +1875,7 @@ fn _window_resize( window ref const window_ref )
 {
 	out_if_any( window_ref is nothing, window_ref->size.w <= 1, window_ref->size.h <= 1 );
 
-	window_ref->using_buffer = window_ref->using_buffer or( window_ref->views.count > 1 );
+	window_ref->using_buffer = window_ref->using_buffer or( window_ref->view_refs.count > 1 );
 
 	#if OS_LINUX
 		temp n4 const screen = DefaultScreen( windows_display );
@@ -1922,9 +1925,9 @@ fn _window_resize( window ref const window_ref )
 		}
 	#endif
 
-	list_iter( window_ref->views, view_index )
+	list_iter( window_ref->view_refs, view_index )
 	{
-		temp view ref const this_view = ref_of( list_get_iter( view_index, view ) );
+		temp view ref const this_view = list_get_iter( view_index, view ref );
 
 		with( this_view->scaling )
 		{
@@ -2011,7 +2014,7 @@ fn _window_resize( window ref const window_ref )
 				XFreePixmap( windows_display, this_view->pixmap );
 			}
 
-			this_view->pixmap = XCreatePixmap( windows_display, window_ref->handle, this_view->canvas->size.w, this_view->canvas->size.h, depth );
+			this_view->pixmap = XCreatePixmap( windows_display, window_ref->handle, this_view->canvas.size.w, this_view->canvas.size.h, depth );
 			this_view->picture = XRenderCreatePicture( windows_display, this_view->pixmap, format, 0, 0 );
 		#endif
 	}
@@ -2023,9 +2026,9 @@ fn _window_tick_once( window ref const window_ref )
 {
 	window_get_mouse_position( window_ref, ref_of( window_ref->mouse.x ), ref_of( window_ref->mouse.y ) );
 
-	list_iter( window_ref->views, view_index )
+	list_iter( window_ref->view_refs, view_index )
 	{
-		temp view ref const this_view = ref_of( list_get_iter( view_index, view ) );
+		temp view ref const this_view = list_get_iter( view_index, view ref );
 		this_view->mouse_prev = this_view->mouse;
 		this_view->mouse = r4x2( r4( window_ref->mouse.x - this_view->pos.x ) / this_view->scale.w, r4( window_ref->mouse.y - this_view->pos.y ) / this_view->scale.h );
 	}
@@ -2062,9 +2065,9 @@ fn _window_tick_once( window ref const window_ref )
 
 fn _window_draw( window ref const window_ref )
 {
-	list_iter( window_ref->views, view_index )
+	list_iter( window_ref->view_refs, view_index )
 	{
-		temp view ref const view_ref = ref_of( list_get_iter( view_index, view ) );
+		temp view ref const view_ref = list_get_iter( view_index, view ref );
 		next_if( view_ref->update is no );
 		view_ref->fn_draw( view_ref );
 		view_ref->update = no;
@@ -2073,7 +2076,7 @@ fn _window_draw( window ref const window_ref )
 
 fn _window_present( window ref const window_ref )
 {
-	window_ref->using_buffer = window_ref->using_buffer or window_ref->views.count > 1;
+	window_ref->using_buffer = window_ref->using_buffer or window_ref->view_refs.count > 1;
 
 	#if OS_LINUX
 		perm GC gc = nothing;
@@ -2105,9 +2108,9 @@ fn _window_present( window ref const window_ref )
 
 	window_ref->clear = no;
 
-	if( needs_clear and window_ref->views.count > 0 )
+	if( needs_clear and window_ref->view_refs.count > 0 )
 	{
-		temp view ref const first_view = ref_of( list_get( window_ref->views, view, 0 ) );
+		temp view ref const first_view = list_get( window_ref->view_refs, view ref, 0 );
 		temp r4x2 const first_scaled = view_get_scaled_size( first_view );
 
 		temp i4 const view_l = i4( r4_round( first_view->pos.x ) );
@@ -2161,9 +2164,9 @@ fn _window_present( window ref const window_ref )
 		}
 	}
 
-	list_iter( window_ref->views, view_index )
+	list_iter( window_ref->view_refs, view_index )
 	{
-		temp view ref const view_ref = ref_of( list_get_iter( view_index, view ) );
+		temp view ref const view_ref = list_get_iter( view_index, view ref );
 		temp r4x2 const scaled_size = view_get_scaled_size( view_ref );
 
 		skip_if( scaled_size.w is 0 or scaled_size.h is 0 );
@@ -2304,7 +2307,7 @@ group( window_event_type, n2 )
 };
 
 #if OS_LINUX
-	embed out_state window_process_event( window const this, window_event_type const event, os_event const ref e )
+	embed out_state window_process_event( window ref const window_ref, window_event_type const event, os_event const ref e )
 #elif OS_WINDOWS
 	embed LRESULT CALLBACK window_process_event( os_handle const h, window_event_type const event, WPARAM const wp, LPARAM const lp )
 #endif
@@ -2424,7 +2427,7 @@ group( window_event_type, n2 )
 		{
 			#if OS_LINUX
 				os_event next_move;
-				while( XCheckTypedWindowEvent( windows_display, this->handle, MotionNotify, ref_of( next_move ) ) );
+				while( XCheckTypedWindowEvent( windows_display, window_ref->handle, MotionNotify, ref_of( next_move ) ) );
 			#endif
 			is_input = yes;
 			skip;
@@ -2627,7 +2630,7 @@ embed window new_window( byte const ref const name, n2 const width, n2 const hei
 	this.size.w = width;
 	this.size.h = height;
 
-	this.views = new_list( view );
+	this.view_refs = new_list( view ref );
 
 	this.bordered = yes;
 
@@ -2682,11 +2685,11 @@ fn window_register( window ref window_ref )
 fn delete_window( window ref const window_ref )
 {
 	delete_text( ref_of( window_ref->name ) );
-	list_iter( window_ref->views, canvas_id )
+	list_iter( window_ref->view_refs, canvas_id )
 	{
-		delete_view( ref_of( list_get_iter( canvas_id, view ) ) );
+		delete_view( list_get_iter( canvas_id, view ref ) );
 	}
-	delete_list( ref_of( window_ref->views ) );
+	delete_list( ref_of( window_ref->view_refs ) );
 	delete_list( ref_of( window_ref->inputs_pressed ) );
 	delete_list( ref_of( window_ref->inputs_released ) );
 	val_of( window_ref ) = make( window );
@@ -2695,14 +2698,14 @@ fn delete_window( window ref const window_ref )
 ////////////////////////////////
 // window process
 
-fn _window_process_events()
+fn _window_process_events( window ref const window_ref )
 {
 	os_event event;
 	#if OS_LINUX
 		while( XPending( windows_display ) )
 		{
 			XNextEvent( windows_display, ref_of( event ) );
-			window_process_event( this, event.type, ref_of( event ) );
+			window_process_event( window_ref, event.type, ref_of( event ) );
 		}
 	#elif OS_WINDOWS
 		while( PeekMessage( ref_of( event ), 0, 0, 0, PM_REMOVE ) )
@@ -2728,7 +2731,7 @@ fn _window_process( window ref const window_ref )
 		window_show( window_ref );
 	}
 
-	_window_process_events();
+	_window_process_events( window_ref );
 }
 
 //
@@ -2825,7 +2828,7 @@ fn _C7H16_loop()
 				current_window_ref = list_get_iter( window_id, window ref );
 				//_window_draw( this_window );
 				window_update( current_window_ref );
-				_window_process_events();
+				_window_process_events( current_window_ref );
 			}
 
 			windows_time_next_draw += frame_nano_draw;
