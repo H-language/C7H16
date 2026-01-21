@@ -17,7 +17,6 @@
 //
 
 #if __linux__
-	//#include <alsa/asoundlib.h>
 	#include <X11/Xlib.h>
 	#include <X11/Xutil.h>
 	#include <X11/extensions/Xrender.h>
@@ -568,7 +567,6 @@ embed n2 anchor_get_y( anchor const anchor, n2 const region_height, n2 const obj
 #define pixel_bits 8
 #define pixel_shift 2
 
-// construction is RGBA though, for consistency
 #define pixel( R, G, B, A... ) make( pixel, .r = ( R ), .g = ( G ), .b = ( B ), .a = DEFAULT( 0xff, A ) )
 
 #define pixel_invalid make( pixel, .bgra = 0 )
@@ -609,7 +607,7 @@ embed canvas new_canvas( n2 const width, n2 const height )
 
 fn delete_canvas( canvas ref const canvas_ref )
 {
-	delete_ref( canvas_ref->pixels );
+	delete_ref( canvas_ref->pixels, canvas_ref->area << pixel_shift );
 	val_of( canvas_ref ) = make( canvas );
 }
 
@@ -1297,14 +1295,13 @@ perm byte const _INPUT_MAP[] =
 	if( not( window_ref->inputs[ VALUE ] & INPUT_MASK_HELD ) )\
 	{\
 		window_ref->inputs[ VALUE ] |= INPUT_MASK_PRESSED | INPUT_MASK_HELD;\
-		++window_ref->inputs_active;\
-		list_add( ref_of( window_ref->inputs_pressed ), byte( VALUE ) );\
+		window_ref->inputs_pressed[ window_ref->inputs_pressed_count++ ] = n1( VALUE );\
 		is_input = yes;\
 	}
 
 #define _window_add_input_released( VALUE )\
 	window_ref->inputs[ VALUE ] |= INPUT_MASK_RELEASED;\
-	list_add( ref_of( window_ref->inputs_released ), byte( VALUE ) );\
+	window_ref->inputs_released[ window_ref->inputs_released_count++ ] = n1( VALUE );\
 	is_input = yes
 
 //
@@ -1363,7 +1360,6 @@ type( view )
 	pixel outline;
 	view_ref_fn fn_draw;
 	anon ref draw_ref;
-	list lines;
 
 	r4x2 pos;
 	r4x2 scale;
@@ -1387,7 +1383,6 @@ embed view new_view( canvas const canvas, sizing_mode const sizing, scaling_mode
 	this.scaling = scaling;
 	this.update = yes;
 	this.fn_draw = fn_draw;
-	this.lines = new_list( view_line );
 	this.scale = r4x2( 1.0, 1.0 );
 	out this;
 }
@@ -1395,7 +1390,6 @@ embed view new_view( canvas const canvas, sizing_mode const sizing, scaling_mode
 fn delete_view( view ref const view_ref )
 {
 	delete_canvas( ref_of( view_ref->canvas ) );
-	delete_list( ref_of( view_ref->lines ) );
 	val_of( view_ref ) = make( view );
 }
 
@@ -1430,6 +1424,9 @@ embed flag mouse_in_view( view ref const view_ref )
 ////////////////////////////////
 // window
 
+#define window_max_view_refs 32
+#define window_max_inputs 16
+
 type_from( PICK( OS_LINUX, Window, HWND ) ) os_handle;
 type_from( PICK( OS_LINUX, XImage ref, BITMAPINFO ) ) os_image;
 type_from( PICK( OS_LINUX, XEvent, MSG ) ) os_event;
@@ -1439,7 +1436,7 @@ type_fn( anon, window ref const ) window_ref_fn;
 
 type( window )
 {
-	text name;
+	byte name[ 32 ];
 
 	os_handle handle;
 	os_image image;
@@ -1455,7 +1452,8 @@ type( window )
 		HDC window_dc;
 	#endif
 
-	list view_refs;
+	view ref view_refs[ window_max_view_refs ];
+	n1 view_refs_count;
 	n2x2 size;
 
 	flag clear : 1;
@@ -1467,11 +1465,11 @@ type( window )
 	n8 tick;
 	r4 delta_time;
 
-	byte inputs[ inputs_count ];
-	n1 inputs_active;
-	list inputs_pressed;
-	list inputs_released;
-	//r4x2 scroll;
+	n1 inputs[ inputs_count ];
+	n1 inputs_pressed[ window_max_inputs ];
+	n1 inputs_pressed_count;
+	n1 inputs_released[ window_max_inputs ];
+	n1 inputs_released_count;
 	i4x2 mouse;
 
 	window_ref_fn fn_start;
@@ -1480,7 +1478,10 @@ type( window )
 }
 packed;
 
-perm list window_refs;
+#define max_window_refs 4
+
+perm window ref window_refs[ max_window_refs ];
+perm n1 window_refs_count = 0;
 perm window ref current_window_ref = nothing;
 
 perm r4 windows_fps_tick = 0;
@@ -1605,7 +1606,7 @@ fn view_clamp( window ref const window_ref, view ref const view_ref )
 
 fn window_add_view_ref( window ref const window_ref, view ref view_ref )
 {
-	list_add( ref_of( window_ref->view_refs ), view_ref );
+	window_ref->view_refs[ window_ref->view_refs_count++ ] = view_ref;
 }
 
 #define window_clear( WINDOW ) WINDOW->clear = yes
@@ -1859,9 +1860,8 @@ fn window_set_cursor( window ref const window_ref, cursor_type const cursor )
 fn _window_clear_inputs( window ref const window_ref )
 {
 	bytes_clear( window_ref->inputs, inputs_count );
-	window_ref->inputs_active = 0;
-	list_clear( ref_of( window_ref->inputs_pressed ) );
-	list_clear( ref_of( window_ref->inputs_released ) );
+	window_ref->inputs_pressed_count = 0;
+	window_ref->inputs_released_count = 0;
 }
 
 fn _window_set_size( window ref const window_ref, n2 const width, n2 const height )
@@ -1875,7 +1875,7 @@ fn _window_resize( window ref const window_ref )
 {
 	out_if_any( window_ref is nothing, window_ref->size.w <= 1, window_ref->size.h <= 1 );
 
-	window_ref->using_buffer = window_ref->using_buffer or( window_ref->view_refs.count > 1 );
+	window_ref->using_buffer = window_ref->using_buffer or( window_ref->view_refs_count > 1 );
 
 	#if OS_LINUX
 		temp n4 const screen = DefaultScreen( windows_display );
@@ -1925,9 +1925,10 @@ fn _window_resize( window ref const window_ref )
 		}
 	#endif
 
-	list_iter( window_ref->view_refs, view_index )
+	//list_iter( ref_of( window_ref->view_refs ), view_index )
+	iter( view_index, window_ref->view_refs_count )
 	{
-		temp view ref const this_view = list_get_iter( view_index, view ref );
+		temp view ref const this_view = window_ref->view_refs[ view_index ]; // list_get( ref_of( window_ref->view_refs ), view ref, view_index );
 
 		with( this_view->scaling )
 		{
@@ -2026,9 +2027,9 @@ fn _window_tick_once( window ref const window_ref )
 {
 	window_get_mouse_position( window_ref, ref_of( window_ref->mouse.x ), ref_of( window_ref->mouse.y ) );
 
-	list_iter( window_ref->view_refs, view_index )
+	iter( view_index, window_ref->view_refs_count )
 	{
-		temp view ref const this_view = list_get_iter( view_index, view ref );
+		temp view ref const this_view = window_ref->view_refs[ view_index ];
 		this_view->mouse_prev = this_view->mouse;
 		this_view->mouse = r4x2( r4( window_ref->mouse.x - this_view->pos.x ) / this_view->scale.w, r4( window_ref->mouse.y - this_view->pos.y ) / this_view->scale.h );
 	}
@@ -2041,33 +2042,30 @@ fn _window_tick_once( window ref const window_ref )
 
 	window_ref->fn_tick( window_ref );
 
-	if( window_ref->inputs_pressed.count > 0 )
+	if( window_ref->inputs_pressed_count > 0 )
 	{
-		list_iter( window_ref->inputs_pressed, input_index )
+		iter( input_index, window_ref->inputs_pressed_count )
 		{
-			temp byte ref const input_ref = ref_of( list_get_iter( input_index, byte ) );
-			window_ref->inputs[ val_of( input_ref ) ] &= ~ INPUT_MASK_PRESSED;
+			window_ref->inputs[ window_ref->inputs_pressed[ input_index ] ] &= ~ INPUT_MASK_PRESSED;
 		}
-		list_clear( ref_of( window_ref->inputs_pressed ) );
+		window_ref->inputs_pressed_count = 0;
 	}
 
-	if( window_ref->inputs_released.count > 0 )
+	if( window_ref->inputs_released_count > 0 )
 	{
-		list_iter( window_ref->inputs_released, input_index )
+		iter( input_index, window_ref->inputs_released_count )
 		{
-			temp byte ref const input_ref = ref_of( list_get_iter( input_index, byte ) );
-			window_ref->inputs[ val_of( input_ref ) ] = 0;
-			--window_ref->inputs_active;
+			window_ref->inputs[ window_ref->inputs_released[ input_index ] ] = 0;
 		}
-		list_clear( ref_of( window_ref->inputs_released ) );
+		window_ref->inputs_released_count = 0;
 	}
 }
 
 fn _window_draw( window ref const window_ref )
 {
-	list_iter( window_ref->view_refs, view_index )
+	iter( view_index, window_ref->view_refs_count )
 	{
-		temp view ref const view_ref = list_get_iter( view_index, view ref );
+		temp view ref const view_ref = window_ref->view_refs[ view_index ];
 		next_if( view_ref->update is no );
 		view_ref->fn_draw( view_ref );
 		view_ref->update = no;
@@ -2076,7 +2074,7 @@ fn _window_draw( window ref const window_ref )
 
 fn _window_present( window ref const window_ref )
 {
-	window_ref->using_buffer = window_ref->using_buffer or window_ref->view_refs.count > 1;
+	window_ref->using_buffer = window_ref->using_buffer or window_ref->view_refs_count > 1;
 
 	#if OS_LINUX
 		perm GC gc = nothing;
@@ -2108,9 +2106,9 @@ fn _window_present( window ref const window_ref )
 
 	window_ref->clear = no;
 
-	if( needs_clear and window_ref->view_refs.count > 0 )
+	if( needs_clear and window_ref->view_refs_count > 0 )
 	{
-		temp view ref const first_view = list_get( window_ref->view_refs, view ref, 0 );
+		temp view ref const first_view = window_ref->view_refs[ 0 ];
 		temp r4x2 const first_scaled = view_get_scaled_size( first_view );
 
 		temp i4 const view_l = i4( r4_round( first_view->pos.x ) );
@@ -2164,9 +2162,9 @@ fn _window_present( window ref const window_ref )
 		}
 	}
 
-	list_iter( window_ref->view_refs, view_index )
+	iter( view_index, window_ref->view_refs_count )
 	{
-		temp view ref const view_ref = list_get_iter( view_index, view ref );
+		temp view ref const view_ref = window_ref->view_refs[ view_index ];
 		temp r4x2 const scaled_size = view_get_scaled_size( view_ref );
 
 		skip_if( scaled_size.w is 0 or scaled_size.h is 0 );
@@ -2256,7 +2254,7 @@ fn _window_present( window ref const window_ref )
 			#endif
 		}
 
-		list_iter( view_ref->lines, line_id )
+		/*list_iter( view_ref->lines, line_id )
 		{
 			temp view_line const this_line = list_get_iter( line_id, view_line );
 
@@ -2279,7 +2277,7 @@ fn _window_present( window ref const window_ref )
 				DeleteObject( color_pen );
 			#endif
 		}
-		list_clear( ref_of( view_ref->lines ) );
+		list_clear( ref_of( view_ref->lines ) );*/
 	}
 
 	if( window_ref->using_buffer is yes )
@@ -2622,20 +2620,14 @@ group( window_event_type, n2 )
 
 embed window new_window( byte const ref const name, n2 const width, n2 const height )
 {
-	temp window this = { 0 };
+	window this = { 0 };
 
-	temp n2 const name_size = bytes_measure( name );
-	this.name = new_text_bytes( name, name_size );
+	bytes_paste( this.name, name );
 
 	this.size.w = width;
 	this.size.h = height;
 
-	this.view_refs = new_list( view ref );
-
 	this.bordered = yes;
-
-	this.inputs_pressed = new_list( byte );
-	this.inputs_released = new_list( byte );
 
 	#if OS_LINUX
 		temp i4 screen = DefaultScreen( windows_display );
@@ -2644,20 +2636,20 @@ embed window new_window( byte const ref const name, n2 const width, n2 const hei
 
 		XSetWindowBackgroundPixmap( windows_display, this.handle, None );
 		XSelectInput( windows_display, this.handle, ExposureMask | StructureNotifyMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | FocusChangeMask | PointerMotionMask );
-		XStoreName( windows_display, this.handle, this.name.bytes );
+		XStoreName( windows_display, this.handle, this.name );
 
 		this.image = XCreateImage( windows_display, DefaultVisual( windows_display, screen ), DefaultDepth( windows_display, screen ), ZPixmap, 0, nothing, width, height, 32, 0 );
 	#elif OS_WINDOWS
 		WNDCLASS wclass = { 0 };
 		wclass.lpfnWndProc = to( type_of( wclass.lpfnWndProc ), window_process_event );
 		wclass.hInstance = GetModuleHandle( nothing );
-		wclass.lpszClassName = this.name.bytes;
+		wclass.lpszClassName = this.name;
 		RegisterClass( ref_of( wclass ) );
 
 		RECT rect = { 0, 0, width, height };
 		AdjustWindowRect( ref_of( rect ), WS_OVERLAPPEDWINDOW, FALSE );
 
-		this.handle = CreateWindow( this.name.bytes, this.name.bytes, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top, nothing, nothing, GetModuleHandle( nothing ), nothing );
+		this.handle = CreateWindow( this.name, this.name, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top, nothing, nothing, GetModuleHandle( nothing ), nothing );
 
 		this.window_dc = GetDC( this.handle );
 
@@ -2675,7 +2667,7 @@ embed window new_window( byte const ref const name, n2 const width, n2 const hei
 
 fn window_register( window ref window_ref )
 {
-	list_add( ref_of( window_refs ), window_ref );
+	window_refs[ window_refs_count++ ] = window_ref;
 
 	#if OS_WINDOWS
 		SetWindowLongPtr( window_ref->handle, GWLP_USERDATA, to( LONG_PTR, window_ref ) );
@@ -2684,14 +2676,10 @@ fn window_register( window ref window_ref )
 
 fn delete_window( window ref const window_ref )
 {
-	delete_text( ref_of( window_ref->name ) );
-	list_iter( window_ref->view_refs, canvas_id )
+	iter( view_index, window_ref->view_refs_count )
 	{
-		delete_view( list_get_iter( canvas_id, view ref ) );
+		delete_view( window_ref->view_refs[ view_index ] );
 	}
-	delete_list( ref_of( window_ref->view_refs ) );
-	delete_list( ref_of( window_ref->inputs_pressed ) );
-	delete_list( ref_of( window_ref->inputs_released ) );
 	val_of( window_ref ) = make( window );
 }
 
@@ -2742,8 +2730,6 @@ fn _window_process( window ref const window_ref )
 
 fn _C7H16_init()
 {
-	window_refs = new_list( window ref );
-
 	#if OS_LINUX
 		windows_display = XOpenDisplay( nothing );
 		XkbSetDetectableAutoRepeat( windows_display, yes, nothing );
@@ -2765,7 +2751,7 @@ fn _C7H16_loop()
 
 	loop
 	{
-		out_if( window_refs.count is 0 );
+		out_if( window_refs_count is 0 );
 
 		temp const nano frame_nano_tick = pick( windows_fps_tick > 0, nano_per_sec / windows_fps_tick, 0 );
 		temp const nano frame_nano_draw = pick( windows_fps_draw > 0, nano_per_sec / windows_fps_draw, 0 );
@@ -2779,17 +2765,12 @@ fn _C7H16_loop()
 		prev_frame_nano_tick = frame_nano_tick;
 
 		// process
-		list_iter( window_refs, window_id )
+		iter( window_index, window_refs_count )
 		{
-			current_window_ref = list_get_iter( window_id, window ref );
+			current_window_ref = window_refs[ window_index ];
 			_window_process( current_window_ref );
 
-			if( current_window_ref->close )
-			{
-				out_if( window_id is 0 );
-				--window_id;
-				skip_if( window_id < 0 );
-			}
+			out_if( current_window_ref->close and window_index is 0 );
 		}
 
 		// tick
@@ -2801,9 +2782,9 @@ fn _C7H16_loop()
 			if( windows_time_tick <= target_frames )
 			{
 				++windows_time_tick;
-				list_iter( window_refs, window_id )
+				iter( window_index, window_refs_count )
 				{
-					current_window_ref = list_get_iter( window_id, window ref );
+					current_window_ref = window_refs[ window_index ];
 					_window_tick_once( current_window_ref );
 				}
 			}
@@ -2823,9 +2804,9 @@ fn _C7H16_loop()
 		temp nano now = get_nano();
 		if( frame_nano_draw > 0 and now >= windows_time_next_draw )
 		{
-			list_iter( window_refs, window_id )
+			iter( window_index, window_refs_count )
 			{
-				current_window_ref = list_get_iter( window_id, window ref );
+				current_window_ref = window_refs[ window_index ];
 				//_window_draw( this_window );
 				window_update( current_window_ref );
 				_window_process_events( current_window_ref );
@@ -2842,9 +2823,9 @@ fn _C7H16_loop()
 		if( event_driven )
 		{
 			temp flag all_ready = yes;
-			list_iter( window_refs, window_id )
+			iter( window_index, window_refs_count )
 			{
-				if( list_get_iter( window_id, window ref const )->tick < 3 )
+				if( window_refs[ window_index ]->tick < 3 )
 				{
 					all_ready = no;
 					skip;
@@ -2894,11 +2875,10 @@ fn _C7H16_loop()
 
 fn _C7H16_close()
 {
-	list_iter( window_refs, window_index )
+	iter( window_index, window_refs_count )
 	{
-		delete_window( list_get_iter( window_index, window ref const ) );
+		delete_window( window_refs[ window_index ] );
 	}
-	delete_list( ref_of( window_refs ) );
 }
 
 #undef start
