@@ -2358,7 +2358,7 @@ group( window_event_type, n2 )
 			{
 				skip_if( wp isnt 1 );
 
-				_current_window_tick( window_ref );
+				_current_window_tick();
 				jump WINDOW_PRESENT;
 			}
 
