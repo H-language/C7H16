@@ -1310,6 +1310,12 @@ perm byte const _INPUT_MAP[] =
 /// windows
 //
 
+#if OS_LINUX
+	perm Display ref windows_display = nothing;
+#elif OS_WINDOWS
+	perm HICON windows_icon = nothing;
+#endif
+
 ////////////////////////////////
 // view
 
@@ -1416,6 +1422,161 @@ fn view_update( view ref const view_ref )
 	view_ref->update = yes;
 }
 
+fn view_resize( view ref const view_ref, n2x2 const window_size, n2x2 const size )
+{
+	out_if_any( view_ref is nothing, size.w is 0, size.h is 0 );
+
+	if( view_ref->canvas.pixels is nothing )
+	{
+		view_ref->canvas = new_canvas( size.w, size.h );
+	}
+	else if( view_ref->canvas.size.w isnt size.w or view_ref->canvas.size.h isnt size.h )
+	{
+		canvas_resize( ref_of( view_ref->canvas ), size.w, size.h );
+	}
+
+	with( view_ref->scaling )
+	{
+		when( scaling_integer_fit_floor, scaling_integer_fit_round, scaling_integer_fit_ceil, scaling_rational_fit )
+		{
+			temp r4 const scale = r4_min( r4( window_size.w ) / r4( size.w ), r4( window_size.h ) / r4( size.h ) );
+			view_ref->scale.w = scale;
+			view_ref->scale.h = scale;
+			skip;
+		}
+
+		when( scaling_integer_fill_floor, scaling_integer_fill_round, scaling_integer_fill_ceil, scaling_rational_fill )
+		{
+			temp r4 const scale = r4_max( r4( window_size.w ) / r4( size.w ), r4( window_size.h ) / r4( size.h ) );
+			view_ref->scale.w = scale;
+			view_ref->scale.h = scale;
+			skip;
+		}
+
+		when( scaling_integer_stretch_floor, scaling_integer_stretch_round, scaling_integer_stretch_ceil, scaling_rational_stretch )
+		{
+			view_ref->scale.w = r4( window_size.w ) / r4( size.w );
+			view_ref->scale.h = r4( window_size.h ) / r4( size.h );
+			skip;
+		}
+
+		other skip;
+	}
+
+	with( view_ref->scaling )
+	{
+		when( scaling_integer_stretch_floor )
+		{
+			view_ref->scale.w = r4_floor( view_ref->scale.w );
+			view_ref->scale.h = r4_floor( view_ref->scale.h );
+			skip;
+		}
+
+		when( scaling_integer_stretch_ceil )
+		{
+			view_ref->scale.w = r4_ceil( view_ref->scale.w );
+			view_ref->scale.h = r4_ceil( view_ref->scale.h );
+			skip;
+		}
+
+		when( scaling_integer_stretch_round )
+		{
+			view_ref->scale.w = r4_round( view_ref->scale.w );
+			view_ref->scale.h = r4_round( view_ref->scale.h );
+			skip;
+		}
+
+		when( scaling_integer_fit_floor, scaling_integer_fill_floor )
+		{
+			temp r4 const scale = r4_floor( view_ref->scale.w );
+			view_ref->scale.w = scale;
+			view_ref->scale.h = scale;
+			skip;
+		}
+
+		when( scaling_integer_fit_ceil, scaling_integer_fill_ceil )
+		{
+			temp r4 const scale = r4_ceil( view_ref->scale.w );
+			view_ref->scale.w = scale;
+			view_ref->scale.h = scale;
+			skip;
+		}
+
+		when( scaling_integer_fit_round, scaling_integer_fill_round )
+		{
+			temp r4 const scale = r4_round( view_ref->scale.w );
+			view_ref->scale.w = scale;
+			view_ref->scale.h = scale;
+			skip;
+		}
+
+		other skip;
+	}
+
+	#if OS_LINUX
+		temp n4 const screen = DefaultScreen( windows_display );
+		temp n4 const depth = DefaultDepth( windows_display, screen );
+		temp XRenderPictFormat ref format = XRenderFindVisualFormat( windows_display, DefaultVisual( windows_display, screen ) );
+
+		if( view_ref->pixmap )
+		{
+			XRenderFreePicture( windows_display, view_ref->picture );
+			XFreePixmap( windows_display, view_ref->pixmap );
+		}
+
+		view_ref->pixmap = XCreatePixmap( windows_display, RootWindow( windows_display, screen ), size.w, size.h, depth );
+		view_ref->picture = XRenderCreatePicture( windows_display, view_ref->pixmap, format, 0, 0 );
+	#endif
+}
+
+fn view_center( view ref const view_ref, n2x2 const window_size )
+{
+	out_if_nothing( view_ref->canvas.pixels );
+	//
+	temp i4 const scaled_w = i4( r4_round( r4( view_ref->canvas.size.w ) * view_ref->scale.w ) );
+	temp i4 const scaled_h = i4( r4_round( r4( view_ref->canvas.size.h ) * view_ref->scale.h ) );
+	view_ref->pos.x = r4( i4( window_size.w ) - scaled_w ) * 0.5;
+	view_ref->pos.y = r4( i4( window_size.h ) - scaled_h ) * 0.5;
+}
+
+fn view_clamp( view ref const view_ref, n2x2 const window_size )
+{
+	temp r4x2 const scaled_size = view_get_scaled_size( view_ref );
+
+	with( view_ref->scaling )
+	{
+		when( scaling_rational_fit, scaling_integer_fit_floor, scaling_integer_fit_round, scaling_integer_fit_ceil )
+		{
+			view_ref->pos.x = r4_clamp( view_ref->pos.x, 0, r4( window_size.w ) - scaled_size.w );
+			view_ref->pos.y = r4_clamp( view_ref->pos.y, 0, r4( window_size.h ) - scaled_size.h );
+			skip;
+		}
+
+		when( scaling_rational_fill, scaling_integer_fill_floor, scaling_integer_fill_round, scaling_integer_fill_ceil )
+		{
+			view_ref->pos.x = r4_clamp( view_ref->pos.x, r4( window_size.w ) - scaled_size.w, 0 );
+			view_ref->pos.y = r4_clamp( view_ref->pos.y, r4( window_size.h ) - scaled_size.h, 0 );
+			skip;
+		}
+
+		when( scaling_manual )
+		{
+			temp i4 const margin = i4_min( window_size.w, window_size.h ) >> 2;
+			view_ref->pos.x = r4_clamp( view_ref->pos.x, -scaled_size.w + r4( margin ), r4( i4( window_size.w ) - margin ) );
+			view_ref->pos.y = r4_clamp( view_ref->pos.y, -scaled_size.h + r4( margin ), r4( i4( window_size.h ) - margin ) );
+			skip;
+		}
+
+		when( scaling_rational_stretch )
+		{
+			view_ref->pos = r4x2();
+			skip;
+		}
+
+		other skip;
+	}
+}
+
 embed flag mouse_in_view( view ref const view_ref )
 {
 	out point_in_size( r4_trunc( view_ref->mouse.x ), r4_trunc( view_ref->mouse.y ), view_ref->canvas.size.w, view_ref->canvas.size.h );
@@ -1494,12 +1655,6 @@ perm n8 windows_time_tick = 0;
 #define window_set_fn_resize( WINDOW, FN ) WINDOW->fn_resize = to( window_fn, FN )
 #define window_set_fn_tick( WINDOW, FN ) WINDOW->fn_tick = to( window_fn, FN )
 
-#if OS_LINUX
-	perm Display ref windows_display = nothing;
-#elif OS_WINDOWS
-	perm HICON windows_icon = nothing;
-#endif
-
 ////////////////////////////////
 // display
 
@@ -1555,54 +1710,6 @@ embed n2 const display_get_fps()
 
 ////////////////////////////////
 // visible functions
-
-fn view_center( window ref const window_ref, view ref const view_ref )
-{
-	out_if_nothing( view_ref->canvas.pixels );
-	//
-	temp i4 const scaled_w = i4( r4_round( r4( view_ref->canvas.size.w ) * view_ref->scale.w ) );
-	temp i4 const scaled_h = i4( r4_round( r4( view_ref->canvas.size.h ) * view_ref->scale.h ) );
-	view_ref->pos.x = r4( i4( window_ref->size.w ) - scaled_w ) * 0.5;
-	view_ref->pos.y = r4( i4( window_ref->size.h ) - scaled_h ) * 0.5;
-}
-
-fn view_clamp( window ref const window_ref, view ref const view_ref )
-{
-	temp r4x2 const scaled_size = view_get_scaled_size( view_ref );
-
-	with( view_ref->scaling )
-	{
-		when( scaling_rational_fit, scaling_integer_fit_floor, scaling_integer_fit_round, scaling_integer_fit_ceil )
-		{
-			view_ref->pos.x = r4_clamp( view_ref->pos.x, 0, r4( window_ref->size.w ) - scaled_size.w );
-			view_ref->pos.y = r4_clamp( view_ref->pos.y, 0, r4( window_ref->size.h ) - scaled_size.h );
-			skip;
-		}
-
-		when( scaling_rational_fill, scaling_integer_fill_floor, scaling_integer_fill_round, scaling_integer_fill_ceil )
-		{
-			view_ref->pos.x = r4_clamp( view_ref->pos.x, r4( window_ref->size.w ) - scaled_size.w, 0 );
-			view_ref->pos.y = r4_clamp( view_ref->pos.y, r4( window_ref->size.h ) - scaled_size.h, 0 );
-			skip;
-		}
-
-		when( scaling_manual )
-		{
-			temp i4 const margin = i4_min( window_ref->size.w, window_ref->size.h ) >> 2;
-			view_ref->pos.x = r4_clamp( view_ref->pos.x, -scaled_size.w + r4( margin ), r4( i4( window_ref->size.w ) - margin ) );
-			view_ref->pos.y = r4_clamp( view_ref->pos.y, -scaled_size.h + r4( margin ), r4( i4( window_ref->size.h ) - margin ) );
-			skip;
-		}
-
-		when( scaling_rational_stretch )
-		{
-			view_ref->pos = r4x2();
-			skip;
-		}
-
-		other skip;
-	}
-}
 
 fn window_add_view_ref( window ref const window_ref, view ref view_ref )
 {
@@ -1925,139 +2032,54 @@ fn _window_resize( window ref const window_ref )
 		}
 	#endif
 
-	//list_iter( ref_of( window_ref->view_refs ), view_index )
 	iter( view_index, window_ref->view_refs_count )
 	{
-		temp view ref const this_view = window_ref->view_refs[ view_index ]; // list_get( ref_of( window_ref->view_refs ), view ref, view_index );
-
-		with( this_view->scaling )
-		{
-			when( scaling_integer_fit_floor, scaling_integer_fit_round, scaling_integer_fit_ceil, scaling_rational_fit )
-			{
-				temp r4 const scale = r4_min( r4( window_ref->size.w ) / r4( this_view->canvas.size.w ), r4( window_ref->size.h ) / r4( this_view->canvas.size.h ) );
-				this_view->scale.w = scale;
-				this_view->scale.h = scale;
-				skip;
-			}
-
-			when( scaling_integer_fill_floor, scaling_integer_fill_round, scaling_integer_fill_ceil, scaling_rational_fill )
-			{
-				temp r4 const scale = r4_max( r4( window_ref->size.w ) / r4( this_view->canvas.size.w ), r4( window_ref->size.h ) / r4( this_view->canvas.size.h ) );
-				this_view->scale.w = scale;
-				this_view->scale.h = scale;
-				skip;
-			}
-
-			when( scaling_integer_stretch_floor, scaling_integer_stretch_round, scaling_integer_stretch_ceil, scaling_rational_stretch )
-			{
-				this_view->scale.w = r4( window_ref->size.w ) / r4( this_view->canvas.size.w );
-				this_view->scale.h = r4( window_ref->size.h ) / r4( this_view->canvas.size.h );
-				skip;
-			}
-
-			other skip;
-		}
-
-		with( this_view->scaling )
-		{
-			when( scaling_integer_stretch_floor )
-			{
-				this_view->scale.w = r4_floor( this_view->scale.w );
-				this_view->scale.h = r4_floor( this_view->scale.h );
-				skip;
-			}
-
-			when( scaling_integer_stretch_ceil )
-			{
-				this_view->scale.w = r4_ceil( this_view->scale.w );
-				this_view->scale.h = r4_ceil( this_view->scale.h );
-				skip;
-			}
-
-			when( scaling_integer_stretch_round )
-			{
-				this_view->scale.w = r4_round( this_view->scale.w );
-				this_view->scale.h = r4_round( this_view->scale.h );
-				skip;
-			}
-
-			when( scaling_integer_fit_floor, scaling_integer_fill_floor )
-			{
-				temp r4 const scale = r4_floor( this_view->scale.w );
-				this_view->scale.w = scale;
-				this_view->scale.h = scale;
-				skip;
-			}
-
-			when( scaling_integer_fit_ceil, scaling_integer_fill_ceil )
-			{
-				temp r4 const scale = r4_ceil( this_view->scale.w );
-				this_view->scale.w = scale;
-				this_view->scale.h = scale;
-				skip;
-			}
-
-			when( scaling_integer_fit_round, scaling_integer_fill_round )
-			{
-				temp r4 const scale = r4_round( this_view->scale.w );
-				this_view->scale.w = scale;
-				this_view->scale.h = scale;
-				skip;
-			}
-
-			other skip;
-		}
-
-		#if OS_LINUX
-			if( this_view->pixmap )
-			{
-				XRenderFreePicture( windows_display, this_view->picture );
-				XFreePixmap( windows_display, this_view->pixmap );
-			}
-
-			this_view->pixmap = XCreatePixmap( windows_display, window_ref->handle, this_view->canvas.size.w, this_view->canvas.size.h, depth );
-			this_view->picture = XRenderCreatePicture( windows_display, this_view->pixmap, format, 0, 0 );
-		#endif
+		temp view ref const this_view = window_ref->view_refs[ view_index ];
+		view_resize( this_view, window_ref->size, this_view->canvas.size );
 	}
 
 	window_ref->fn_resize( window_ref );
 }
 
-fn _window_tick_once( window ref const window_ref )
+fn _current_window_tick()
 {
-	window_get_mouse_position( window_ref, ref_of( window_ref->mouse.x ), ref_of( window_ref->mouse.y ) );
+	window_get_mouse_position( current_window_ref, ref_of( current_window_ref->mouse.x ), ref_of( current_window_ref->mouse.y ) );
 
-	iter( view_index, window_ref->view_refs_count )
+	iter( view_index, current_window_ref->view_refs_count )
 	{
-		temp view ref const this_view = window_ref->view_refs[ view_index ];
+		temp view ref const this_view = current_window_ref->view_refs[ view_index ];
 		this_view->mouse_prev = this_view->mouse;
-		this_view->mouse = r4x2( r4( window_ref->mouse.x - this_view->pos.x ) / this_view->scale.w, r4( window_ref->mouse.y - this_view->pos.y ) / this_view->scale.h );
+		this_view->mouse = r4x2( r4( current_window_ref->mouse.x - this_view->pos.x ) / this_view->scale.w, r4( current_window_ref->mouse.y - this_view->pos.y ) / this_view->scale.h );
 	}
 
 	perm nano start_nano = 0;
 	once start_nano = get_nano();
 
-	window_ref->delta_time = r4( get_nano() - start_nano ) / r4( nano_per_sec );
+	current_window_ref->delta_time = r4( get_nano() - start_nano ) / r4( nano_per_sec );
 	start_nano = get_nano();
 
-	window_ref->fn_tick( window_ref );
+	//
 
-	if( window_ref->inputs_pressed_count > 0 )
+	current_window_ref->fn_tick( current_window_ref );
+
+	//
+
+	if( current_window_ref->inputs_pressed_count > 0 )
 	{
-		iter( input_index, window_ref->inputs_pressed_count )
+		iter( input_index, current_window_ref->inputs_pressed_count )
 		{
-			window_ref->inputs[ window_ref->inputs_pressed[ input_index ] ] &= ~ INPUT_MASK_PRESSED;
+			current_window_ref->inputs[ current_window_ref->inputs_pressed[ input_index ] ] &= ~ INPUT_MASK_PRESSED;
 		}
-		window_ref->inputs_pressed_count = 0;
+		current_window_ref->inputs_pressed_count = 0;
 	}
 
-	if( window_ref->inputs_released_count > 0 )
+	if( current_window_ref->inputs_released_count > 0 )
 	{
-		iter( input_index, window_ref->inputs_released_count )
+		iter( input_index, current_window_ref->inputs_released_count )
 		{
-			window_ref->inputs[ window_ref->inputs_released[ input_index ] ] = 0;
+			current_window_ref->inputs[ current_window_ref->inputs_released[ input_index ] ] = 0;
 		}
-		window_ref->inputs_released_count = 0;
+		current_window_ref->inputs_released_count = 0;
 	}
 }
 
@@ -2336,7 +2358,7 @@ group( window_event_type, n2 )
 			{
 				skip_if( wp isnt 1 );
 
-				_window_tick_once( window_ref );
+				_current_window_tick( window_ref );
 				jump WINDOW_PRESENT;
 			}
 
@@ -2391,9 +2413,6 @@ group( window_event_type, n2 )
 				_window_set_size( window_ref, LOWORD( lp ), HIWORD( lp ) );
 			#endif
 			_window_resize( window_ref );
-
-			//DRAW_AND_PRESENT:
-			//_window_draw( this );
 		} // fall through
 
 		when( window_event_draw )
@@ -2402,20 +2421,10 @@ group( window_event_type, n2 )
 				skip_if( e->xexpose.count isnt 0 );
 			#endif
 
-			#if OS_WINDOWS
-				//PAINTSTRUCT ps;
-				//BeginPaint( this->handle, & ps );
-			#endif
-			//ValidateRect(this->handle, nothing);
-
 			WINDOW_PRESENT:
 			_window_draw( window_ref );
 			_window_present( window_ref );
 
-			#if OS_WINDOWS
-
-				//EndPaint( this->handle, & ps );
-			#endif
 			skip;
 		}
 
@@ -2607,7 +2616,7 @@ group( window_event_type, n2 )
 
 	if( windows_fps_tick is 0 and is_input )
 	{
-		_window_tick_once( window_ref );
+		_current_window_tick();
 	}
 
 	exit_events:
@@ -2686,14 +2695,14 @@ fn delete_window( window ref const window_ref )
 ////////////////////////////////
 // window process
 
-fn _window_process_events( window ref const window_ref )
+fn _current_window_process_events()
 {
 	os_event event;
 	#if OS_LINUX
 		while( XPending( windows_display ) )
 		{
 			XNextEvent( windows_display, ref_of( event ) );
-			window_process_event( window_ref, event.type, ref_of( event ) );
+			window_process_event( current_window_ref, event.type, ref_of( event ) );
 		}
 	#elif OS_WINDOWS
 		while( PeekMessage( ref_of( event ), 0, 0, 0, PM_REMOVE ) )
@@ -2704,22 +2713,23 @@ fn _window_process_events( window ref const window_ref )
 	#endif
 }
 
-fn _window_process( window ref const window_ref )
+fn _current_window_process()
 {
-	++window_ref->tick;
+	++current_window_ref->tick;
 
-	if( window_ref->tick is 1 )
+	if( current_window_ref->tick is 1 )
 	{
-		_window_resize( window_ref );
-		window_center( window_ref );
-		window_ref->fn_start( window_ref );
+		_window_resize( current_window_ref );
+		window_center( current_window_ref );
+		current_window_ref->fn_start( current_window_ref );
+		_current_window_tick();
 	}
-	else if( window_ref->tick is 2 )
+	else if( current_window_ref->tick is 2 )
 	{
-		window_show( window_ref );
+		window_show( current_window_ref );
 	}
 
-	_window_process_events( window_ref );
+	_current_window_process_events();
 }
 
 //
@@ -2768,7 +2778,7 @@ fn _C7H16_loop()
 		iter( window_index, window_refs_count )
 		{
 			current_window_ref = window_refs[ window_index ];
-			_window_process( current_window_ref );
+			_current_window_process();
 
 			out_if( current_window_ref->close and window_index is 0 );
 		}
@@ -2785,19 +2795,9 @@ fn _C7H16_loop()
 				iter( window_index, window_refs_count )
 				{
 					current_window_ref = window_refs[ window_index ];
-					_window_tick_once( current_window_ref );
+					_current_window_tick();
 				}
 			}
-
-			// catch up (no input processing)
-			/*while( windows_time_tick <= target_frames )
-			{
-				++windows_time_tick;
-				list_iter( window_refs, window_id )
-				{
-					//call( list_get_iter( window_id, window ), fn_tick );
-				}
-			}*/
 		}
 
 		// draw
@@ -2807,9 +2807,8 @@ fn _C7H16_loop()
 			iter( window_index, window_refs_count )
 			{
 				current_window_ref = window_refs[ window_index ];
-				//_window_draw( this_window );
 				window_update( current_window_ref );
-				_window_process_events( current_window_ref );
+				_current_window_process_events();
 			}
 
 			windows_time_next_draw += frame_nano_draw;
