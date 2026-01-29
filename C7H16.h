@@ -675,6 +675,8 @@ fn canvas_fill( canvas ref const canvas_ref, pixel const color )
 ////////////////////////////////
 // draw
 
+#define bgra_avg( A, B ) ( ( ( ( A ) & 0xfefefefe ) >> 1 ) + ( ( ( B ) & 0xfefefefe ) >> 1 ) )
+
 #define _canvas_draw_pixel_index_( CANVAS, INDEX, PIXEL )\
 	START_DEF\
 	{\
