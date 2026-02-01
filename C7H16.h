@@ -833,6 +833,9 @@ fn canvas_fill( canvas ref const canvas_ref, pixel const color )
 #define _line_v_fn_eval( _LINE_V_FN, Ax, Ay, By, X_NAME, Y_NAME, CODE ) _line_v_fn( _LINE_V_FN, Ax, Ay, By, X_NAME, Y_NAME, CODE )
 #define line_v_fn( Ax, Ay, By, X_NAME, Y_NAME, CODE ) _line_v_fn_eval( JOIN( _LINE_V_FN_, __COUNTER__ ), Ax, Ay, By, X_NAME, Y_NAME, CODE )
 
+#define _canvas_set_line( CANVAS, Ax, Ay, Bx, By, PIXEL, SUFFIX... ) line_fn( Ax, Ay, Bx, By, _X, _Y, canvas_set_pixel##SUFFIX( CANVAS, _X, _Y, PIXEL ) );
+#define canvas_set_line_safe( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_set_line( CANVAS, Ax, Ay, Bx, By, PIXEL, _safe )
+
 #define _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, SUFFIX... ) line_fn( Ax, Ay, Bx, By, _X, _Y, canvas_draw_pixel##SUFFIX( CANVAS, _X, _Y, PIXEL ) );
 #define canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL )
 #define canvas_draw_line_safe( CANVAS, Ax, Ay, Bx, By, PIXEL ) _canvas_draw_line( CANVAS, Ax, Ay, Bx, By, PIXEL, _safe )
@@ -1292,13 +1295,15 @@ perm byte const _INPUT_MAP[] =
 		_INPUT_SET_MASKED( menu, XK_Menu, VK_APPS ),
 	};
 
-#define key_pressed( KEY ) ( current_window_ref->inputs[ input_##KEY ] & INPUT_MASK_PRESSED )
-#define key_held( KEY ) ( current_window_ref->inputs[ input_##KEY ] & INPUT_MASK_HELD )
-#define key_released( KEY ) ( current_window_ref->inputs[ input_##KEY ] & INPUT_MASK_RELEASED )
+#define key_pressed( KEY ) ( _current_window_ref->inputs[ input_##KEY ] & INPUT_MASK_PRESSED )
+#define key_held( KEY ) ( _current_window_ref->inputs[ input_##KEY ] & INPUT_MASK_HELD )
+#define key_released( KEY ) ( _current_window_ref->inputs[ input_##KEY ] & INPUT_MASK_RELEASED )
 
 #define mouse_pressed( BUTTON ) key_pressed( mouse_##BUTTON )
 #define mouse_held( BUTTON ) key_held( mouse_##BUTTON )
 #define mouse_released( BUTTON ) key_released( mouse_##BUTTON )
+
+#define mouse_scroll( DIRECTION ) key_pressed( scroll_##DIRECTION )
 
 #define _window_add_input_pressed( VALUE )\
 	if( not( window_ref->inputs[ VALUE ] & INPUT_MASK_HELD ) )\
@@ -1652,7 +1657,7 @@ packed;
 
 perm window ref window_refs[ max_window_refs ];
 perm n1 window_refs_count = 0;
-perm window ref current_window_ref = nothing;
+perm window ref _current_window_ref = nothing;
 
 perm r4 windows_fps_tick = 0;
 perm r4 windows_fps_draw = 0;
@@ -2052,43 +2057,43 @@ fn _window_resize( window ref const window_ref )
 
 fn _current_window_tick()
 {
-	window_get_mouse_position( current_window_ref, ref_of( current_window_ref->mouse.x ), ref_of( current_window_ref->mouse.y ) );
+	window_get_mouse_position( _current_window_ref, ref_of( _current_window_ref->mouse.x ), ref_of( _current_window_ref->mouse.y ) );
 
-	iter( view_index, current_window_ref->view_refs_count )
+	iter( view_index, _current_window_ref->view_refs_count )
 	{
-		temp view ref const this_view = current_window_ref->view_refs[ view_index ];
+		temp view ref const this_view = _current_window_ref->view_refs[ view_index ];
 		this_view->mouse_prev = this_view->mouse;
-		this_view->mouse = r4x2( r4( current_window_ref->mouse.x - this_view->pos.x ) / this_view->scale.w, r4( current_window_ref->mouse.y - this_view->pos.y ) / this_view->scale.h );
+		this_view->mouse = r4x2( r4( _current_window_ref->mouse.x - this_view->pos.x ) / this_view->scale.w, r4( _current_window_ref->mouse.y - this_view->pos.y ) / this_view->scale.h );
 	}
 
 	perm nano start_nano = 0;
 	once start_nano = get_nano();
 
-	current_window_ref->delta_time = r4( get_nano() - start_nano ) / r4( nano_per_sec );
+	_current_window_ref->delta_time = r4( get_nano() - start_nano ) / r4( nano_per_sec );
 	start_nano = get_nano();
 
 	//
 
-	current_window_ref->fn_tick( current_window_ref );
+	_current_window_ref->fn_tick( _current_window_ref );
 
 	//
 
-	if( current_window_ref->inputs_pressed_count > 0 )
+	if( _current_window_ref->inputs_pressed_count > 0 )
 	{
-		iter( input_index, current_window_ref->inputs_pressed_count )
+		iter( input_index, _current_window_ref->inputs_pressed_count )
 		{
-			current_window_ref->inputs[ current_window_ref->inputs_pressed[ input_index ] ] &= ~ INPUT_MASK_PRESSED;
+			_current_window_ref->inputs[ _current_window_ref->inputs_pressed[ input_index ] ] &= ~ INPUT_MASK_PRESSED;
 		}
-		current_window_ref->inputs_pressed_count = 0;
+		_current_window_ref->inputs_pressed_count = 0;
 	}
 
-	if( current_window_ref->inputs_released_count > 0 )
+	if( _current_window_ref->inputs_released_count > 0 )
 	{
-		iter( input_index, current_window_ref->inputs_released_count )
+		iter( input_index, _current_window_ref->inputs_released_count )
 		{
-			current_window_ref->inputs[ current_window_ref->inputs_released[ input_index ] ] = 0;
+			_current_window_ref->inputs[ _current_window_ref->inputs_released[ input_index ] ] = 0;
 		}
-		current_window_ref->inputs_released_count = 0;
+		_current_window_ref->inputs_released_count = 0;
 	}
 }
 
@@ -2098,7 +2103,7 @@ fn _window_draw( window ref const window_ref )
 	{
 		temp view ref const view_ref = window_ref->view_refs[ view_index ];
 		next_if( view_ref->update is no );
-		view_ref->fn_draw( view_ref );
+		if_something( view_ref->fn_draw ) view_ref->fn_draw( view_ref );
 		view_ref->update = no;
 	}
 }
@@ -2676,8 +2681,8 @@ embed window new_window( byte const ref const name, n2 const width, n2 const hei
 		this.image.bmiHeader.biBitCount = 32;
 		this.image.bmiHeader.biCompression = BI_RGB;
 
-		SendMessage( this.handle, WM_SETICON, ICON_SMALL, ( LPARAM ) windows_icon );
-		SendMessage( this.handle, WM_SETICON, ICON_BIG, ( LPARAM ) windows_icon );
+		SendMessage( this.handle, WM_SETICON, ICON_SMALL, to( LPARAM, windows_icon ) );
+		SendMessage( this.handle, WM_SETICON, ICON_BIG, to( LPARAM, windows_icon ) );
 	#endif
 
 	out this;
@@ -2711,7 +2716,7 @@ fn _current_window_process_events()
 		while( XPending( windows_display ) )
 		{
 			XNextEvent( windows_display, ref_of( event ) );
-			window_process_event( current_window_ref, event.type, ref_of( event ) );
+			window_process_event( _current_window_ref, event.type, ref_of( event ) );
 		}
 	#elif OS_WINDOWS
 		while( PeekMessage( ref_of( event ), 0, 0, 0, PM_REMOVE ) )
@@ -2724,18 +2729,18 @@ fn _current_window_process_events()
 
 fn _current_window_process()
 {
-	++current_window_ref->tick;
+	++_current_window_ref->tick;
 
-	if( current_window_ref->tick is 1 )
+	if( _current_window_ref->tick is 1 )
 	{
-		_window_resize( current_window_ref );
-		window_center( current_window_ref );
-		current_window_ref->fn_start( current_window_ref );
+		_window_resize( _current_window_ref );
+		window_center( _current_window_ref );
+		if_something( _current_window_ref->fn_start )_current_window_ref->fn_start( _current_window_ref );
 		_current_window_tick();
 	}
-	else if( current_window_ref->tick is 2 )
+	else if( _current_window_ref->tick is 2 )
 	{
-		window_show( current_window_ref );
+		window_show( _current_window_ref );
 	}
 
 	_current_window_process_events();
@@ -2786,10 +2791,10 @@ fn _C7H16_loop()
 		// process
 		iter( window_index, window_refs_count )
 		{
-			current_window_ref = window_refs[ window_index ];
+			_current_window_ref = window_refs[ window_index ];
 			_current_window_process();
 
-			out_if( current_window_ref->close and window_index is 0 );
+			out_if( _current_window_ref->close and window_index is 0 );
 		}
 
 		// tick
@@ -2803,7 +2808,7 @@ fn _C7H16_loop()
 				++windows_time_tick;
 				iter( window_index, window_refs_count )
 				{
-					current_window_ref = window_refs[ window_index ];
+					_current_window_ref = window_refs[ window_index ];
 					_current_window_tick();
 				}
 			}
@@ -2815,8 +2820,8 @@ fn _C7H16_loop()
 		{
 			iter( window_index, window_refs_count )
 			{
-				current_window_ref = window_refs[ window_index ];
-				window_update( current_window_ref );
+				_current_window_ref = window_refs[ window_index ];
+				window_update( _current_window_ref );
 				_current_window_process_events();
 			}
 
