@@ -95,6 +95,11 @@
 			TYPE b;\
 			TYPE a;\
 		};\
+		variant\
+		{\
+			TYPE##x2 axy;\
+			TYPE##x2 bxy;\
+		};\
 	}
 
 #define DECLARE_TYPE_2D_FN( TYPE )\
@@ -895,10 +900,12 @@ fn canvas_fill( canvas ref const canvas_ref, pixel const color )
 		temp i2 X_NAME = _RECT_FN##_x1;\
 		temp i2 Y_NAME = _RECT_FN##_y1;\
 		temp i2 _RECT_FN##_w = _RECT_FN##_x2 - _RECT_FN##_x1 + 1;\
+		temp i2 const _RECT_FN##_h_base = _RECT_FN##_y2 - _RECT_FN##_y1 + 1;\
+		temp i2 _RECT_FN##_h = 0;\
 		do\
 		{\
 			Y_NAME = _RECT_FN##_y1;\
-			temp i2 _RECT_FN##_h = _RECT_FN##_y2 - _RECT_FN##_y1 + 1;\
+			_RECT_FN##_h = _RECT_FN##_h_base;\
 			do\
 			{\
 				CODE;\
