@@ -2052,7 +2052,7 @@ fn _window_resize( window ref const window_ref )
 		view_resize( this_view, window_ref->size, this_view->canvas.size );
 	}
 
-	window_ref->fn_resize( window_ref );
+	call( window_ref->fn_resize, window_ref );
 }
 
 fn _current_window_tick()
@@ -2074,7 +2074,7 @@ fn _current_window_tick()
 
 	//
 
-	_current_window_ref->fn_tick( _current_window_ref );
+	call( _current_window_ref->fn_tick, _current_window_ref );
 
 	//
 
@@ -2103,7 +2103,7 @@ fn _window_draw( window ref const window_ref )
 	{
 		temp view ref const view_ref = window_ref->view_refs[ view_index ];
 		next_if( view_ref->update is no );
-		if_something( view_ref->fn_draw ) view_ref->fn_draw( view_ref );
+		call( view_ref->fn_draw, view_ref );
 		view_ref->update = no;
 	}
 }
@@ -2735,7 +2735,7 @@ fn _current_window_process()
 	{
 		_window_resize( _current_window_ref );
 		window_center( _current_window_ref );
-		if_something( _current_window_ref->fn_start )_current_window_ref->fn_start( _current_window_ref );
+		call( _current_window_ref->fn_start, _current_window_ref );
 		_current_window_tick();
 	}
 	else if( _current_window_ref->tick is 2 )
