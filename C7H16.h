@@ -511,27 +511,27 @@ fn nano_sleep( nano const time )
 
 group( anchor )
 {
-	anchor_top_left = 0x00, // 0000 0000
-	anchor_top_center = 0x01, // 0000 0001
-	anchor_top_right = 0x02, // 0000 0010
-	anchor_middle_left = 0x10, // 0001 0000
-	anchor_middle_center = 0x11, // 0001 0001
-	anchor_middle_right = 0x12, // 0001 0010
-	anchor_bottom_left = 0x20, // 0010 0000
-	anchor_bottom_center = 0x21, // 0010 0001
-	anchor_bottom_right = 0x22 // 0010 0010
+	anchor_left_top = 0x00, // 0000 0000
+	anchor_left_middle = 0x01, // 0000 0001
+	anchor_left_bottom = 0x02, // 0000 0010
+	anchor_center_top = 0x10, // 0001 0000
+	anchor_center_middle = 0x11, // 0001 0001
+	anchor_center_bottom = 0x12, // 0001 0010
+	anchor_right_top = 0x20, // 0010 0000
+	anchor_right_middle = 0x21, // 0010 0001
+	anchor_right_bottom = 0x22 // 0010 0010
 };
 
 embed n2 anchor_get_x( anchor const anchor, n2 const region_width, n2 const object_width )
 {
-	temp n1 const h_align = anchor & 0x0F;
+	temp n1 const h_align = anchor >> 4;
 	temp n2 const offset = region_width - object_width;
 	out pick( h_align is 1, offset >> 1, pick( h_align is 2, offset, 0 ) );
 }
 
 embed n2 anchor_get_y( anchor const anchor, n2 const region_height, n2 const object_height )
 {
-	temp const n1 v_align = anchor >> 4;
+	temp const n1 v_align = anchor & 0x0F;
 	temp n2 const offset = region_height - object_height;
 	out pick( v_align is 1, offset >> 1, pick( v_align is 2, offset, 0 ) );
 }
