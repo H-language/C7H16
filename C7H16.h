@@ -522,17 +522,17 @@ group( anchor )
 	anchor_right_bottom = 0x22 // 0010 0010
 };
 
-embed n2 anchor_get_x( anchor const anchor, n2 const region_width, n2 const object_width )
+embed i2 anchor_get_x( anchor const anchor, n2 const region_width, n2 const object_width )
 {
 	temp n1 const h_align = anchor >> 4;
-	temp n2 const offset = region_width - object_width;
+	temp i2 const offset = region_width - object_width;
 	out pick( h_align is 1, offset >> 1, pick( h_align is 2, offset, 0 ) );
 }
 
-embed n2 anchor_get_y( anchor const anchor, n2 const region_height, n2 const object_height )
+embed i2 anchor_get_y( anchor const anchor, n2 const region_height, n2 const object_height )
 {
 	temp const n1 v_align = anchor & 0x0F;
-	temp n2 const offset = region_height - object_height;
+	temp i2 const offset = region_height - object_height;
 	out pick( v_align is 1, offset >> 1, pick( v_align is 2, offset, 0 ) );
 }
 
@@ -1092,6 +1092,218 @@ fn canvas_fill( canvas ref const canvas_ref, pixel const color )
 	}\
 	END_DEF
 
+#define canvas_draw_canvas_trans_part( TO_CANVAS, FROM_CANVAS, TLx, TLy, PART_TLx, PART_TLy, PART_SIZEw, PART_SIZEh )\
+	START_DEF\
+	{\
+		temp pixel ref _to_ref = TO_CANVAS->pixels + ( TLy ) * TO_CANVAS->size.w + ( TLx );\
+		temp const pixel ref _from_ref = FROM_CANVAS->pixels + ( PART_TLy ) * FROM_CANVAS->size.w + ( PART_TLx );\
+		temp const i2 _width = PART_SIZEw;\
+		temp const i4 _to_step = TO_CANVAS->size.w - _width;\
+		temp const i4 _from_step = FROM_CANVAS->size.w - _width;\
+		temp i2 _h = PART_SIZEh;\
+		do\
+		{\
+			temp i2 _w = _width;\
+			do\
+			{\
+				if( _from_ref->a )\
+				{\
+					val_of( _to_ref ) = val_of( _from_ref );\
+				}\
+				++_to_ref;\
+				++_from_ref;\
+			}\
+			while( --_w );\
+			_to_ref += _to_step;\
+			_from_ref += _from_step;\
+		}\
+		while( --_h );\
+	}\
+	END_DEF
+
+#define canvas_draw_canvas_trans_part_safe( TO_CANVAS, FROM_CANVAS, TLx, TLy, PART_TLx, PART_TLy, PART_SIZEw, PART_SIZEh )\
+	START_DEF\
+	{\
+		temp const i2 _TLx = TLx;\
+		temp const i2 _to_x = MAX( 0, _TLx );\
+		temp const i2 _offset_x = _to_x - _TLx;\
+		temp const i2 _from_x = PART_TLx + _offset_x;\
+		temp const i2 _W = i2_min3( TO_CANVAS->size.w - _to_x, FROM_CANVAS->size.w - _from_x, PART_SIZEw - _offset_x );\
+		skip_if( _W <= 0 );\
+		temp const i2 _TLy = TLy;\
+		temp const i2 _to_y = MAX( 0, _TLy );\
+		temp const i2 _offset_y = _to_y - _TLy;\
+		temp const i2 _from_y = PART_TLy + _offset_y;\
+		temp const i2 _H = i2_min3( TO_CANVAS->size.h - _to_y, FROM_CANVAS->size.h - _from_y, PART_SIZEh - _offset_y );\
+		skip_if( _H <= 0 );\
+		temp pixel ref _to_ref = TO_CANVAS->pixels + ( _to_y * TO_CANVAS->size.w ) + _to_x;\
+		temp const pixel ref _from_ref = FROM_CANVAS->pixels + ( _from_y * FROM_CANVAS->size.w ) + _from_x;\
+		temp const i4 _to_step = TO_CANVAS->size.w - _W;\
+		temp const i4 _from_step = FROM_CANVAS->size.w - _W;\
+		temp i2 _h = _H;\
+		do\
+		{\
+			temp i2 _w = _W;\
+			do\
+			{\
+				if( _from_ref->a )\
+				{\
+					val_of( _to_ref ) = val_of( _from_ref );\
+				}\
+				++_to_ref;\
+				++_from_ref;\
+			}\
+			while( --_w );\
+			_to_ref += _to_step;\
+			_from_ref += _from_step;\
+		}\
+		while( --_h );\
+	}\
+	END_DEF
+
+//
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////// bytes
+/// bytes
+//
+
+fn bytes_to_h( const byte ref const in_bytes, const n4 in_size, byte ref ref out_ref )
+{
+	bytes_paste_move( val_of( out_ref ), "\"" );
+
+	iter( b, in_size )
+	{
+		temp const byte pbyte = in_bytes[ b ];
+		with( pbyte )
+		{
+			when( '\0' )
+			{
+				if_all( b + 1 < in_size, in_bytes[ b + 1 ] >= '0', in_bytes[ b + 1 ] <= '9' )
+				{
+					bytes_paste_move( val_of( out_ref ), "\\000" );
+				}
+				else
+				{
+					bytes_paste_move( val_of( out_ref ), "\\0" );
+				}
+				skip;
+			}
+
+			when( 0x1A )
+			{
+				if_all( b + 1 < in_size, in_bytes[ b + 1 ] >= '0', in_bytes[ b + 1 ] <= '7' )
+				{
+					bytes_paste_move( val_of( out_ref ), "\\032" );
+				}
+				else
+				{
+					bytes_paste_move( val_of( out_ref ), "\\32" );
+				}
+				skip;
+			}
+
+			when( '"' )
+			{
+				bytes_paste_move( val_of( out_ref ), "\\\"" );
+				skip;
+			}
+
+			when( '\\' )
+			{
+				bytes_paste_move( val_of( out_ref ), "\\\\" );
+				skip;
+			}
+
+			when( '\r' )
+			{
+				bytes_paste_move( val_of( out_ref ), "\\r" );
+				skip;
+			}
+
+			when( '\n' )
+			{
+				bytes_paste_move( val_of( out_ref ), "\\n" );
+				skip;
+			}
+
+			other
+			{
+				bytes_set_move( val_of( out_ref ), pbyte );
+			}
+		}
+
+		if( ( ( b + 1 ) mod 4000 ) is 0 and b + 1 < in_size )
+		{
+			bytes_paste_move( val_of( out_ref ), "\"\n\"" );
+		}
+	}
+
+	bytes_paste_move( val_of( out_ref ), "\"" );
+}
+
+//
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////// font
+/// font
+//
+
+type( font )
+{
+	canvas canvas;
+	n2x2 letter_size;
+};
+
+embed font new_font( canvas const canvas )
+{
+	temp font this = { 0 };
+	this.canvas = canvas;
+	this.letter_size = n2x2( canvas.size.w >> 4, canvas.size.h >> 3 );
+	out this;
+}
+
+#define canvas_draw_bytes( CANVAS, FONT, BYTES, BYTES_SIZE, POS, ANCHOR, COLOR )\
+	START_DEF\
+	{\
+		temp const n2 _text_len = pick( BYTES_SIZE is 0, bytes_measure( BYTES ), BYTES_SIZE );\
+		temp const i2 _letter_w = FONT->letter_size.w;\
+		temp const i2 _letter_h = FONT->letter_size.h;\
+		temp const i2 _text_width = _text_len * _letter_w;\
+		temp anchor const _anchor = ANCHOR;\
+		temp i2 _draw_x = POS.x + anchor_get_x( _anchor, 0, _text_width );\
+		temp i2 _draw_y = POS.y + anchor_get_y( _anchor, 0, _letter_h );\
+		temp const pixel _color = COLOR;\
+		temp const i4 _to_step = CANVAS->size.w - _letter_w;\
+		temp const i4 _from_step = FONT->canvas.size.w - _letter_w;\
+		iter( _l, _text_len )\
+		{\
+			temp const byte _letter = BYTES[ _l ] - ' ';\
+			temp const i2 _letter_x = ( _letter & 0x0F ) * _letter_w;\
+			temp const i2 _letter_y = ( _letter >> 4 ) * _letter_h;\
+			temp pixel ref _to_ref = CANVAS->pixels + _draw_y * CANVAS->size.w + _draw_x;\
+			temp const pixel ref _from_ref = FONT->canvas.pixels + _letter_y * FONT->canvas.size.w + _letter_x;\
+			temp i2 _h = _letter_h;\
+			do\
+			{\
+				temp i2 _w = _letter_w;\
+				do\
+				{\
+					if( _from_ref->a )\
+					{\
+						val_of( _to_ref ) = _color;\
+					}\
+					++_to_ref;\
+					++_from_ref;\
+				}\
+				while( --_w );\
+				_to_ref += _to_step;\
+				_from_ref += _from_step;\
+			}\
+			while( --_h );\
+			_draw_x += _letter_w;\
+		}\
+	}\
+	END_DEF
+
 //
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////// inputs
@@ -1205,6 +1417,8 @@ group( input_type )
 
 #define _INPUT_SET( NAME, LINUX_KEY, WINDOWS_KEY )[ PICK( OS_LINUX, LINUX_KEY, WINDOWS_KEY ) ] = input_##NAME
 #define _INPUT_SET_MASKED( NAME, LINUX_KEY, WINDOWS_KEY )[ PICK( OS_LINUX, LINUX_KEY & 0x1ff, WINDOWS_KEY ) ] = input_##NAME
+
+#define input_to_byte( INPUT ) ( ( INPUT ) - input_a + 'A' )
 
 perm byte const _INPUT_MAP[] =
 	{
@@ -2046,13 +2260,13 @@ fn _window_resize( window ref const window_ref )
 		}
 	#endif
 
+	call( window_ref->fn_resize, window_ref );
+
 	iter( view_index, window_ref->view_refs_count )
 	{
 		temp view ref const this_view = window_ref->view_refs[ view_index ];
 		view_resize( this_view, window_ref->size, this_view->canvas.size );
 	}
-
-	call( window_ref->fn_resize, window_ref );
 }
 
 fn _current_window_tick()
@@ -2103,6 +2317,8 @@ fn _window_draw( window ref const window_ref )
 	{
 		temp view ref const view_ref = window_ref->view_refs[ view_index ];
 		next_if( view_ref->update is no );
+		next_if( view_ref->canvas.pixels is nothing );
+
 		call( view_ref->fn_draw, view_ref );
 		view_ref->update = no;
 	}
@@ -2733,9 +2949,9 @@ fn _current_window_process()
 
 	if( _current_window_ref->tick is 1 )
 	{
+		call( _current_window_ref->fn_start, _current_window_ref );
 		_window_resize( _current_window_ref );
 		window_center( _current_window_ref );
-		call( _current_window_ref->fn_start, _current_window_ref );
 		_current_window_tick();
 	}
 	else if( _current_window_ref->tick is 2 )
