@@ -1313,6 +1313,7 @@ embed font new_font( canvas const canvas )
 group( input_type )
 {
 	input_none,
+	
 	input_mouse_left,
 	input_mouse_middle,
 	input_mouse_right,
@@ -1320,7 +1321,7 @@ group( input_type )
 	input_scroll_down,
 	input_scroll_left,
 	input_scroll_right,
-	input_cancel,
+	
 	input_a,
 	input_b,
 	input_c,
