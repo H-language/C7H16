@@ -1313,7 +1313,7 @@ embed font new_font( canvas const canvas )
 group( input_type )
 {
 	input_none,
-	
+
 	input_mouse_left,
 	input_mouse_middle,
 	input_mouse_right,
@@ -1321,7 +1321,7 @@ group( input_type )
 	input_scroll_down,
 	input_scroll_left,
 	input_scroll_right,
-	
+
 	input_a,
 	input_b,
 	input_c,
@@ -1525,6 +1525,7 @@ perm byte const _INPUT_MAP[] =
 	{\
 		window_ref->inputs[ VALUE ] |= INPUT_MASK_PRESSED | INPUT_MASK_HELD;\
 		window_ref->inputs_pressed[ window_ref->inputs_pressed_count++ ] = n1( VALUE );\
+		printf( "pressed: %d\n", VALUE );\
 		is_input = yes;\
 	}
 
@@ -2546,21 +2547,18 @@ fn _window_present( window ref const window_ref )
 ////////////////////////////////
 // window events
 
-group( window_event_type, n2 )
-{
-	window_event_resize = PICK( OS_LINUX, ConfigureNotify, WM_SIZE ),
-	window_event_draw = PICK( OS_LINUX, Expose, WM_PAINT ),
-	window_event_close = PICK( OS_LINUX, ClientMessage, WM_DESTROY ),
-	window_event_key_activate = PICK( OS_LINUX, KeyPress, WM_KEYDOWN ),
-	window_event_key_deactivate = PICK( OS_LINUX, KeyRelease, WM_KEYUP ),
-	window_event_mouse_move = PICK( OS_LINUX, MotionNotify, WM_MOUSEMOVE ),
-	window_event_focus_lost = PICK( OS_LINUX, FocusOut, WM_KILLFOCUS )
-};
+#define window_event_resize PICK( OS_LINUX, ConfigureNotify, WM_SIZE )
+#define window_event_draw PICK( OS_LINUX, Expose, WM_PAINT )
+#define window_event_close PICK( OS_LINUX, ClientMessage, WM_DESTROY )
+#define window_event_key_activate PICK( OS_LINUX, KeyPress, WM_KEYDOWN, WM_SYSKEYDOWN )
+#define window_event_key_deactivate PICK( OS_LINUX, KeyRelease, WM_KEYUP, WM_SYSKEYUP )
+#define window_event_mouse_move PICK( OS_LINUX, MotionNotify, WM_MOUSEMOVE )
+#define window_event_focus_lost PICK( OS_LINUX, FocusOut, WM_KILLFOCUS )
 
 #if OS_LINUX
-	embed out_state window_process_event( window ref const window_ref, window_event_type const event, os_event const ref e )
+	embed out_state window_process_event( window ref const window_ref, i4 const event, os_event const ref e )
 #elif OS_WINDOWS
-	embed LRESULT CALLBACK window_process_event( os_handle const h, window_event_type const event, WPARAM const wp, LPARAM const lp )
+	embed LRESULT CALLBACK window_process_event( os_handle const h, i4 const event, WPARAM const wp, LPARAM const lp )
 #endif
 {
 	#if OS_WINDOWS
@@ -2619,6 +2617,12 @@ group( window_event_type, n2 )
 			{
 				skip_if( window_ref->bordered is yes );
 				out 1;
+			}
+
+			when( WM_SYSCOMMAND )
+			{
+				skip_if( ( wp & 0xFFF0 ) isnt SC_KEYMENU );
+				out 0;
 			}
 		#endif
 
