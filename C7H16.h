@@ -1525,7 +1525,6 @@ perm byte const _INPUT_MAP[] =
 	{\
 		window_ref->inputs[ VALUE ] |= INPUT_MASK_PRESSED | INPUT_MASK_HELD;\
 		window_ref->inputs_pressed[ window_ref->inputs_pressed_count++ ] = n1( VALUE );\
-		printf( "pressed: %d\n", VALUE );\
 		is_input = yes;\
 	}
 
@@ -1807,9 +1806,9 @@ fn view_clamp( view ref const view_ref, n2x2 const window_size )
 	}
 }
 
-embed flag mouse_in_view( view ref const view_ref )
+embed flag mouse_in_view( view ref const view_ref, i2 const buffer )
 {
-	out point_in_size( r4_trunc( view_ref->mouse.x ), r4_trunc( view_ref->mouse.y ), view_ref->canvas.size.w, view_ref->canvas.size.h );
+	out point_in_box( r4_trunc( view_ref->mouse.x ), r4_trunc( view_ref->mouse.y ), -buffer, -buffer, view_ref->canvas.size.w + buffer, view_ref->canvas.size.h + buffer );
 }
 
 ////////////////////////////////
