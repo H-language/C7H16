@@ -522,20 +522,19 @@ group( anchor )
 	anchor_right_bottom = 0x22 // 0010 0010
 };
 
-embed i2 anchor_get_x( anchor const anchor, n2 const region_width, n2 const object_width )
+embed i2 anchor_get_x( anchor const anchor, n2 const region_width, n2 const object_width, n2 const padding )
 {
 	temp n1 const h_align = anchor >> 4;
 	temp i2 const offset = region_width - object_width;
-	out pick( h_align is 1, offset >> 1, pick( h_align is 2, offset, 0 ) );
+	out pick( h_align is 1, offset >> 1, pick( h_align is 2, offset - padding, padding ) );
 }
 
-embed i2 anchor_get_y( anchor const anchor, n2 const region_height, n2 const object_height )
+embed i2 anchor_get_y( anchor const anchor, n2 const region_height, n2 const object_height, n2 const padding )
 {
 	temp const n1 v_align = anchor & 0x0F;
 	temp i2 const offset = region_height - object_height;
-	out pick( v_align is 1, offset >> 1, pick( v_align is 2, offset, 0 ) );
+	out pick( v_align is 1, offset >> 1, pick( v_align is 2, offset - padding, padding ) );
 }
-
 //
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////// pixel
@@ -1269,8 +1268,8 @@ embed font new_font( canvas const canvas )
 		temp const i2 _letter_h = FONT->letter_size.h;\
 		temp const i2 _text_width = _text_len * _letter_w;\
 		temp anchor const _anchor = ANCHOR;\
-		temp i2 _draw_x = POS.x + anchor_get_x( _anchor, 0, _text_width );\
-		temp i2 _draw_y = POS.y + anchor_get_y( _anchor, 0, _letter_h );\
+		temp i2 _draw_x = POS.x + anchor_get_x( _anchor, 0, _text_width, 0 );\
+		temp i2 _draw_y = POS.y + anchor_get_y( _anchor, 0, _letter_h, 0 );\
 		temp const pixel _color = COLOR;\
 		temp const i4 _to_step = CANVAS->size.w - _letter_w;\
 		temp const i4 _from_step = FONT->canvas.size.w - _letter_w;\
@@ -1811,6 +1810,11 @@ embed flag mouse_in_view( view ref const view_ref, i2 const buffer )
 	out point_in_box( r4_trunc( view_ref->mouse.x ), r4_trunc( view_ref->mouse.y ), -buffer, -buffer, view_ref->canvas.size.w + buffer, view_ref->canvas.size.h + buffer );
 }
 
+embed flag mouse_was_in_view( view ref const view_ref, i2 const buffer )
+{
+	out point_in_box( r4_trunc( view_ref->mouse_prev.x ), r4_trunc( view_ref->mouse_prev.y ), -buffer, -buffer, view_ref->canvas.size.w + buffer, view_ref->canvas.size.h + buffer );
+}
+
 ////////////////////////////////
 // window
 
@@ -2277,8 +2281,10 @@ fn _current_window_tick()
 	iter( view_index, _current_window_ref->view_refs_count )
 	{
 		temp view ref const this_view = _current_window_ref->view_refs[ view_index ];
-		this_view->mouse_prev = this_view->mouse;
-		this_view->mouse = r4x2( r4( _current_window_ref->mouse.x - this_view->pos.x ) / this_view->scale.w, r4( _current_window_ref->mouse.y - this_view->pos.y ) / this_view->scale.h );
+
+		r4x2 new_mouse = r4x2( r4( _current_window_ref->mouse.x - this_view->pos.x ) / this_view->scale.w, r4( _current_window_ref->mouse.y - this_view->pos.y ) / this_view->scale.h );
+		this_view->mouse_prev = pick( _current_window_ref->tick > 1, this_view->mouse, new_mouse );
+		this_view->mouse = new_mouse;
 	}
 
 	perm nano start_nano = 0;
@@ -2493,6 +2499,7 @@ fn _window_present( window ref const window_ref )
 			#if OS_LINUX
 				XSetForeground( windows_display, gc, ( n4( view_ref->outline.r ) << 16 ) | ( n4( view_ref->outline.g ) << 8 ) | n4( view_ref->outline.b ) );
 				XDrawRectangle( windows_display, target_drawable, gc, outline_l, outline_t, outline_r - outline_l, outline_b - outline_t );
+				XDrawPoint( windows_display, target_drawable, gc, outline_r, outline_b );
 			#elif OS_WINDOWS
 				perm HBRUSH null_brush = nothing;
 				once null_brush = to( HBRUSH, GetStockObject( NULL_BRUSH ) );
