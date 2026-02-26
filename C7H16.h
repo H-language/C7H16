@@ -1509,9 +1509,9 @@ perm byte const _INPUT_MAP[] =
 		_INPUT_SET_MASKED( menu, XK_Menu, VK_APPS ),
 	};
 
-#define key_pressed( KEY ) ( _current_window_ref->inputs[ input_##KEY ] & INPUT_MASK_PRESSED )
-#define key_held( KEY ) ( _current_window_ref->inputs[ input_##KEY ] & INPUT_MASK_HELD )
-#define key_released( KEY ) ( _current_window_ref->inputs[ input_##KEY ] & INPUT_MASK_RELEASED )
+#define key_pressed( KEY ) ( ( _current_window_ref->inputs[ input_##KEY ] & INPUT_MASK_PRESSED ) isnt 0 )
+#define key_held( KEY ) ( ( _current_window_ref->inputs[ input_##KEY ] & INPUT_MASK_HELD ) isnt 0 )
+#define key_released( KEY ) ( ( _current_window_ref->inputs[ input_##KEY ] & INPUT_MASK_RELEASED ) isnt 0 )
 
 #define mouse_pressed( BUTTON ) key_pressed( mouse_##BUTTON )
 #define mouse_held( BUTTON ) key_held( mouse_##BUTTON )
