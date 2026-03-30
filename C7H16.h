@@ -10,7 +10,6 @@
 //
 
 #pragma once
-#define HEPTANE
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////// dependencies
 /// dependencies
@@ -272,6 +271,13 @@
 	embed r##N##x##X r##N##x##X##_norm( const r##N##x##X V )\
 	{\
 		out r##N##x##X##_mul_##r##N( V, 1.0 / r##N##x##X##_length( V ) );\
+	}\
+	embed r##N##x##X r##N##x##X##_rotate( const r##N##x##X V, const r##N R )\
+	{\
+		r##N cos_angle = 0;\
+		r##N sin_angle = 0;\
+		r##N##_sincos( R, ref_of( sin_angle ), ref_of( cos_angle ) );\
+		out r##N##x##X( V.x * cos_angle - V.y * sin_angle, V.x * sin_angle + V.y * cos_angle );\
 	}
 
 #define DECLARE_TYPE_MULTI( TYPE )\
@@ -1672,9 +1678,9 @@ fn window_set_cursor( window ref const window_ref, cursor_type const cursor )
 		perm Cursor cache[ 256 ] = { 0 };
 		if( not cache[ cursor ] )
 		{
-			cache[ cursor ] = XCreateFontCursor( windows_display, cursor );
+			cache[ cursor ] = XCreateFontCursor( program.display, cursor );
 		}
-		XDefineCursor( windows_display, window_ref->handle, cache[ cursor ] );
+		XDefineCursor( program.display, window_ref->handle, cache[ cursor ] );
 	#else
 		SetCursor( LoadCursor( NULL, MAKEINTRESOURCE( cursor ) ) );
 	#endif
