@@ -271,13 +271,6 @@
 	embed r##N##x##X r##N##x##X##_norm( const r##N##x##X V )\
 	{\
 		out r##N##x##X##_mul_##r##N( V, 1.0 / r##N##x##X##_length( V ) );\
-	}\
-	embed r##N##x##X r##N##x##X##_rotate( const r##N##x##X V, const r##N R )\
-	{\
-		r##N cos_angle = 0;\
-		r##N sin_angle = 0;\
-		r##N##_sincos( R, ref_of( sin_angle ), ref_of( cos_angle ) );\
-		out r##N##x##X( V.x * cos_angle - V.y * sin_angle, V.x * sin_angle + V.y * cos_angle );\
 	}
 
 #define DECLARE_TYPE_MULTI( TYPE )\
@@ -597,104 +590,132 @@ fn canvas_fill( canvas ref const canvas_ref, pixel const color )
 /// inputs
 //
 
+#ifdef C7H16_INPUT_NO_KEYBOARD
+	#define C7H16_INPUT_NO_LETTERS
+	#define C7H16_INPUT_NO_NUMBERS
+	#define C7H16_INPUT_NO_SYMBOLS
+	#define C7H16_INPUT_NO_FUNCTIONS
+	#define C7H16_INPUT_NO_MODIFIERS
+	#define C7H16_INPUT_NO_ARROWS
+	#define C7H16_INPUT_NO_CONTROLS
+#elif defined( C7H16_INPUT_NO_LETTERS ) and defined( C7H16_INPUT_NO_NUMBERS ) and defined( C7H16_INPUT_NO_SYMBOLS ) and defined( C7H16_INPUT_NO_FUNCTIONS ) and defined( C7H16_INPUT_NO_MODIFIERS ) and defined( C7H16_INPUT_NO_ARROWS ) and defined( C7H16_INPUT_NO_CONTROLS )
+	#define C7H16_INPUT_NO_KEYBOARD
+#endif
+
 group( input_type )
 {
 	input_none,
 
-	input_mouse_left,
-	input_mouse_middle,
-	input_mouse_right,
-	input_scroll_up,
-	input_scroll_down,
-	input_scroll_left,
-	input_scroll_right,
+	#ifndef C7H16_INPUT_NO_MOUSE
+		input_mouse_left,
+		input_mouse_middle,
+		input_mouse_right,
+		input_scroll_up,
+		input_scroll_down,
+		input_scroll_left,
+		input_scroll_right,
+	#endif
 
-	input_a,
-	input_b,
-	input_c,
-	input_d,
-	input_e,
-	input_f,
-	input_g,
-	input_h,
-	input_i,
-	input_j,
-	input_k,
-	input_l,
-	input_m,
-	input_n,
-	input_o,
-	input_p,
-	input_q,
-	input_r,
-	input_s,
-	input_t,
-	input_u,
-	input_v,
-	input_w,
-	input_x,
-	input_y,
-	input_z,
+	#ifndef C7H16_INPUT_NO_LETTERS
+		input_a,
+		input_b,
+		input_c,
+		input_d,
+		input_e,
+		input_f,
+		input_g,
+		input_h,
+		input_i,
+		input_j,
+		input_k,
+		input_l,
+		input_m,
+		input_n,
+		input_o,
+		input_p,
+		input_q,
+		input_r,
+		input_s,
+		input_t,
+		input_u,
+		input_v,
+		input_w,
+		input_x,
+		input_y,
+		input_z,
+	#endif
 
-	input_0,
-	input_1,
-	input_2,
-	input_3,
-	input_4,
-	input_5,
-	input_6,
-	input_7,
-	input_8,
-	input_9,
+	#ifndef C7H16_INPUT_NO_NUMBERS
+		input_0,
+		input_1,
+		input_2,
+		input_3,
+		input_4,
+		input_5,
+		input_6,
+		input_7,
+		input_8,
+		input_9,
+	#endif
 
-	input_f1,
-	input_f2,
-	input_f3,
-	input_f4,
-	input_f5,
-	input_f6,
-	input_f7,
-	input_f8,
-	input_f9,
-	input_f10,
-	input_f11,
-	input_f12,
+	#ifndef C7H16_INPUT_NO_SYMBOLS
+		input_backtick,
+		input_minus,
+		input_equals,
+		input_leftbracket,
+		input_rightbracket,
+		input_backslash,
+		input_semicolon,
+		input_apostrophe,
+		input_comma,
+		input_period,
+		input_slash,
+		input_space,
+		input_tab,
+	#endif
 
-	input_escape,
-	input_tab,
-	input_capslock,
-	input_shift,
-	input_ctrl,
-	input_alt,
-	input_space,
-	input_enter,
-	input_backspace,
-	input_insert,
-	input_delete,
-	input_home,
-	input_end,
-	input_pageup,
-	input_pagedown,
+	#ifndef C7H16_INPUT_NO_FUNCTIONS
+		input_f1,
+		input_f2,
+		input_f3,
+		input_f4,
+		input_f5,
+		input_f6,
+		input_f7,
+		input_f8,
+		input_f9,
+		input_f10,
+		input_f11,
+		input_f12,
+	#endif
 
-	input_up,
-	input_down,
-	input_left,
-	input_right,
+	#ifndef C7H16_INPUT_NO_MODIFIERS
+		input_shift,
+		input_ctrl,
+		input_alt,
+		input_super,
+	#endif
 
-	input_backtick,
-	input_minus,
-	input_equals,
-	input_leftbracket,
-	input_rightbracket,
-	input_backslash,
-	input_semicolon,
-	input_apostrophe,
-	input_comma,
-	input_period,
-	input_slash,
+	#ifndef C7H16_INPUT_NO_ARROWS
+		input_up,
+		input_down,
+		input_left,
+		input_right,
+	#endif
 
-	input_super,
-	input_menu,
+	#ifndef C7H16_INPUT_NO_CONTROLS
+		input_escape,
+		input_capslock,
+		input_enter,
+		input_backspace,
+		input_insert,
+		input_delete,
+		input_home,
+		input_end,
+		input_pageup,
+		input_pagedown,
+		input_menu,
+	#endif
 
 	inputs_count
 };
@@ -708,94 +729,111 @@ group( input_type )
 
 #define input_to_byte( INPUT ) ( ( INPUT ) - input_a + 'A' )
 
-perm byte const _INPUT_MAP[] =
-	{
-		_INPUT_SET( a, XK_a, 'A' ),
-		_INPUT_SET( b, XK_b, 'B' ),
-		_INPUT_SET( c, XK_c, 'C' ),
-		_INPUT_SET( d, XK_d, 'D' ),
-		_INPUT_SET( e, XK_e, 'E' ),
-		_INPUT_SET( f, XK_f, 'F' ),
-		_INPUT_SET( g, XK_g, 'G' ),
-		_INPUT_SET( h, XK_h, 'H' ),
-		_INPUT_SET( i, XK_i, 'I' ),
-		_INPUT_SET( j, XK_j, 'J' ),
-		_INPUT_SET( k, XK_k, 'K' ),
-		_INPUT_SET( l, XK_l, 'L' ),
-		_INPUT_SET( m, XK_m, 'M' ),
-		_INPUT_SET( n, XK_n, 'N' ),
-		_INPUT_SET( o, XK_o, 'O' ),
-		_INPUT_SET( p, XK_p, 'P' ),
-		_INPUT_SET( q, XK_q, 'Q' ),
-		_INPUT_SET( r, XK_r, 'R' ),
-		_INPUT_SET( s, XK_s, 'S' ),
-		_INPUT_SET( t, XK_t, 'T' ),
-		_INPUT_SET( u, XK_u, 'U' ),
-		_INPUT_SET( v, XK_v, 'V' ),
-		_INPUT_SET( w, XK_w, 'W' ),
-		_INPUT_SET( x, XK_x, 'X' ),
-		_INPUT_SET( y, XK_y, 'Y' ),
-		_INPUT_SET( z, XK_z, 'Z' ),
+#ifndef C7H16_INPUT_NO_KEYBOARD
+	perm byte const _INPUT_MAP[] =
+		{
+			#ifndef C7H16_INPUT_NO_LETTERS
+				_INPUT_SET( a, XK_a, 'A' ),
+				_INPUT_SET( b, XK_b, 'B' ),
+				_INPUT_SET( c, XK_c, 'C' ),
+				_INPUT_SET( d, XK_d, 'D' ),
+				_INPUT_SET( e, XK_e, 'E' ),
+				_INPUT_SET( f, XK_f, 'F' ),
+				_INPUT_SET( g, XK_g, 'G' ),
+				_INPUT_SET( h, XK_h, 'H' ),
+				_INPUT_SET( i, XK_i, 'I' ),
+				_INPUT_SET( j, XK_j, 'J' ),
+				_INPUT_SET( k, XK_k, 'K' ),
+				_INPUT_SET( l, XK_l, 'L' ),
+				_INPUT_SET( m, XK_m, 'M' ),
+				_INPUT_SET( n, XK_n, 'N' ),
+				_INPUT_SET( o, XK_o, 'O' ),
+				_INPUT_SET( p, XK_p, 'P' ),
+				_INPUT_SET( q, XK_q, 'Q' ),
+				_INPUT_SET( r, XK_r, 'R' ),
+				_INPUT_SET( s, XK_s, 'S' ),
+				_INPUT_SET( t, XK_t, 'T' ),
+				_INPUT_SET( u, XK_u, 'U' ),
+				_INPUT_SET( v, XK_v, 'V' ),
+				_INPUT_SET( w, XK_w, 'W' ),
+				_INPUT_SET( x, XK_x, 'X' ),
+				_INPUT_SET( y, XK_y, 'Y' ),
+				_INPUT_SET( z, XK_z, 'Z' ),
+			#endif
 
-		_INPUT_SET( 0, XK_0, '0' ),
-		_INPUT_SET( 1, XK_1, '1' ),
-		_INPUT_SET( 2, XK_2, '2' ),
-		_INPUT_SET( 3, XK_3, '3' ),
-		_INPUT_SET( 4, XK_4, '4' ),
-		_INPUT_SET( 5, XK_5, '5' ),
-		_INPUT_SET( 6, XK_6, '6' ),
-		_INPUT_SET( 7, XK_7, '7' ),
-		_INPUT_SET( 8, XK_8, '8' ),
-		_INPUT_SET( 9, XK_9, '9' ),
+			#ifndef C7H16_INPUT_NO_NUMBERS
+				_INPUT_SET( 0, XK_0, '0' ),
+				_INPUT_SET( 1, XK_1, '1' ),
+				_INPUT_SET( 2, XK_2, '2' ),
+				_INPUT_SET( 3, XK_3, '3' ),
+				_INPUT_SET( 4, XK_4, '4' ),
+				_INPUT_SET( 5, XK_5, '5' ),
+				_INPUT_SET( 6, XK_6, '6' ),
+				_INPUT_SET( 7, XK_7, '7' ),
+				_INPUT_SET( 8, XK_8, '8' ),
+				_INPUT_SET( 9, XK_9, '9' ),
+			#endif
 
-		_INPUT_SET_MASKED( f1, XK_F1, VK_F1 ),
-		_INPUT_SET_MASKED( f2, XK_F2, VK_F2 ),
-		_INPUT_SET_MASKED( f3, XK_F3, VK_F3 ),
-		_INPUT_SET_MASKED( f4, XK_F4, VK_F4 ),
-		_INPUT_SET_MASKED( f5, XK_F5, VK_F5 ),
-		_INPUT_SET_MASKED( f6, XK_F6, VK_F6 ),
-		_INPUT_SET_MASKED( f7, XK_F7, VK_F7 ),
-		_INPUT_SET_MASKED( f8, XK_F8, VK_F8 ),
-		_INPUT_SET_MASKED( f9, XK_F9, VK_F9 ),
-		_INPUT_SET_MASKED( f10, XK_F10, VK_F10 ),
-		_INPUT_SET_MASKED( f11, XK_F11, VK_F11 ),
-		_INPUT_SET_MASKED( f12, XK_F12, VK_F12 ),
+			#ifndef C7H16_INPUT_NO_SYMBOLS
+				_INPUT_SET( backtick, XK_grave, VK_OEM_3 ),
+				_INPUT_SET( minus, XK_minus, VK_OEM_MINUS ),
+				_INPUT_SET( equals, XK_equal, VK_OEM_PLUS ),
+				_INPUT_SET( leftbracket, XK_bracketleft, VK_OEM_4 ),
+				_INPUT_SET( rightbracket, XK_bracketright, VK_OEM_6 ),
+				_INPUT_SET( backslash, XK_backslash, VK_OEM_5 ),
+				_INPUT_SET( semicolon, XK_semicolon, VK_OEM_1 ),
+				_INPUT_SET( apostrophe, XK_apostrophe, VK_OEM_7 ),
+				_INPUT_SET( comma, XK_comma, VK_OEM_COMMA ),
+				_INPUT_SET( period, XK_period, VK_OEM_PERIOD ),
+				_INPUT_SET( slash, XK_slash, VK_OEM_2 ),
+				_INPUT_SET( space, XK_space, VK_SPACE ),
+				_INPUT_SET_MASKED( tab, XK_Tab, VK_TAB ),
+			#endif
 
-		_INPUT_SET( space, XK_space, VK_SPACE ),
-		_INPUT_SET( backtick, XK_grave, VK_OEM_3 ),
-		_INPUT_SET( minus, XK_minus, VK_OEM_MINUS ),
-		_INPUT_SET( equals, XK_equal, VK_OEM_PLUS ),
-		_INPUT_SET( leftbracket, XK_bracketleft, VK_OEM_4 ),
-		_INPUT_SET( rightbracket, XK_bracketright, VK_OEM_6 ),
-		_INPUT_SET( backslash, XK_backslash, VK_OEM_5 ),
-		_INPUT_SET( semicolon, XK_semicolon, VK_OEM_1 ),
-		_INPUT_SET( apostrophe, XK_apostrophe, VK_OEM_7 ),
-		_INPUT_SET( comma, XK_comma, VK_OEM_COMMA ),
-		_INPUT_SET( period, XK_period, VK_OEM_PERIOD ),
-		_INPUT_SET( slash, XK_slash, VK_OEM_2 ),
+			#ifndef C7H16_INPUT_NO_FUNCTIONS
+				_INPUT_SET_MASKED( f1, XK_F1, VK_F1 ),
+				_INPUT_SET_MASKED( f2, XK_F2, VK_F2 ),
+				_INPUT_SET_MASKED( f3, XK_F3, VK_F3 ),
+				_INPUT_SET_MASKED( f4, XK_F4, VK_F4 ),
+				_INPUT_SET_MASKED( f5, XK_F5, VK_F5 ),
+				_INPUT_SET_MASKED( f6, XK_F6, VK_F6 ),
+				_INPUT_SET_MASKED( f7, XK_F7, VK_F7 ),
+				_INPUT_SET_MASKED( f8, XK_F8, VK_F8 ),
+				_INPUT_SET_MASKED( f9, XK_F9, VK_F9 ),
+				_INPUT_SET_MASKED( f10, XK_F10, VK_F10 ),
+				_INPUT_SET_MASKED( f11, XK_F11, VK_F11 ),
+				_INPUT_SET_MASKED( f12, XK_F12, VK_F12 ),
+			#endif
 
-		_INPUT_SET_MASKED( backspace, XK_BackSpace, VK_BACK ),
-		_INPUT_SET_MASKED( tab, XK_Tab, VK_TAB ),
-		_INPUT_SET_MASKED( enter, XK_Return, VK_RETURN ),
-		_INPUT_SET_MASKED( escape, XK_Escape, VK_ESCAPE ),
-		_INPUT_SET_MASKED( delete, XK_Delete, VK_DELETE ),
-		_INPUT_SET_MASKED( insert, XK_Insert, VK_INSERT ),
-		_INPUT_SET_MASKED( home, XK_Home, VK_HOME ),
-		_INPUT_SET_MASKED( end, XK_End, VK_END ),
-		_INPUT_SET_MASKED( pageup, XK_Page_Up, VK_PRIOR ),
-		_INPUT_SET_MASKED( pagedown, XK_Page_Down, VK_NEXT ),
-		_INPUT_SET_MASKED( left, XK_Left, VK_LEFT ),
-		_INPUT_SET_MASKED( up, XK_Up, VK_UP ),
-		_INPUT_SET_MASKED( right, XK_Right, VK_RIGHT ),
-		_INPUT_SET_MASKED( down, XK_Down, VK_DOWN ),
+			#ifndef C7H16_INPUT_NO_MODIFIERS
+				_INPUT_SET_MASKED( shift, XK_Shift_L, VK_SHIFT ),
+				_INPUT_SET_MASKED( ctrl, XK_Control_L, VK_CONTROL ),
+				_INPUT_SET_MASKED( alt, XK_Alt_L, VK_MENU ),
+				_INPUT_SET_MASKED( super, XK_Super_L, VK_LWIN ),
+			#endif
 
-		_INPUT_SET_MASKED( shift, XK_Shift_L, VK_SHIFT ),
-		_INPUT_SET_MASKED( ctrl, XK_Control_L, VK_CONTROL ),
-		_INPUT_SET_MASKED( capslock, XK_Caps_Lock, VK_CAPITAL ),
-		_INPUT_SET_MASKED( alt, XK_Alt_L, VK_MENU ),
-		_INPUT_SET_MASKED( super, XK_Super_L, VK_LWIN ),
-		_INPUT_SET_MASKED( menu, XK_Menu, VK_APPS ),
-	};
+			#ifndef C7H16_INPUT_NO_ARROWS
+				_INPUT_SET_MASKED( up, XK_Up, VK_UP ),
+				_INPUT_SET_MASKED( down, XK_Down, VK_DOWN ),
+				_INPUT_SET_MASKED( left, XK_Left, VK_LEFT ),
+				_INPUT_SET_MASKED( right, XK_Right, VK_RIGHT ),
+			#endif
+
+			#ifndef C7H16_INPUT_NO_CONTROLS
+				_INPUT_SET_MASKED( escape, XK_Escape, VK_ESCAPE ),
+				_INPUT_SET_MASKED( capslock, XK_Caps_Lock, VK_CAPITAL ),
+				_INPUT_SET_MASKED( enter, XK_Return, VK_RETURN ),
+				_INPUT_SET_MASKED( backspace, XK_BackSpace, VK_BACK ),
+				_INPUT_SET_MASKED( insert, XK_Insert, VK_INSERT ),
+				_INPUT_SET_MASKED( delete, XK_Delete, VK_DELETE ),
+				_INPUT_SET_MASKED( home, XK_Home, VK_HOME ),
+				_INPUT_SET_MASKED( end, XK_End, VK_END ),
+				_INPUT_SET_MASKED( pageup, XK_Page_Up, VK_PRIOR ),
+				_INPUT_SET_MASKED( pagedown, XK_Page_Down, VK_NEXT ),
+				_INPUT_SET_MASKED( menu, XK_Menu, VK_APPS ),
+			#endif
+		};
+#endif
 
 #define key_pressed( WINDOW_REF, KEY ) ( ( ( WINDOW_REF )->inputs[ input_##KEY ] & INPUT_MASK_PRESSED ) isnt 0 )
 #define key_held( WINDOW_REF, KEY ) ( ( ( WINDOW_REF )->inputs[ input_##KEY ] & INPUT_MASK_HELD ) isnt 0 )
@@ -847,8 +885,7 @@ type( view )
 	flag update : 1;
 	flag clip : 1;
 	flag clear : 1;
-}
-packed;
+};
 
 //
 
@@ -916,8 +953,7 @@ type( window )
 	i4x2 mouse;
 
 	flag visible : 1;
-}
-packed;
+};
 
 //
 
@@ -943,7 +979,7 @@ global
 	window windows[ program_max_windows ];
 	n1 windows_count;
 }
-packed program;
+program;
 
 //
 
@@ -982,7 +1018,7 @@ fn view_zoom( view ref const view_ref, i4 const x, i4 const y, r4 const factor )
 	view_ref->scale = r4x2( new_scale, new_scale );
 }
 
-fn view_resize( view ref const view_ref, n2x2 const window_size, n2x2 const size )
+fn view_resize( view ref const view_ref, n2x2 const size )
 {
 	out_if_any( view_ref is nothing, size.w is 0, size.h is 0 );
 
@@ -1004,6 +1040,12 @@ fn view_resize( view ref const view_ref, n2x2 const window_size, n2x2 const size
 	#endif
 
 	_view_setup( view_ref );
+}
+
+fn view_recreate( view ref const view_ref, canvas const canvas )
+{
+	view_ref->canvas = canvas;
+	view_resize( view_ref, view_ref->canvas.size );
 }
 
 fn view_center( view ref const view_ref, i2x2 const center_position )
@@ -1141,6 +1183,7 @@ fn _window_draw( window ref const window_ref )
 			window_ref->image->width = canvas_w;
 			window_ref->image->height = canvas_h;
 			window_ref->image->bytes_per_line = canvas_w << pixel_shift;
+
 		#elif OS_WINDOWS
 			window_ref->image.bmiHeader.biWidth = canvas_w;
 			window_ref->image.bmiHeader.biHeight = -canvas_h;
@@ -1389,174 +1432,178 @@ fn _window_draw( window ref const window_ref )
 
 		// inputs
 
-		when( _window_event_mouse_move )
-		{
-			#if OS_LINUX
-				window_event next_move;
-				while( XCheckTypedWindowEvent( program.display, window_ref->handle, MotionNotify, ref_of( next_move ) ) );
-			#endif
-			is_input = yes;
-			skip;
-		}
-
-		when( _window_event_key_activate )
-		{
-			temp byte key = _INPUT_MAP[ PICK( OS_LINUX, XkbKeycodeToKeysym( program.display, e->xkey.keycode, 0, 0 ) & 0x1ff, wp & 0xff ) ];
-			_window_add_input_pressed( key );
-			skip;
-		}
-
-		when( _window_event_key_deactivate )
-		{
-			temp byte key = _INPUT_MAP[ PICK( OS_LINUX, XkbKeycodeToKeysym( program.display, e->xkey.keycode, 0, 0 ) & 0x1ff, wp & 0xff ) ];
-			_window_add_input_released( key );
-			skip;
-		}
-
-		#if OS_LINUX
-			when( ButtonPress )
+		#ifndef C7H16_INPUT_NO_KEYBOARD
+			when( _window_event_key_activate )
 			{
-				with( e->xbutton.button )
+				temp byte key = _INPUT_MAP[ PICK( OS_LINUX, XkbKeycodeToKeysym( program.display, e->xkey.keycode, 0, 0 ) & 0x1ff, wp & 0xff ) ];
+				_window_add_input_pressed( key );
+				skip;
+			}
+
+			when( _window_event_key_deactivate )
+			{
+				temp byte key = _INPUT_MAP[ PICK( OS_LINUX, XkbKeycodeToKeysym( program.display, e->xkey.keycode, 0, 0 ) & 0x1ff, wp & 0xff ) ];
+				_window_add_input_released( key );
+				skip;
+			}
+		#endif
+
+		#ifndef C7H16_INPUT_NO_MOUSE
+			when( _window_event_mouse_move )
+			{
+				#if OS_LINUX
+					window_event next_move;
+					while( XCheckTypedWindowEvent( program.display, window_ref->handle, MotionNotify, ref_of( next_move ) ) );
+				#endif
+				is_input = yes;
+				skip;
+			}
+
+			#if OS_LINUX
+				when( ButtonPress )
 				{
-					when( Button1 )
+					with( e->xbutton.button )
 					{
-						_window_add_input_pressed( input_mouse_left );
-						skip;
-					}
+						when( Button1 )
+						{
+							_window_add_input_pressed( input_mouse_left );
+							skip;
+						}
 
-					when( Button2 )
+						when( Button2 )
+						{
+							_window_add_input_pressed( input_mouse_middle );
+							skip;
+						}
+
+						when( Button3 )
+						{
+							_window_add_input_pressed( input_mouse_right );
+							skip;
+						}
+
+						when( 4 )
+						{
+							_window_add_input_pressed( input_scroll_up );
+							_window_add_input_released( input_scroll_up );
+							skip;
+						}
+
+						when( 5 )
+						{
+							_window_add_input_pressed( input_scroll_down );
+							_window_add_input_released( input_scroll_down );
+							skip;
+						}
+
+						when( 6 )
+						{
+							_window_add_input_pressed( input_scroll_right );
+							_window_add_input_released( input_scroll_right );
+							skip;
+						}
+
+						when( 7 )
+						{
+							_window_add_input_pressed( input_scroll_left );
+							_window_add_input_released( input_scroll_left );
+							skip;
+						}
+					}
+					skip;
+				}
+
+				when( ButtonRelease )
+				{
+					with( e->xbutton.button )
 					{
-						_window_add_input_pressed( input_mouse_middle );
-						skip;
-					}
+						when( Button1 )
+						{
+							_window_add_input_released( input_mouse_left );
+							skip;
+						}
 
-					when( Button3 )
-					{
-						_window_add_input_pressed( input_mouse_right );
-						skip;
-					}
+						when( Button2 )
+						{
+							_window_add_input_released( input_mouse_middle );
+							skip;
+						}
 
-					when( 4 )
+						when( Button3 )
+						{
+							_window_add_input_released( input_mouse_right );
+							skip;
+						}
+					}
+					skip;
+				}
+			#elif OS_WINDOWS
+				when( WM_LBUTTONDOWN )
+				{
+					_window_add_input_pressed( input_mouse_left );
+					skip;
+				}
+
+				when( WM_MBUTTONDOWN )
+				{
+					_window_add_input_pressed( input_mouse_middle );
+					skip;
+				}
+
+				when( WM_RBUTTONDOWN )
+				{
+					_window_add_input_pressed( input_mouse_right );
+					skip;
+				}
+
+				when( WM_LBUTTONUP )
+				{
+					_window_add_input_released( input_mouse_left );
+					skip;
+				}
+
+				when( WM_MBUTTONUP )
+				{
+					_window_add_input_released( input_mouse_middle );
+					skip;
+				}
+
+				when( WM_RBUTTONUP )
+				{
+					_window_add_input_released( input_mouse_right );
+					skip;
+				}
+
+				when( WM_MOUSEWHEEL )
+				{
+					if( GET_WHEEL_DELTA_WPARAM( wp ) > 0 )
 					{
 						_window_add_input_pressed( input_scroll_up );
 						_window_add_input_released( input_scroll_up );
-						skip;
 					}
-
-					when( 5 )
+					else
 					{
 						_window_add_input_pressed( input_scroll_down );
 						_window_add_input_released( input_scroll_down );
-						skip;
 					}
+					skip;
+				}
 
-					when( 6 )
+				when( WM_MOUSEHWHEEL )
+				{
+					if( GET_WHEEL_DELTA_WPARAM( wp ) > 0 )
 					{
 						_window_add_input_pressed( input_scroll_right );
 						_window_add_input_released( input_scroll_right );
-						skip;
 					}
-
-					when( 7 )
+					else
 					{
 						_window_add_input_pressed( input_scroll_left );
 						_window_add_input_released( input_scroll_left );
-						skip;
 					}
+					skip;
 				}
-				skip;
-			}
-
-			when( ButtonRelease )
-			{
-				with( e->xbutton.button )
-				{
-					when( Button1 )
-					{
-						_window_add_input_released( input_mouse_left );
-						skip;
-					}
-
-					when( Button2 )
-					{
-						_window_add_input_released( input_mouse_middle );
-						skip;
-					}
-
-					when( Button3 )
-					{
-						_window_add_input_released( input_mouse_right );
-						skip;
-					}
-				}
-				skip;
-			}
-		#elif OS_WINDOWS
-			when( WM_LBUTTONDOWN )
-			{
-				_window_add_input_pressed( input_mouse_left );
-				skip;
-			}
-
-			when( WM_MBUTTONDOWN )
-			{
-				_window_add_input_pressed( input_mouse_middle );
-				skip;
-			}
-
-			when( WM_RBUTTONDOWN )
-			{
-				_window_add_input_pressed( input_mouse_right );
-				skip;
-			}
-
-			when( WM_LBUTTONUP )
-			{
-				_window_add_input_released( input_mouse_left );
-				skip;
-			}
-
-			when( WM_MBUTTONUP )
-			{
-				_window_add_input_released( input_mouse_middle );
-				skip;
-			}
-
-			when( WM_RBUTTONUP )
-			{
-				_window_add_input_released( input_mouse_right );
-				skip;
-			}
-
-			when( WM_MOUSEWHEEL )
-			{
-				if( GET_WHEEL_DELTA_WPARAM( wp ) > 0 )
-				{
-					_window_add_input_pressed( input_scroll_up );
-					_window_add_input_released( input_scroll_up );
-				}
-				else
-				{
-					_window_add_input_pressed( input_scroll_down );
-					_window_add_input_released( input_scroll_down );
-				}
-				skip;
-			}
-
-			when( WM_MOUSEHWHEEL )
-			{
-				if( GET_WHEEL_DELTA_WPARAM( wp ) > 0 )
-				{
-					_window_add_input_pressed( input_scroll_right );
-					_window_add_input_released( input_scroll_right );
-				}
-				else
-				{
-					_window_add_input_pressed( input_scroll_left );
-					_window_add_input_released( input_scroll_left );
-				}
-				skip;
-			}
+			#endif
 		#endif
 
 		when( _window_event_close )
@@ -1625,10 +1672,9 @@ embed view ref const window_create_view( window ref const window_ref, canvas can
 
 	temp view ref const view_ref = ref_of( window_ref->views[ view_index ] );
 
-	view_ref->canvas = canvas;
 	view_ref->scale = r4x2( 1.0, 1.0 );
 	view_ref->state = view_state_visible;
-	_view_setup( view_ref );
+	view_recreate( view_ref, canvas );
 
 	window_ref->views_count += 1;
 
