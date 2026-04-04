@@ -12,8 +12,7 @@
 #pragma once
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////// dependencies
-/// dependencies
-//
+#pragma region dependencies
 
 #define _GNU_SOURCE
 
@@ -35,7 +34,7 @@
 //
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////// version
-/// version
+#pragma region version
 //
 
 #define C7H16_VERSION_MAJOR 0
@@ -46,8 +45,7 @@
 //
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////// dimensional
-/// dimensional
-//
+#pragma region dimensional
 
 #define DECLARE_TYPE_2D( TYPE )\
 	fusion( TYPE##x2 )\
@@ -387,8 +385,7 @@ DECLARE_TYPE_MULTI_R( 8 );
 //
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////// nano
-/// nano
-//
+#pragma region nano
 
 #define nano_per_micro 1000
 #define nano_per_milli 1000000
@@ -466,8 +463,7 @@ fn nano_sleep( nano const time )
 //
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////// pixel
-/// pixel
-//
+#pragma region pixel
 
 // BGRA for X11/Windows (little-endian)
 fusion( pixel )
@@ -505,8 +501,7 @@ fusion( pixel )
 //
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////// canvas
-/// canvas
-//
+#pragma region canvas
 
 type( canvas )
 {
@@ -587,8 +582,7 @@ fn canvas_fill( canvas ref const canvas_ref, pixel const color )
 //
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////// inputs
-/// inputs
-//
+#pragma region inputs
 
 #ifdef C7H16_INPUT_NO_KEYBOARD
 	#define C7H16_INPUT_NO_LETTERS
@@ -848,8 +842,7 @@ group( input_type )
 //
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////// view
-/// view
-//
+#pragma region view
 
 type( view );
 type_fn( anon, view ref const ) view_ref_fn;
@@ -858,13 +851,13 @@ group( view_state )
 {
 	view_state_unknown,
 	view_state_visible,
-	view_state_hidden
+	view_state_hidden,
+	//
+	view_states_count
 };
 
 type( view )
 {
-	view_state state;
-
 	canvas canvas;
 
 	#if OS_LINUX
@@ -882,16 +875,16 @@ type( view )
 	view_ref_fn fn_draw;
 	anon ref draw_ref;
 
-	flag update : 1;
-	flag clip : 1;
-	flag clear : 1;
+	view_state state bits( view_states_count );
+	flag update bits_flag;
+	flag clip bits_flag;
+	flag clear bits_flag;
 };
 
 //
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////// window
-/// window
-//
+#pragma region window
 
 type_from( OS_PICK( Window, HWND ) ) window_handle;
 type_from( OS_PICK( XImage ref, BITMAPINFO ) ) window_image;
@@ -918,13 +911,13 @@ group( window_state )
 	window_state_preparing,
 	window_state_opening,
 	window_state_ready,
-	window_state_closing
+	window_state_closing,
+	//
+	window_states_count
 };
 
 type( window )
 {
-	window_state state;
-
 	byte name[ window_max_name_size ];
 	n2x2 size;
 
@@ -952,14 +945,14 @@ type( window )
 	n1 inputs_released_count;
 	i4x2 mouse;
 
-	flag visible : 1;
+	window_state state bits( window_states_count );
+	flag visible bits_flag;
 };
 
 //
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////// program
-/// program
-//
+#pragma region program
 
 #ifndef program_max_windows
 	#define program_max_windows 1
@@ -984,8 +977,7 @@ program;
 //
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////// view functions
-/// view functions
-//
+#pragma region view def
 
 ////////////////////////////////
 // hidden
