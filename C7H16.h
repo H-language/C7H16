@@ -1422,6 +1422,24 @@ fn _window_draw( window ref const window_ref )
 			skip;
 		}
 
+		when( _window_event_focus_lost )
+		{
+			#if OS_WINDOWS
+				SetProcessWorkingSetSize( GetCurrentProcess(), to( SIZE_T, -1 ), to( SIZE_T, -1 ) );
+			#elif OS_LINUX
+				malloc_trim( 0 );
+			#endif
+
+			iter( input_index, inputs_count )
+			{
+				if( window_ref->inputs[ input_index ] & INPUT_MASK_HELD )
+				{
+					_window_add_input_released( input_index );
+				}
+			}
+			skip;
+		}
+
 		// inputs
 
 		#ifndef C7H16_INPUT_NO_KEYBOARD
