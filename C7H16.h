@@ -518,7 +518,7 @@ fn delete_canvas( canvas ref const canvas_ref )
 	val_of( canvas_ref ) = make( canvas );
 }
 
-fn canvas_resize( canvas ref const canvas_ref, n2 const width, n2 const height )
+fn canvas_resize( canvas ref const canvas_ref, n2 const width, n2 const height, flag const preserve )
 {
 	out_if( canvas_ref->size.w is width and canvas_ref->size.h is height );
 
@@ -526,7 +526,7 @@ fn canvas_resize( canvas ref const canvas_ref, n2 const width, n2 const height )
 	temp n4 const area_old = canvas_ref->area;
 	canvas_ref->size = n2x2( width, height );
 	canvas_ref->area = n4( canvas_ref->size.w ) * n4( canvas_ref->size.h );
-	canvas_ref->pixels = ref_resize( canvas_ref->pixels, canvas_ref->area << pixel_shift );
+	canvas_ref->pixels = ref_resize( canvas_ref->pixels, canvas_ref->area << pixel_shift, preserve );
 }
 
 fn canvas_fill( canvas ref const canvas_ref, pixel const color )
@@ -1010,7 +1010,7 @@ fn view_zoom( view ref const view_ref, i4 const x, i4 const y, r4 const factor )
 	view_ref->scale = r4x2( new_scale, new_scale );
 }
 
-fn view_resize( view ref const view_ref, n2x2 const size )
+fn view_resize( view ref const view_ref, n2x2 const size, flag const preserve )
 {
 	out_if_any( view_ref is nothing, size.w is 0, size.h is 0 );
 
@@ -1020,7 +1020,7 @@ fn view_resize( view ref const view_ref, n2x2 const size )
 	}
 	else if( view_ref->canvas.size.w isnt size.w or view_ref->canvas.size.h isnt size.h )
 	{
-		canvas_resize( ref_of( view_ref->canvas ), size.w, size.h );
+		canvas_resize( ref_of( view_ref->canvas ), size.w, size.h, preserve );
 	}
 
 	#if OS_LINUX
@@ -1032,12 +1032,6 @@ fn view_resize( view ref const view_ref, n2x2 const size )
 	#endif
 
 	_view_setup( view_ref );
-}
-
-fn view_recreate( view ref const view_ref, canvas const canvas )
-{
-	view_ref->canvas = canvas;
-	view_resize( view_ref, view_ref->canvas.size );
 }
 
 fn view_center( view ref const view_ref, i2x2 const center_position )
@@ -1424,10 +1418,10 @@ fn _window_draw( window ref const window_ref )
 
 		when( _window_event_focus_lost )
 		{
-			#if OS_WINDOWS
-				SetProcessWorkingSetSize( GetCurrentProcess(), to( SIZE_T, -1 ), to( SIZE_T, -1 ) );
-			#elif OS_LINUX
+			#if OS_LINUX
 				malloc_trim( 0 );
+			#elif OS_WINDOWS
+				SetProcessWorkingSetSize( GetCurrentProcess(), to( SIZE_T, -1 ), to( SIZE_T, -1 ) );
 			#endif
 
 			iter( input_index, inputs_count )
@@ -1671,24 +1665,25 @@ fn window_show( window ref const window_ref )
 	window_ref->visible = yes;
 }
 
-embed view ref const window_create_view( window ref const window_ref, canvas canvas )
+embed view ref const window_make_view_ref( window ref const window_ref, canvas canvas )
 {
-	temp n2 view_index = 0;
-
-	while( window_ref->views[ view_index ].state isnt view_state_unknown )
+	iter( view_id, window_max_views )
 	{
-		view_index += 1;
+		temp view ref const view_ref = ref_of( window_ref->views[ view_id ] );
+		if( view_ref->state is view_state_unknown )
+		{
+			view_ref->scale = r4x2( 1.0, 1.0 );
+			view_ref->state = view_state_visible;
+			view_ref->canvas = canvas;
+			_view_setup(view_ref);
+
+			window_ref->views_count += 1;
+
+			out view_ref;
+		}
 	}
 
-	temp view ref const view_ref = ref_of( window_ref->views[ view_index ] );
-
-	view_ref->scale = r4x2( 1.0, 1.0 );
-	view_ref->state = view_state_visible;
-	view_recreate( view_ref, canvas );
-
-	window_ref->views_count += 1;
-
-	out view_ref;
+	out nothing;
 }
 
 fn window_capture_mouse( window ref const window_ref )
