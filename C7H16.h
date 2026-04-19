@@ -14,11 +14,14 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #pragma region - dependencies
 
-#define _GNU_SOURCE
+#ifndef _GNU_SOURCE
+	#define _GNU_SOURCE
+#endif
 
 #if __linux__
 	#include <errno.h>
 	#include <poll.h>
+	#include <malloc.h>
 	#include <X11/Xlib.h>
 	#include <X11/Xutil.h>
 	#include <X11/extensions/Xrender.h>
@@ -1332,7 +1335,7 @@ fn _window_ref_draw( window ref const window_ref )
 			window_ref->image->data = to( byte ref, view_ref->canvas.pixels );
 			window_ref->image->width = canvas_w;
 			window_ref->image->height = canvas_h;
-			window_ref->image->bytes_per_line = canvas_w << pixel_shift;
+			window_ref->image->bytes_per_line = canvas_w << pixel_bytes_shift;
 
 		#elif OS_WINDOWS
 			window_ref->image.bmiHeader.biWidth = canvas_w;
@@ -1873,8 +1876,8 @@ fn window_ref_release_mouse()
 fn window_ref_center( window ref const window_ref )
 {
 	#if OS_LINUX
-		XMoveWindow( windows_display, window_ref->handle, ( display_get_width() - window_ref->size.w ) >> 1, ( display_get_height() - window_ref->size.h ) >> 1 );
-		XSync( windows_display, no );
+		XMoveWindow( program.display, window_ref->handle, ( display_get_width() - window_ref->size.w ) >> 1, ( display_get_height() - window_ref->size.h ) >> 1 );
+		XSync( program.display, no );
 	#elif OS_WINDOWS
 		SetWindowPos( window_ref->handle, nothing, ( display_get_width() - window_ref->size.w ) >> 1, ( display_get_height() - window_ref->size.h ) >> 1, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE );
 	#endif
@@ -1905,9 +1908,9 @@ fn window_ref_set_cursor( window ref const window_ref, cursor_type const cursor 
 		perm Cursor cache[ 256 ] = { 0 };
 		if( not cache[ cursor ] )
 		{
-			cache[ cursor ] = XCreateFontCursor( windows_display, cursor );
+			cache[ cursor ] = XCreateFontCursor( program.display, cursor );
 		}
-		XDefineCursor( windows_display, window_ref->handle, cache[ cursor ] );
+		XDefineCursor( program.display, window_ref->handle, cache[ cursor ] );
 	#elif OS_WINDOWS
 		SetCursor( LoadCursor( NULL, MAKEINTRESOURCE( cursor ) ) );
 	#endif
@@ -2008,7 +2011,7 @@ fn _program_loop()
 				{
 					if( program.windows[ i ].handle is event.xany.window )
 					{
-						_window_process_event( ref_of( program.windows[ i ] ), event.type, ref_of( event ) );
+						_window_ref_process_event( ref_of( program.windows[ i ] ), event.type, ref_of( event ) );
 						skip;
 					}
 				}
