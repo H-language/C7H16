@@ -1,18 +1,18 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-//  heptane (C7H16)
+//  C7H16 (heptane)
 //
 //  author(s):
 //  ENDESGA - https://x.com/ENDESGA | https://bsky.app/profile/endesga.bsky.social
 //
 //  https://github.com/H-language/C7H16
-//  2025 - CC0 - FOSS forever
+//  2026 - CC0 - FOSS forever
 //
 
 #pragma once
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////// dependencies
-#pragma region dependencies
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#pragma region - dependencies
 
 #define _GNU_SOURCE
 
@@ -31,23 +31,35 @@
 
 #include <H.h>
 
-//
+#pragma endregion dependencies
+///
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////// version
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#pragma region - defaults
+
+#define C7H16_NAME "C7H16"
+
+////////////////////////////////////////////////////////////////
 #pragma region version
-//
 
 #define C7H16_VERSION_MAJOR 0
 #define C7H16_VERSION_MINOR 1
 #define C7H16_VERSION_PATCH 0
 #define C7H16_VERSION AS_BYTES( C7H16_VERSION_MAJOR ) "." AS_BYTES( C7H16_VERSION_MINOR ) "." AS_BYTES( C7H16_VERSION_PATCH )
 
+#pragma endregion version
 //
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////// dimensional
+#pragma endregion defaults
+///
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#pragma region - declarations
+
+////////////////////////////////////////////////////////////////
 #pragma region dimensional
 
-#define DECLARE_TYPE_2D( TYPE )\
+#define _type_x2( TYPE )\
 	fusion( TYPE##x2 )\
 	{\
 		variant\
@@ -62,7 +74,7 @@
 		};\
 	}
 
-#define DECLARE_TYPE_3D( TYPE )\
+#define _type_x3( TYPE )\
 	fusion( TYPE##x3 )\
 	{\
 		variant\
@@ -79,7 +91,7 @@
 		};\
 	}
 
-#define DECLARE_TYPE_4D( TYPE )\
+#define _type_x4( TYPE )\
 	fusion( TYPE##x4 )\
 	{\
 		variant\
@@ -103,366 +115,45 @@
 		};\
 	}
 
-#define DECLARE_TYPE_2D_FN( TYPE )\
-	embed TYPE##x2 TYPE##x2_invert( TYPE##x2 const V )\
-	{\
-		out make( TYPE##x2, .x = -V.x, .y = -V.y );\
-	}\
-	embed TYPE##x2 TYPE##x2_add( TYPE##x2 const A, TYPE##x2 const B )\
-	{\
-		out make( TYPE##x2, .x = A.x + B.x, .y = A.y + B.y );\
-	}\
-	embed TYPE##x2 TYPE##x2_add_##TYPE( TYPE##x2 const A, const TYPE V )\
-	{\
-		out make( TYPE##x2, .x = A.x + V, .y = A.y + V );\
-	}\
-	embed TYPE##x2 TYPE##x2_sub( TYPE##x2 const A, TYPE##x2 const B )\
-	{\
-		out make( TYPE##x2, .x = A.x - B.x, .y = A.y - B.y );\
-	}\
-	embed TYPE##x2 TYPE##x2_sub_##TYPE( TYPE##x2 const A, const TYPE V )\
-	{\
-		out make( TYPE##x2, .x = A.x - V, .y = A.y - V );\
-	}\
-	embed TYPE##x2 TYPE##x2_mul( TYPE##x2 const A, TYPE##x2 const B )\
-	{\
-		out make( TYPE##x2, .x = A.x * B.x, .y = A.y * B.y );\
-	}\
-	embed TYPE##x2 TYPE##x2_mul_##TYPE( TYPE##x2 const A, const TYPE V )\
-	{\
-		out make( TYPE##x2, .x = A.x * V, .y = A.y * V );\
-	}\
-	embed TYPE##x2 TYPE##x2_div( TYPE##x2 const A, TYPE##x2 const B )\
-	{\
-		out make( TYPE##x2, .x = A.x / B.x, .y = A.y / B.y );\
-	}\
-	embed TYPE##x2 TYPE##x2_div_##TYPE( TYPE##x2 const A, const TYPE V )\
-	{\
-		out make( TYPE##x2, .x = A.x / V, .y = A.y / V );\
-	}\
-	embed TYPE TYPE##x2_dot( TYPE##x2 const A, TYPE##x2 const B )\
-	{\
-		out A.x * B.x + A.y * B.y;\
-	}\
-	embed TYPE TYPE##x2_mag_sqr( TYPE##x2 const V )\
-	{\
-		out TYPE##x2_dot( V, V );\
-	}\
-	embed TYPE TYPE##x2_distance_sqr( TYPE##x2 const A, TYPE##x2 const B )\
-	{\
-		out TYPE##x2_mag_sqr( TYPE##x2_sub( B, A ) );\
-	}
+#define _TYPEx( TYPE ) _type_x2( TYPE ); _type_x3( TYPE ); _type_x4( TYPE )
 
-#define DECLARE_TYPE_3D_FN( TYPE )\
-	embed TYPE##x3 TYPE##x3_invert( TYPE##x3 const V )\
-	{\
-		out make( TYPE##x3, .x = -V.x, .y = -V.y, .z = -V.z );\
-	}\
-	embed TYPE##x3 TYPE##x3_add( TYPE##x3 const A, TYPE##x3 const B )\
-	{\
-		out make( TYPE##x3, .x = A.x + B.x, .y = A.y + B.y, .z = A.z + B.z );\
-	}\
-	embed TYPE##x3 TYPE##x3_add_##TYPE( TYPE##x3 const A, const TYPE V )\
-	{\
-		out make( TYPE##x3, .x = A.x + V, .y = A.y + V, .z = A.z + V );\
-	}\
-	embed TYPE##x3 TYPE##x3_sub( TYPE##x3 const A, TYPE##x3 const B )\
-	{\
-		out make( TYPE##x3, .x = A.x - B.x, .y = A.y - B.y, .z = A.z - B.z );\
-	}\
-	embed TYPE##x3 TYPE##x3_sub_##TYPE( TYPE##x3 const A, const TYPE V )\
-	{\
-		out make( TYPE##x3, .x = A.x - V, .y = A.y - V, .z = A.z - V );\
-	}\
-	embed TYPE##x3 TYPE##x3_mul( TYPE##x3 const A, TYPE##x3 const B )\
-	{\
-		out make( TYPE##x3, .x = A.x * B.x, .y = A.y * B.y, .z = A.z * B.z );\
-	}\
-	embed TYPE##x3 TYPE##x3_mul_##TYPE( TYPE##x3 const A, const TYPE V )\
-	{\
-		out make( TYPE##x3, .x = A.x * V, .y = A.y * V, .z = A.z * V );\
-	}\
-	embed TYPE##x3 TYPE##x3_div( TYPE##x3 const A, TYPE##x3 const B )\
-	{\
-		out make( TYPE##x3, .x = A.x / B.x, .y = A.y / B.y, .z = A.z / B.z );\
-	}\
-	embed TYPE##x3 TYPE##x3_div_##TYPE( TYPE##x3 const A, const TYPE V )\
-	{\
-		out make( TYPE##x3, .x = A.x / V, .y = A.y / V, .z = A.z / V );\
-	}\
-	embed TYPE TYPE##x3_dot( TYPE##x3 const A, TYPE##x3 const B )\
-	{\
-		out A.x * B.x + A.y * B.y + A.z * B.z;\
-	}\
-	embed TYPE TYPE##x3_mag_sqr( TYPE##x3 const V )\
-	{\
-		out TYPE##x3_dot( V, V );\
-	}\
-	embed TYPE TYPE##x3_distance_sqr( TYPE##x3 const A, TYPE##x3 const B )\
-	{\
-		out TYPE##x3_mag_sqr( TYPE##x3_sub( B, A ) );\
-	}\
-	embed TYPE##x3 TYPE##x3_cross( TYPE##x3 const A, TYPE##x3 const B )\
-	{\
-		out make( TYPE##x3, .x = A.y * B.z - A.z * B.y, .y = A.z * B.x - A.x * B.z, .z = A.x * B.y - A.y * B.x );\
-	}
+_TYPEx( n1 );
+_TYPEx( i1 );
 
-#define DECLARE_TYPE_4D_FN( TYPE )\
-	embed TYPE##x4 TYPE##x4_invert( TYPE##x4 const V )\
-	{\
-		out make( TYPE##x4, .x = -V.x, .y = -V.y, .z = -V.z, .w = -V.w );\
-	}\
-	embed TYPE##x4 TYPE##x4_add( TYPE##x4 const A, TYPE##x4 const B )\
-	{\
-		out make( TYPE##x4, .x = A.x + B.x, .y = A.y + B.y, .z = A.z + B.z, .w = A.w + B.w );\
-	}\
-	embed TYPE##x4 TYPE##x4_add_##TYPE( TYPE##x4 const A, const TYPE V )\
-	{\
-		out make( TYPE##x4, .x = A.x + V, .y = A.y + V, .z = A.z + V, .w = A.w + V );\
-	}\
-	embed TYPE##x4 TYPE##x4_sub( TYPE##x4 const A, TYPE##x4 const B )\
-	{\
-		out make( TYPE##x4, .x = A.x - B.x, .y = A.y - B.y, .z = A.z - B.z, .w = A.w - B.w );\
-	}\
-	embed TYPE##x4 TYPE##x4_sub_##TYPE( TYPE##x4 const A, const TYPE V )\
-	{\
-		out make( TYPE##x4, .x = A.x - V, .y = A.y - V, .z = A.z - V, .w = A.w - V );\
-	}\
-	embed TYPE##x4 TYPE##x4_mul( TYPE##x4 const A, TYPE##x4 const B )\
-	{\
-		out make( TYPE##x4, .x = A.x * B.x, .y = A.y * B.y, .z = A.z * B.z, .w = A.w * B.w );\
-	}\
-	embed TYPE##x4 TYPE##x4_mul_##TYPE( TYPE##x4 const A, const TYPE V )\
-	{\
-		out make( TYPE##x4, .x = A.x * V, .y = A.y * V, .z = A.z * V, .w = A.w * V );\
-	}\
-	embed TYPE##x4 TYPE##x4_div( TYPE##x4 const A, TYPE##x4 const B )\
-	{\
-		out make( TYPE##x4, .x = A.x / B.x, .y = A.y / B.y, .z = A.z / B.z, .w = A.w / B.w );\
-	}\
-	embed TYPE##x4 TYPE##x4_div_##TYPE( TYPE##x4 const A, const TYPE V )\
-	{\
-		out make( TYPE##x4, .x = A.x / V, .y = A.y / V, .z = A.z / V, .w = A.w / V );\
-	}\
-	embed TYPE TYPE##x4_dot( TYPE##x4 const A, TYPE##x4 const B )\
-	{\
-		out A.x * B.x + A.y * B.y + A.z * B.z + A.w * B.w;\
-	}\
-	embed TYPE TYPE##x4_mag_sqr( TYPE##x4 const V )\
-	{\
-		out TYPE##x4_dot( V, V );\
-	}\
-	embed TYPE TYPE##x4_distance_sqr( TYPE##x4 const A, TYPE##x4 const B )\
-	{\
-		out TYPE##x4_mag_sqr( TYPE##x4_sub( B, A ) );\
-	}
+_TYPEx( n2 );
+_TYPEx( i2 );
 
-#define DECLARE_TYPE_XD_FN_R( N, X )\
-	embed r##N r##N##x##X##_length( const r##N##x##X V )\
-	{\
-		out r##N##_sqrt( r##N##x##X##_mag_sqr( V ) );\
-	}\
-	embed r##N r##N##x##X##_distance( const r##N##x##X A, const r##N##x##X B )\
-	{\
-		out r##N##_sqrt( r##N##x##X##_distance_sqr( A, B ) );\
-	}\
-	embed r##N##x##X r##N##x##X##_norm( const r##N##x##X V )\
-	{\
-		out r##N##x##X##_mul_##r##N( V, 1.0 / r##N##x##X##_length( V ) );\
-	}
+_TYPEx( n4 );
+_TYPEx( i4 );
+_TYPEx( r4 );
 
-#define DECLARE_TYPE_MULTI( TYPE )\
-	DECLARE_TYPE_2D( TYPE );\
-	DECLARE_TYPE_3D( TYPE );\
-	DECLARE_TYPE_4D( TYPE );\
-	DECLARE_TYPE_2D_FN( TYPE );\
-	DECLARE_TYPE_3D_FN( TYPE );\
-	DECLARE_TYPE_4D_FN( TYPE )
+_TYPEx( n8 );
+_TYPEx( i8 );
+_TYPEx( r8 );
 
-#define DECLARE_TYPE_MULTI_R( N )\
-	DECLARE_TYPE_XD_FN_R( N, 2 );\
-	DECLARE_TYPE_XD_FN_R( N, 3 );\
-	DECLARE_TYPE_XD_FN_R( N, 4 )
-
-#define _x2( TYPE, X_Y... ) make( TYPE##x2, DEFAULTS( ( 0, 0 ), X_Y ) )
-#define _x3( TYPE, X_Y_Z... ) make( TYPE##x3, DEFAULTS( ( 0, 0, 0 ), X_Y_Z ) )
-#define _x4( TYPE, X_Y_Z_W... ) make( TYPE##x4, DEFAULTS( ( 0, 0, 0, 0 ), X_Y_Z_W ) )
-
-DECLARE_TYPE_MULTI( n1 );
-#define n1x2( X_Y... ) _x2( n1, X_Y )
-#define n1x3( X_Y_Z... ) _x3( n1, X_Y_Z )
-#define n1x4( X_Y_Z_W... ) _x4( n1, X_Y_Z_W )
-#define to_n1x2( X2 ) n1x2( X2.x, X2.y )
-#define to_n1x3( X3 ) n1x3( X3.x, X3.y, X3.z )
-#define to_n1x4( X4 ) n1x4( X4.x, X4.y, X4.z, X4.w )
-DECLARE_TYPE_MULTI( i1 );
-#define i1x2( X_Y... ) _x2( i1, X_Y )
-#define i1x3( X_Y_Z... ) _x3( i1, X_Y_Z )
-#define i1x4( X_Y_Z_W... ) _x4( i1, X_Y_Z_W )
-#define to_i1x2( X2 ) i1x2( X2.x, X2.y )
-#define to_i1x3( X3 ) i1x3( X3.x, X3.y, X3.z )
-#define to_i1x4( X4 ) i1x4( X4.x, X4.y, X4.z, X4.w )
-
-DECLARE_TYPE_MULTI( n2 );
-#define n2x2( X_Y... ) _x2( n2, X_Y )
-#define n2x3( X_Y_Z... ) _x3( n2, X_Y_Z )
-#define n2x4( X_Y_Z_W... ) _x4( n2, X_Y_Z_W )
-#define to_n2x2( X2 ) n2x2( X2.x, X2.y )
-#define to_n2x3( X3 ) n2x3( X3.x, X3.y, X3.z )
-#define to_n2x4( X4 ) n2x4( X4.x, X4.y, X4.z, X4.w )
-DECLARE_TYPE_MULTI( i2 );
-#define i2x2( X_Y... ) _x2( i2, X_Y )
-#define i2x3( X_Y_Z... ) _x3( i2, X_Y_Z )
-#define i2x4( X_Y_Z_W... ) _x4( i2, X_Y_Z_W )
-#define to_i2x2( X2 ) i2x2( X2.x, X2.y )
-#define to_i2x3( X3 ) i2x3( X3.x, X3.y, X3.z )
-#define to_i2x4( X4 ) i2x4( X4.x, X4.y, X4.z, X4.w )
-
-DECLARE_TYPE_MULTI( n4 );
-#define n4x2( X_Y... ) _x2( n4, X_Y )
-#define n4x3( X_Y_Z... ) _x3( n4, X_Y_Z )
-#define n4x4( X_Y_Z_W... ) _x4( n4, X_Y_Z_W )
-#define to_n4x2( X2 ) n4x2( X2.x, X2.y )
-#define to_n4x3( X3 ) n4x3( X3.x, X3.y, X3.z )
-#define to_n4x4( X4 ) n4x4( X4.x, X4.y, X4.z, X4.w )
-DECLARE_TYPE_MULTI( i4 );
-#define i4x2( X_Y... ) _x2( i4, X_Y )
-#define i4x3( X_Y_Z... ) _x3( i4, X_Y_Z )
-#define i4x4( X_Y_Z_W... ) _x4( i4, X_Y_Z_W )
-#define to_i4x2( X2 ) i4x2( X2.x, X2.y )
-#define to_i4x3( X3 ) i4x3( X3.x, X3.y, X3.z )
-#define to_i4x4( X4 ) i4x4( X4.x, X4.y, X4.z, X4.w )
-DECLARE_TYPE_MULTI( r4 );
-#define r4x2( X_Y... ) _x2( r4, X_Y )
-#define r4x3( X_Y_Z... ) _x3( r4, X_Y_Z )
-#define r4x4( X_Y_Z_W... ) _x4( r4, X_Y_Z_W )
-#define to_r4x2( X2 ) r4x2( X2.x, X2.y )
-#define to_r4x3( X3 ) r4x3( X3.x, X3.y, X3.z )
-#define to_r4x4( X4 ) r4x4( X4.x, X4.y, X4.z, X4.w )
-DECLARE_TYPE_MULTI_R( 4 );
-
-DECLARE_TYPE_MULTI( n8 );
-#define n8x2( X_Y... ) _x2( n8, X_Y )
-#define n8x3( X_Y_Z... ) _x3( n8, X_Y_Z )
-#define n8x4( X_Y_Z_W... ) _x4( n8, X_Y_Z_W )
-#define to_n8x2( X2 ) n8x2( X2.x, X2.y )
-#define to_n8x3( X3 ) n8x3( X3.x, X3.y, X3.z )
-#define to_n8x4( X4 ) n8x4( X4.x, X4.y, X4.z, X4.w )
-DECLARE_TYPE_MULTI( i8 );
-#define i8x2( X_Y... ) _x2( i8, X_Y )
-#define i8x3( X_Y_Z... ) _x3( i8, X_Y_Z )
-#define i8x4( X_Y_Z_W... ) _x4( i8, X_Y_Z_W )
-#define to_i8x2( X2 ) i8x2( X2.x, X2.y )
-#define to_i8x3( X3 ) i8x3( X3.x, X3.y, X3.z )
-#define to_i8x4( X4 ) i8x4( X4.x, X4.y, X4.z, X4.w )
-DECLARE_TYPE_MULTI( r8 );
-#define r8x2( X_Y... ) _x2( r8, X_Y )
-#define r8x3( X_Y_Z... ) _x3( r8, X_Y_Z )
-#define r8x4( X_Y_Z_W... ) _x4( r8, X_Y_Z_W )
-#define to_r8x2( X2 ) r8x2( X2.x, X2.y )
-#define to_r8x3( X3 ) r8x3( X3.x, X3.y, X3.z )
-#define to_r8x4( X4 ) r8x4( X4.x, X4.y, X4.z, X4.w )
-DECLARE_TYPE_MULTI_R( 8 );
-
-#define grid_area( X, Y ) ( ( X ) * ( Y ) )
-#define grid_index( X, Y, WIDTH ) ( ( X ) + ( ( Y ) * ( WIDTH ) ) )
-
-////////////////////////////////
-// dimensional flags
-
-#define point_in_size( X, Y, W, H ) all( X >= 0, Y >= 0, X < W, Y < H )
-#define point_not_in_size( X, Y, W, H ) any( X < 0, Y < 0, X >= W, Y >= H )
-
-#define point_in_box( X, Y, TOPLEFT_X, TOPLEFT_Y, BOTTOMRIGHT_X, BOTTOMRIGHT_Y ) all( X >= TOPLEFT_X, Y >= TOPLEFT_Y, X <= BOTTOMRIGHT_X, Y <= BOTTOMRIGHT_Y )
-#define point_not_in_box( X, Y, TOPLEFT_X, TOPLEFT_Y, BOTTOMRIGHT_X, BOTTOMRIGHT_Y ) any( X < TOPLEFT_X, Y < TOPLEFT_Y, X > BOTTOMRIGHT_X, Y > BOTTOMRIGHT_Y )
-
-#define box_in_size( TOPLEFT_X, TOPLEFT_Y, BOTTOMRIGHT_X, BOTTOMRIGHT_Y, W, H ) all( point_in_size( TOPLEFT_X, TOPLEFT_Y, W, H ), point_in_size( BOTTOMRIGHT_X, BOTTOMRIGHT_Y, W, H ) )
-#define box_not_in_size( TOPLEFT_X, TOPLEFT_Y, BOTTOMRIGHT_X, BOTTOMRIGHT_Y, W, H ) any( point_not_in_size( TOPLEFT_X, TOPLEFT_Y, W, H ), point_not_in_size( BOTTOMRIGHT_X, BOTTOMRIGHT_Y, W, H ) )
-
-#define box_in_box( TL1_X, TL1_Y, BR1_X, BR1_Y, TL2_X, TL2_Y, BR2_X, BR2_Y ) all( point_in_box( TL1_X, TL1_Y, TL2_X, TL2_Y, BR2_X, BR2_Y ), point_in_box( BR1_X, BR1_Y, TL2_X, TL2_Y, BR2_X, BR2_Y ) )
-#define box_not_in_box( TL1_X, TL1_Y, BR1_X, BR1_Y, TL2_X, TL2_Y, BR2_X, BR2_Y ) any( point_not_in_box( TL1_X, TL1_Y, TL2_X, TL2_Y, BR2_X, BR2_Y ), point_not_in_box( BR1_X, BR1_Y, TL2_X, TL2_Y, BR2_X, BR2_Y ) )
-
+#pragma endregion dimensional
 //
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////// nano
-#pragma region nano
+////////////////////////////////////////////////////////////////
+#pragma region anchor
 
-#define nano_per_micro 1000
-#define nano_per_milli 1000000
-#define nano_per_sec 1000000000
-#define nano_per_min 60000000000
-#define nano_per_hour 3600000000000
-#define micro_per_milli 1000
-#define micro_per_sec 1000000
-#define micro_per_min 60000000
-#define micro_per_hour 3600000000
-#define milli_per_sec 1000
-#define milli_per_min 60000
-#define milli_per_hour 3600000
-#define sec_per_min 60
-#define sec_per_hour 3600
-#define min_per_hour 60
-
-type_from( n8 ) nano;
-#define nano( VAL ) n8( VAL )
-
-embed nano _get_nano()
+group( anchor )
 {
-	#if OS_WINDOWS
-		perm LARGE_INTEGER frequency;
-		perm LARGE_INTEGER freq_start;
-		LARGE_INTEGER current;
+	anchor_left_top = 0x00, // 0000 0000
+	anchor_left_middle = 0x01, // 0000 0001
+	anchor_left_bottom = 0x02, // 0000 0010
+	anchor_center_top = 0x10, // 0001 0000
+	anchor_center_middle = 0x11, // 0001 0001
+	anchor_center_bottom = 0x12, // 0001 0010
+	anchor_right_top = 0x20, // 0010 0000
+	anchor_right_middle = 0x21, // 0010 0001
+	anchor_right_bottom = 0x22 // 0010 0010
+};
 
-		once
-		{
-			QueryPerformanceFrequency( ref_of( frequency ) );
-			QueryPerformanceCounter( ref_of( freq_start ) );
-		}
-
-		QueryPerformanceCounter( ref_of( current ) );
-
-		out( ( current.QuadPart - freq_start.QuadPart ) * 1000000000ULL ) / frequency.QuadPart;
-	#else
-		struct timespec ts;
-		clock_gettime( CLOCK_MONOTONIC, ref_of( ts ) );
-		out to( nano, ts.tv_sec * nano_per_sec + ts.tv_nsec );
-	#endif
-}
-
-embed nano get_nano()
-{
-	perm nano epoch = 0;
-	once
-	{
-		epoch = _get_nano();
-	}
-	out _get_nano() - epoch;
-}
-
-fn nano_sleep( nano const time )
-{
-	#if OS_WINDOWS
-		static flag timer_init = no;
-		static HANDLE timer = nothing;
-		if( not timer_init )
-		{
-			timer_init = yes;
-			timeBeginPeriod( 1 );
-			timer = CreateWaitableTimer( nothing, TRUE, nothing );
-		}
-
-		LARGE_INTEGER li = { .QuadPart = -( time / 100 ) };
-		SetWaitableTimer( timer, ref_of( li ), 0, nothing, nothing, FALSE );
-		WaitForSingleObject( timer, INFINITE );
-	#else
-		struct timespec ts = { time / nano_per_sec, time mod nano_per_sec };
-		nanosleep( ref_of( ts ), nothing );
-	#endif
-}
-
+#pragma endregion anchor
 //
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////// pixel
+////////////////////////////////////////////////////////////////
 #pragma region pixel
 
 // BGRA for X11/Windows (little-endian)
@@ -479,109 +170,82 @@ fusion( pixel )
 	};
 };
 
-#define pixel_bits 8
-#define pixel_shift 2
+#define pixel_bytes_shift 2
 
-#define pixel( R, G, B, A... ) make( pixel, .r = ( R ), .g = ( G ), .b = ( B ), .a = DEFAULT( 0xff, A ) )
-
-#define pixel_invalid make( pixel, .bgra = 0 )
-
-#define pixel_black pixel( 0x00, 0x00, 0x00 )
-#define pixel_dark_gray pixel( 0x3f, 0x3f, 0x3f )
-#define pixel_gray pixel( 0x7f, 0x7f, 0x7f )
-#define pixel_light_gray pixel( 0xbf, 0xbf, 0xbf )
-#define pixel_white pixel( 0xff, 0xff, 0xff )
-#define pixel_red pixel( 0xff, 0x00, 0x00 )
-#define pixel_yellow pixel( 0xff, 0xff, 0x00 )
-#define pixel_green pixel( 0x00, 0xff, 0x00 )
-#define pixel_cyan pixel( 0x00, 0xff, 0xff )
-#define pixel_blue pixel( 0x00, 0x00, 0xff )
-#define pixel_magenta pixel( 0xff, 0x00, 0xff )
-
+#pragma endregion pixel
 //
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////// canvas
+////////////////////////////////////////////////////////////////
 #pragma region canvas
 
 type( canvas )
 {
+	pixel ref pixels;
 	n2x2 size;
 	n4 area;
-	pixel ref pixels;
 };
 
-#define canvas( WIDTH, HEIGHT, PIXELS... ) ( { temp n4 const _AREA = n4( WIDTH ) * n4( HEIGHT ); make( canvas, .size = n2x2( WIDTH, HEIGHT ), .area = _AREA, .pixels = to( pixel ref, DEFAULT( new_ref( pixel, _AREA ), PIXELS ) ) ); } )
-
-fn delete_canvas( canvas ref const canvas_ref )
-{
-	delete_ref( canvas_ref->pixels );
-	val_of( canvas_ref ) = make( canvas );
-}
-
-fn canvas_resize( canvas ref const canvas_ref, n2 const width, n2 const height, flag const preserve )
-{
-	out_if( canvas_ref->size.w is width and canvas_ref->size.h is height );
-
-	temp const n2x2 size_old = canvas_ref->size;
-	temp n4 const area_old = canvas_ref->area;
-	canvas_ref->size = n2x2( width, height );
-	canvas_ref->area = n4( canvas_ref->size.w ) * n4( canvas_ref->size.h );
-	canvas_ref->pixels = ref_resize( canvas_ref->pixels, canvas_ref->area << pixel_shift, preserve );
-}
-
-fn canvas_fill( canvas ref const canvas_ref, pixel const color )
-{
-	if_all( color.r is color.g, color.g is color.b, color.b is color.a )
-	{
-		bytes_fill( canvas_ref->pixels, color.r, canvas_ref->area << pixel_shift );
-	}
-	else
-	{
-		temp i4 filled = i4( canvas_ref->size.w );
-		iter( first_row_index, filled )
-		{
-			canvas_ref->pixels[ first_row_index ] = color;
-		}
-
-		temp i4 remaining = canvas_ref->area - filled;
-		do
-		{
-			temp i4 const count = pick( remaining < filled, remaining, filled );
-			bytes_copy( ref_of( canvas_ref->pixels[ filled ] ), ref_of( canvas_ref->pixels[ 0 ] ), count << pixel_shift );
-			filled += count;
-			remaining -= count;
-		}
-		while( remaining );
-	}
-}
-
-#define canvas_clear( CANVAS ) bytes_clear( CANVAS->pixels, CANVAS->area << pixel_shift )
-
-////////////////////////////////
-// check
-
-#define canvas_check_pixel( CANVAS, X, Y ) ( point_in_size( X, Y, CANVAS->size.w, CANVAS->size.h ) )
-#define canvas_check_pixel_index( CANVAS, INDEX ) ( INDEX >= 0 and INDEX < CANVAS->area )
-
-////////////////////////////////
-// get
-
-#define canvas_get_pixel_index( CANVAS, INDEX ) CANVAS->pixels[ ( INDEX ) ]
-#define canvas_get_pixel_index_safe( CANVAS, INDEX ) pick( canvas_check_pixel_index( INDEX ), canvas_get_pixel_index( CANVAS, INDEX ), pixel_invalid )
-#define canvas_get_pixel( CANVAS, X, Y ) canvas_get_pixel_index( CANVAS, grid_index( X, Y, CANVAS->size.w ) )
-#define canvas_get_pixel_safe( CANVAS, X, Y ) pick( canvas_check_pixel( CANVAS, X, Y ), canvas_get_pixel( CANVAS, X, Y ), pixel_invalid )
-
-////////////////////////////////
-// set
-
-#define canvas_set_pixel_index( CANVAS, INDEX, PIXEL ) ( canvas_get_pixel_index( CANVAS, INDEX ) ) = ( PIXEL )
-#define canvas_set_pixel_index_safe( CANVAS, INDEX, PIXEL ) if( canvas_check_pixel_index( CANVAS, INDEX ) ) canvas_set_pixel_index( CANVAS, INDEX, PIXEL )
-#define canvas_set_pixel( CANVAS, X, Y, PIXEL ) ( canvas_get_pixel( CANVAS, X, Y ) ) = ( PIXEL )
-#define canvas_set_pixel_safe( CANVAS, X, Y, PIXEL ) if( canvas_check_pixel( CANVAS, X, Y ) ) canvas_set_pixel( CANVAS, X, Y, PIXEL )
-
+#pragma endregion canvas
 //
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////// inputs
+////////////////////////////////////////////////////////////////
+#pragma region font
+
+type( font )
+{
+	canvas canvas;
+	n2x2 letter_size;
+};
+
+#pragma endregion font
+//
+
+////////////////////////////////////////////////////////////////
+#pragma region view
+
+type( view );
+type_fn( anon, view ref const ) view_ref_fn;
+
+group( view_state )
+{
+	view_state_unknown,
+	view_state_visible,
+	view_state_hidden,
+	//
+	view_states_count
+};
+
+type( view )
+{
+	canvas canvas;
+
+	#if OS_LINUX
+		Pixmap pixmap;
+		Picture picture;
+	#elif OS_WINDOWS
+		//
+	#endif
+
+	n2x4 clip_region;
+
+	r4x2 pos;
+	r4x2 scale;
+
+	r4x2 mouse;
+
+	view_ref_fn fn_draw;
+	anon ref draw_ref;
+
+	view_state state bits( view_states_count );
+	flag update bits_flag;
+	flag clip bits_flag;
+	flag clear bits_flag;
+};
+
+#pragma endregion view
+//
+
+////////////////////////////////////////////////////////////////
 #pragma region inputs
 
 #ifdef C7H16_INPUT_NO_KEYBOARD
@@ -721,8 +385,6 @@ group( input_type )
 #define _INPUT_SET( NAME, LINUX_KEY, WINDOWS_KEY )[ OS_PICK( LINUX_KEY, WINDOWS_KEY ) ] = input_##NAME
 #define _INPUT_SET_MASKED( NAME, LINUX_KEY, WINDOWS_KEY )[ OS_PICK( LINUX_KEY & 0x1ff, WINDOWS_KEY ) ] = input_##NAME
 
-#define input_to_byte( INPUT ) ( ( INPUT ) - input_a + 'A' )
-
 #ifndef C7H16_INPUT_NO_KEYBOARD
 	perm byte const _INPUT_MAP[] =
 		{
@@ -829,61 +491,10 @@ group( input_type )
 		};
 #endif
 
-#define key_pressed( WINDOW_REF, KEY ) ( ( ( WINDOW_REF )->inputs[ input_##KEY ] & INPUT_MASK_PRESSED ) isnt 0 )
-#define key_held( WINDOW_REF, KEY ) ( ( ( WINDOW_REF )->inputs[ input_##KEY ] & INPUT_MASK_HELD ) isnt 0 )
-#define key_released( WINDOW_REF, KEY ) ( ( ( WINDOW_REF )->inputs[ input_##KEY ] & INPUT_MASK_RELEASED ) isnt 0 )
-
-#define mouse_pressed( WINDOW_REF, BUTTON ) key_pressed( WINDOW_REF, mouse_##BUTTON )
-#define mouse_held( WINDOW_REF, BUTTON ) key_held( WINDOW_REF, mouse_##BUTTON )
-#define mouse_released( WINDOW_REF, BUTTON ) key_released( WINDOW_REF, mouse_##BUTTON )
-
-#define mouse_scroll( WINDOW_REF, DIRECTION ) key_pressed( WINDOW_REF, scroll_##DIRECTION )
-
+#pragma endregion inputs
 //
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////// view
-#pragma region view
-
-type( view );
-type_fn( anon, view ref const ) view_ref_fn;
-
-group( view_state )
-{
-	view_state_unknown,
-	view_state_visible,
-	view_state_hidden,
-	//
-	view_states_count
-};
-
-type( view )
-{
-	canvas canvas;
-
-	#if OS_LINUX
-		Pixmap pixmap;
-		Picture picture;
-	#elif OS_WINDOWS
-		//
-	#endif
-
-	n2x4 clip_region;
-
-	r4x2 pos;
-	r4x2 scale;
-
-	view_ref_fn fn_draw;
-	anon ref draw_ref;
-
-	view_state state bits( view_states_count );
-	flag update bits_flag;
-	flag clip bits_flag;
-	flag clear bits_flag;
-};
-
-//
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////// window
+////////////////////////////////////////////////////////////////
 #pragma region window
 
 type_from( OS_PICK( Window, HWND ) ) window_handle;
@@ -949,9 +560,10 @@ type( window )
 	flag visible bits_flag;
 };
 
+#pragma endregion window
 //
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////// program
+////////////////////////////////////////////////////////////////
 #pragma region program
 
 #ifndef program_max_windows
@@ -969,20 +581,492 @@ global
 		HICON icon;
 	#endif
 
+	canvas const ref canvas_ref;
+
 	window windows[ program_max_windows ];
-	n1 windows_count;
+
+	n1 windows_count bits( program_max_windows );
 }
 program;
 
+#pragma endregion program
 //
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////// view functions
-#pragma region view def
+#pragma endregion declarations
+///
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#pragma region - definitions
+
+#define grid_index( X, Y, WIDTH ) ( ( X ) + ( ( Y ) * ( WIDTH ) ) )
+
+////////////////////////////////////////////////////////////////
+#pragma region dimensional
 
 ////////////////////////////////
 // hidden
 
-fn _view_setup( view ref const view_ref )
+#define _xx2( TYPE, NAME, SYMBOL ) embed TYPE##x2 TYPE##x2_##NAME( TYPE##x2 const A, TYPE##x2 const B ) { out make( TYPE##x2, .x = A.x SYMBOL B.x, .y = A.y SYMBOL B.y ); }
+#define _xx3( TYPE, NAME, SYMBOL ) embed TYPE##x3 TYPE##x3_##NAME( TYPE##x3 const A, TYPE##x3 const B ) { out make( TYPE##x3, .x = A.x SYMBOL B.x, .y = A.y SYMBOL B.y, .z = A.z SYMBOL B.z ); }
+#define _xx4( TYPE, NAME, SYMBOL ) embed TYPE##x4 TYPE##x4_##NAME( TYPE##x4 const A, TYPE##x4 const B ) { out make( TYPE##x4, .x = A.x SYMBOL B.x, .y = A.y SYMBOL B.y, .z = A.z SYMBOL B.z, .w = A.w SYMBOL B.w ); }
+#define _xt2( TYPE, NAME, SYMBOL ) embed TYPE##x2 TYPE##x2_##NAME##_##TYPE( TYPE##x2 const A, const TYPE V ) { out make( TYPE##x2, .x = A.x SYMBOL V, .y = A.y SYMBOL V ); }
+#define _xt3( TYPE, NAME, SYMBOL ) embed TYPE##x3 TYPE##x3_##NAME##_##TYPE( TYPE##x3 const A, const TYPE V ) { out make( TYPE##x3, .x = A.x SYMBOL V, .y = A.y SYMBOL V, .z = A.z SYMBOL V ); }
+#define _xt4( TYPE, NAME, SYMBOL ) embed TYPE##x4 TYPE##x4_##NAME##_##TYPE( TYPE##x4 const A, const TYPE V ) { out make( TYPE##x4, .x = A.x SYMBOL V, .y = A.y SYMBOL V, .z = A.z SYMBOL V, .w = A.w SYMBOL V ); }
+
+#define _fn_x2( TYPE )\
+	_xx2( TYPE, add, + ) _xt2( TYPE, add, + ) _xx2( TYPE, sub, - ) _xt2( TYPE, sub, - ) _xx2( TYPE, mul, * ) _xt2( TYPE, mul, * ) _xx2( TYPE, div, / ) _xt2( TYPE, div, / );\
+	embed TYPE##x2 TYPE##x2_min( TYPE##x2 const A, TYPE##x2 const B )\
+	{\
+		out make( TYPE##x2, MIN( A.x, B.x ), MIN( A.y, B.y ) );\
+	}\
+	embed TYPE##x2 TYPE##x2_max( TYPE##x2 const A, TYPE##x2 const B )\
+	{\
+		out make( TYPE##x2, MAX( A.x, B.x ), MAX( A.y, B.y ) );\
+	}\
+	embed TYPE##x2 TYPE##x2_invert( TYPE##x2 const V )\
+	{\
+		out make( TYPE##x2, .x = -V.x, .y = -V.y );\
+	}\
+	embed TYPE TYPE##x2_dot( TYPE##x2 const A, TYPE##x2 const B )\
+	{\
+		out A.x * B.x + A.y * B.y;\
+	}\
+	embed TYPE TYPE##x2_mag_sqr( TYPE##x2 const V )\
+	{\
+		out TYPE##x2_dot( V, V );\
+	}\
+	embed TYPE TYPE##x2_distance_sqr( TYPE##x2 const A, TYPE##x2 const B )\
+	{\
+		out TYPE##x2_mag_sqr( TYPE##x2_sub( B, A ) );\
+	}
+
+#define _fn_x3( TYPE )\
+	_xx3( TYPE, add, + ) _xt3( TYPE, add, + ) _xx3( TYPE, sub, - ) _xt3( TYPE, sub, - ) _xx3( TYPE, mul, * ) _xt3( TYPE, mul, * ) _xx3( TYPE, div, / ) _xt3( TYPE, div, / );\
+	embed TYPE##x3 TYPE##x3_min( TYPE##x3 const A, TYPE##x3 const B )\
+	{\
+		out make( TYPE##x3, MIN( A.x, B.x ), MIN( A.y, B.y ), MIN( A.z, B.z ) );\
+	}\
+	embed TYPE##x3 TYPE##x3_max( TYPE##x3 const A, TYPE##x3 const B )\
+	{\
+		out make( TYPE##x3, MAX( A.x, B.x ), MAX( A.y, B.y ), MAX( A.z, B.z ) );\
+	}\
+	embed TYPE##x3 TYPE##x3_invert( TYPE##x3 const V )\
+	{\
+		out make( TYPE##x3, .x = -V.x, .y = -V.y, .z = -V.z );\
+	}\
+	embed TYPE TYPE##x3_dot( TYPE##x3 const A, TYPE##x3 const B )\
+	{\
+		out A.x * B.x + A.y * B.y + A.z * B.z;\
+	}\
+	embed TYPE TYPE##x3_mag_sqr( TYPE##x3 const V )\
+	{\
+		out TYPE##x3_dot( V, V );\
+	}\
+	embed TYPE TYPE##x3_distance_sqr( TYPE##x3 const A, TYPE##x3 const B )\
+	{\
+		out TYPE##x3_mag_sqr( TYPE##x3_sub( B, A ) );\
+	}\
+	embed TYPE##x3 TYPE##x3_cross( TYPE##x3 const A, TYPE##x3 const B )\
+	{\
+		out make( TYPE##x3, .x = A.y * B.z - A.z * B.y, .y = A.z * B.x - A.x * B.z, .z = A.x * B.y - A.y * B.x );\
+	}
+
+#define _fn_x4( TYPE )\
+	_xx4( TYPE, add, + ) _xt4( TYPE, add, + ) _xx4( TYPE, sub, - ) _xt4( TYPE, sub, - ) _xx4( TYPE, mul, * ) _xt4( TYPE, mul, * ) _xx4( TYPE, div, / ) _xt4( TYPE, div, / );\
+	embed TYPE##x4 TYPE##x4_min( TYPE##x4 const A, TYPE##x4 const B )\
+	{\
+		out make( TYPE##x4, MIN( A.x, B.x ), MIN( A.y, B.y ), MIN( A.z, B.z ), MIN( A.w, B.w ) );\
+	}\
+	embed TYPE##x4 TYPE##x4_max( TYPE##x4 const A, TYPE##x4 const B )\
+	{\
+		out make( TYPE##x4, MAX( A.x, B.x ), MAX( A.y, B.y ), MAX( A.z, B.z ), MAX( A.w, B.w ) );\
+	}\
+	embed TYPE##x4 TYPE##x4_invert( TYPE##x4 const V )\
+	{\
+		out make( TYPE##x4, .x = -V.x, .y = -V.y, .z = -V.z, .w = -V.w );\
+	}\
+	embed TYPE TYPE##x4_dot( TYPE##x4 const A, TYPE##x4 const B )\
+	{\
+		out A.x * B.x + A.y * B.y + A.z * B.z + A.w * B.w;\
+	}\
+	embed TYPE TYPE##x4_mag_sqr( TYPE##x4 const V )\
+	{\
+		out TYPE##x4_dot( V, V );\
+	}\
+	embed TYPE TYPE##x4_distance_sqr( TYPE##x4 const A, TYPE##x4 const B )\
+	{\
+		out TYPE##x4_mag_sqr( TYPE##x4_sub( B, A ) );\
+	}
+
+#define _fn_rNxX( N, X )\
+	embed r##N r##N##x##X##_length( const r##N##x##X V )\
+	{\
+		out r##N##_sqrt( r##N##x##X##_mag_sqr( V ) );\
+	}\
+	embed r##N r##N##x##X##_distance( const r##N##x##X A, const r##N##x##X B )\
+	{\
+		out r##N##_sqrt( r##N##x##X##_distance_sqr( A, B ) );\
+	}\
+	embed r##N##x##X r##N##x##X##_norm( const r##N##x##X V )\
+	{\
+		out r##N##x##X##_mul_##r##N( V, 1.0 / r##N##x##X##_length( V ) );\
+	}
+
+#define _fn_TYPEx( TYPE ) _fn_x2( TYPE ) _fn_x3( TYPE ) _fn_x4( TYPE )
+#define _fn_rNx( N ) _fn_rNxX( N, 2 ); _fn_rNxX( N, 3 ); _fn_rNxX( N, 4 )
+
+#define _x2( TYPE, X_Y... ) make( TYPE##x2, DEFAULTS( ( 0, 0 ), X_Y ) )
+#define _x3( TYPE, X_Y_Z... ) make( TYPE##x3, DEFAULTS( ( 0, 0, 0 ), X_Y_Z ) )
+#define _x4( TYPE, X_Y_Z_W... ) make( TYPE##x4, DEFAULTS( ( 0, 0, 0, 0 ), X_Y_Z_W ) )
+
+////////////////////////////////
+// visible
+
+_fn_TYPEx( n1 );
+#define n1x2( X_Y... ) _x2( n1, X_Y )
+#define n1x3( X_Y_Z... ) _x3( n1, X_Y_Z )
+#define n1x4( X_Y_Z_W... ) _x4( n1, X_Y_Z_W )
+#define to_n1x2( X2 ) n1x2( X2.x, X2.y )
+#define to_n1x3( X3 ) n1x3( X3.x, X3.y, X3.z )
+#define to_n1x4( X4 ) n1x4( X4.x, X4.y, X4.z, X4.w )
+
+_fn_TYPEx( i1 );
+#define i1x2( X_Y... ) _x2( i1, X_Y )
+#define i1x3( X_Y_Z... ) _x3( i1, X_Y_Z )
+#define i1x4( X_Y_Z_W... ) _x4( i1, X_Y_Z_W )
+#define to_i1x2( X2 ) i1x2( X2.x, X2.y )
+#define to_i1x3( X3 ) i1x3( X3.x, X3.y, X3.z )
+#define to_i1x4( X4 ) i1x4( X4.x, X4.y, X4.z, X4.w )
+
+_fn_TYPEx( n2 );
+#define n2x2( X_Y... ) _x2( n2, X_Y )
+#define n2x3( X_Y_Z... ) _x3( n2, X_Y_Z )
+#define n2x4( X_Y_Z_W... ) _x4( n2, X_Y_Z_W )
+#define to_n2x2( X2 ) n2x2( X2.x, X2.y )
+#define to_n2x3( X3 ) n2x3( X3.x, X3.y, X3.z )
+#define to_n2x4( X4 ) n2x4( X4.x, X4.y, X4.z, X4.w )
+
+_fn_TYPEx( i2 );
+#define i2x2( X_Y... ) _x2( i2, X_Y )
+#define i2x3( X_Y_Z... ) _x3( i2, X_Y_Z )
+#define i2x4( X_Y_Z_W... ) _x4( i2, X_Y_Z_W )
+#define to_i2x2( X2 ) i2x2( X2.x, X2.y )
+#define to_i2x3( X3 ) i2x3( X3.x, X3.y, X3.z )
+#define to_i2x4( X4 ) i2x4( X4.x, X4.y, X4.z, X4.w )
+
+_fn_TYPEx( n4 );
+#define n4x2( X_Y... ) _x2( n4, X_Y )
+#define n4x3( X_Y_Z... ) _x3( n4, X_Y_Z )
+#define n4x4( X_Y_Z_W... ) _x4( n4, X_Y_Z_W )
+#define to_n4x2( X2 ) n4x2( X2.x, X2.y )
+#define to_n4x3( X3 ) n4x3( X3.x, X3.y, X3.z )
+#define to_n4x4( X4 ) n4x4( X4.x, X4.y, X4.z, X4.w )
+
+_fn_TYPEx( i4 );
+#define i4x2( X_Y... ) _x2( i4, X_Y )
+#define i4x3( X_Y_Z... ) _x3( i4, X_Y_Z )
+#define i4x4( X_Y_Z_W... ) _x4( i4, X_Y_Z_W )
+#define to_i4x2( X2 ) i4x2( X2.x, X2.y )
+#define to_i4x3( X3 ) i4x3( X3.x, X3.y, X3.z )
+#define to_i4x4( X4 ) i4x4( X4.x, X4.y, X4.z, X4.w )
+
+_fn_TYPEx( r4 );
+_fn_rNx( 4 );
+#define r4x2( X_Y... ) _x2( r4, X_Y )
+#define r4x3( X_Y_Z... ) _x3( r4, X_Y_Z )
+#define r4x4( X_Y_Z_W... ) _x4( r4, X_Y_Z_W )
+#define to_r4x2( X2 ) r4x2( X2.x, X2.y )
+#define to_r4x3( X3 ) r4x3( X3.x, X3.y, X3.z )
+#define to_r4x4( X4 ) r4x4( X4.x, X4.y, X4.z, X4.w )
+
+_fn_TYPEx( n8 );
+#define n8x2( X_Y... ) _x2( n8, X_Y )
+#define n8x3( X_Y_Z... ) _x3( n8, X_Y_Z )
+#define n8x4( X_Y_Z_W... ) _x4( n8, X_Y_Z_W )
+#define to_n8x2( X2 ) n8x2( X2.x, X2.y )
+#define to_n8x3( X3 ) n8x3( X3.x, X3.y, X3.z )
+#define to_n8x4( X4 ) n8x4( X4.x, X4.y, X4.z, X4.w )
+
+_fn_TYPEx( i8 );
+#define i8x2( X_Y... ) _x2( i8, X_Y )
+#define i8x3( X_Y_Z... ) _x3( i8, X_Y_Z )
+#define i8x4( X_Y_Z_W... ) _x4( i8, X_Y_Z_W )
+#define to_i8x2( X2 ) i8x2( X2.x, X2.y )
+#define to_i8x3( X3 ) i8x3( X3.x, X3.y, X3.z )
+#define to_i8x4( X4 ) i8x4( X4.x, X4.y, X4.z, X4.w )
+
+_fn_TYPEx( r8 );
+_fn_rNx( 8 );
+#define r8x2( X_Y... ) _x2( r8, X_Y )
+#define r8x3( X_Y_Z... ) _x3( r8, X_Y_Z )
+#define r8x4( X_Y_Z_W... ) _x4( r8, X_Y_Z_W )
+#define to_r8x2( X2 ) r8x2( X2.x, X2.y )
+#define to_r8x3( X3 ) r8x3( X3.x, X3.y, X3.z )
+#define to_r8x4( X4 ) r8x4( X4.x, X4.y, X4.z, X4.w )
+
+#pragma endregion dimensional
+//
+
+////////////////////////////////////////////////////////////////
+#pragma region anchor
+
+////////////////////////////////
+// hidden
+
+////////////////////////////////
+// visible
+
+embed i2 anchor_get_x( anchor const anchor, n2 const region_width, n2 const object_width, n2 const padding )
+{
+	temp n1 const h_align = anchor >> 4;
+	temp i2 const offset = region_width - object_width;
+	out pick( h_align is 1, offset >> 1, pick( h_align is 2, offset - padding, padding ) );
+}
+
+embed i2 anchor_get_y( anchor const anchor, n2 const region_height, n2 const object_height, n2 const padding )
+{
+	temp const n1 v_align = anchor & 0x0F;
+	temp i2 const offset = region_height - object_height;
+	out pick( v_align is 1, offset >> 1, pick( v_align is 2, offset - padding, padding ) );
+}
+
+#pragma endregion anchor
+//
+
+////////////////////////////////////////////////////////////////
+#pragma region pixel
+
+////////////////////////////////
+// hidden
+
+////////////////////////////////
+// visible
+
+#define pixel( R, G, B, A... ) make( pixel, .r = ( R ), .g = ( G ), .b = ( B ), .a = DEFAULT( 0xff, A ) )
+
+#define pixel_invalid make( pixel, .bgra = 0 )
+
+#define pixel_black pixel( 0x00, 0x00, 0x00 )
+#define pixel_dark_gray pixel( 0x3f, 0x3f, 0x3f )
+#define pixel_gray pixel( 0x7f, 0x7f, 0x7f )
+#define pixel_light_gray pixel( 0xbf, 0xbf, 0xbf )
+#define pixel_white pixel( 0xff, 0xff, 0xff )
+#define pixel_red pixel( 0xff, 0x00, 0x00 )
+#define pixel_yellow pixel( 0xff, 0xff, 0x00 )
+#define pixel_green pixel( 0x00, 0xff, 0x00 )
+#define pixel_cyan pixel( 0x00, 0xff, 0xff )
+#define pixel_blue pixel( 0x00, 0x00, 0xff )
+#define pixel_magenta pixel( 0xff, 0x00, 0xff )
+
+#pragma endregion pixel
+//
+
+////////////////////////////////////////////////////////////////
+#pragma region canvas
+
+////////////////////////////////
+// hidden
+
+////////////////////////////////
+// visible
+
+perm flag const _MAKE_CANVAS_NEW_REF_FLAG;
+perm pixel ref const _MAKE_CANVAS_NEW_REF = to( pixel ref const, ref_of( _MAKE_CANVAS_NEW_REF_FLAG ) );
+
+embed canvas _make_canvas( n2 const width, n2 const height, pixel ref const pixels )
+{
+	temp n4 const area = n4( width ) * n4( height );
+	temp pixel ref pixel_ref = pixels;
+	if( pixels is _MAKE_CANVAS_NEW_REF )
+	{
+		pixel_ref = new_ref( pixel, area );
+	}
+
+	out make( canvas, .size = n2x2( width, height ), .area = area, .pixels = to( pixel ref, pixel_ref ) );
+}
+#define make_canvas( WIDTH, HEIGHT, PIXELS... ) _make_canvas( WIDTH, HEIGHT, DEFAULT( _MAKE_CANVAS_NEW_REF, PIXELS ) )
+
+fn canvas_ref_wipe( canvas ref const canvas_ref )
+{
+	delete_ref( canvas_ref->pixels );
+	val_of( canvas_ref ) = make( canvas );
+}
+
+fn _canvas_ref_resize( canvas ref const canvas_ref, n2 const width, n2 const height, flag const preserve )
+{
+	out_if( canvas_ref->size.w is width and canvas_ref->size.h is height );
+
+	temp const n2x2 size_old = canvas_ref->size;
+	temp n4 const area_old = canvas_ref->area;
+	canvas_ref->size = n2x2( width, height );
+	canvas_ref->area = n4( canvas_ref->size.w ) * n4( canvas_ref->size.h );
+
+	out_if_nothing( canvas_ref->pixels );
+
+	canvas_ref->pixels = ref_resize( canvas_ref->pixels, canvas_ref->area << pixel_bytes_shift, preserve );
+}
+#define canvas_ref_resize( CANVAS_REF, WIDTH, HEIGHT, PRESERVE... ) _canvas_ref_resize( CANVAS_REF, WIDTH, HEIGHT, DEFAULT( no, PRESERVE ) )
+
+////////////////
+// draw
+
+fn canvas_ref_fill( canvas const ref const canvas_ref, pixel const color )
+{
+	if_all( color.r is color.g, color.g is color.b, color.b is color.a )
+	{
+		bytes_fill( canvas_ref->pixels, color.r, canvas_ref->area << pixel_bytes_shift );
+	}
+	else
+	{
+		temp i4 filled = i4( canvas_ref->size.w );
+		iter( first_row_index, filled )
+		{
+			canvas_ref->pixels[ first_row_index ] = color;
+		}
+
+		temp i4 remaining = canvas_ref->area - filled;
+		do
+		{
+			temp i4 const count = pick( remaining < filled, remaining, filled );
+			bytes_copy( ref_of( canvas_ref->pixels[ filled ] ), ref_of( canvas_ref->pixels[ 0 ] ), count << pixel_bytes_shift );
+			filled += count;
+			remaining -= count;
+		}
+		while( remaining );
+	}
+}
+
+#define canvas_ref_clear( CANVAS ) bytes_clear( CANVAS->pixels, CANVAS->area << pixel_bytes_shift )
+
+#define canvas_ref_check_pixel( CANVAS_REF, X, Y ) ( point_in_size( X, Y, CANVAS_REF->size.w, CANVAS_REF->size.h ) )
+#define canvas_ref_check_pixel_index( CANVAS_REF, INDEX ) ( INDEX >= 0 and INDEX < CANVAS_REF->area )
+
+#define canvas_ref_get_pixel_index( CANVAS_REF, INDEX ) CANVAS_REF->pixels[ ( INDEX ) ]
+#define canvas_ref_get_pixel_index_safe( CANVAS_REF, INDEX ) pick( canvas_ref_check_pixel_index( CANVAS_REF, INDEX ), canvas_ref_get_pixel_index( CANVAS_REF, INDEX ), pixel_invalid )
+#define canvas_ref_get_pixel( CANVAS_REF, X, Y ) canvas_ref_get_pixel_index( CANVAS_REF, grid_index( X, Y, CANVAS_REF->size.w ) )
+#define canvas_ref_get_pixel_safe( CANVAS_REF, X, Y ) pick( canvas_ref_check_pixel( CANVAS_REF, X, Y ), canvas_ref_get_pixel( CANVAS_REF, X, Y ), pixel_invalid )
+
+#define canvas_ref_draw_pixel_index( CANVAS_REF, INDEX, PIXEL ) ( canvas_ref_get_pixel_index( CANVAS_REF, INDEX ) ) = ( PIXEL )
+#define canvas_ref_draw_pixel_index_safe( CANVAS_REF, INDEX, PIXEL ) if( canvas_ref_check_pixel_index( CANVAS_REF, INDEX ) ) canvas_ref_draw_pixel_index( CANVAS_REF, INDEX, PIXEL )
+#define canvas_ref_draw_pixel( CANVAS_REF, X, Y, PIXEL ) ( canvas_ref_get_pixel( CANVAS_REF, X, Y ) ) = ( PIXEL )
+#define canvas_ref_draw_pixel_safe( CANVAS_REF, X, Y, PIXEL ) if( canvas_ref_check_pixel( CANVAS_REF, X, Y ) ) canvas_ref_draw_pixel( CANVAS_REF, X, Y, PIXEL )
+
+////////////////
+// program canvas
+
+#define draw_set_canvas_ref( CANVAS_REF ) program.canvas_ref = ( CANVAS_REF )
+
+#define draw_fill( PIXEL ) canvas_ref_fill( program.canvas_ref, PIXEL )
+#define draw_clear() canvas_ref_clear( program.canvas_ref )
+
+#define check_pixel( X, Y ) canvas_ref_check_pixel( program.canvas_ref, X, Y )
+#define check_pixel_index( INDEX ) canvas_ref_check_pixel_index( program.canvas_ref, INDEX )
+
+#define get_pixel_index( INDEX ) canvas_ref_get_pixel_index( program.canvas_ref, INDEX )
+#define get_pixel_index_safe( INDEX ) canvas_ref_get_pixel_index_safe( program.canvas_ref, INDEX )
+#define get_pixel( X, Y ) canvas_ref_get_pixel( program.canvas_ref, X, Y )
+#define get_pixel_safe( X, Y ) canvas_ref_get_pixel_safe( program.canvas_ref, X, Y )
+
+#define draw_pixel_index( INDEX, PIXEL ) canvas_ref_draw_pixel_index( program.canvas_ref, INDEX, PIXEL )
+#define draw_pixel_index_safe( INDEX, PIXEL ) canvas_ref_draw_pixel_index_safe( program.canvas_ref, INDEX, PIXEL )
+#define draw_pixel( X, Y, PIXEL ) canvas_ref_draw_pixel( program.canvas_ref, X, Y, PIXEL )
+#define draw_pixel_safe( X, Y, PIXEL ) canvas_ref_draw_pixel_safe( program.canvas_ref, X, Y, PIXEL )
+
+#pragma endregion canvas
+//
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#pragma region font
+
+////////////////////////////////
+// hidden
+
+////////////////////////////////
+// visible
+
+embed font make_font( canvas const canvas )
+{
+	temp font this = { 0 };
+	this.canvas = canvas;
+	this.letter_size = n2x2( canvas.size.w >> 4, canvas.size.h >> 3 );
+	out this;
+}
+
+#define _canvas_ref_blit_letter( CANVAS_REF, FONT, BYTE )\
+	{\
+		temp const byte _letter = ( BYTE ) - ' ';\
+		temp const i2 _letter_x = ( _letter & 0x0F ) * _letter_w;\
+		temp const i2 _letter_y = ( _letter >> 4 ) * _letter_h;\
+		temp pixel ref _to_ref = CANVAS_REF->pixels + _draw_y * CANVAS_REF->size.w + _draw_x;\
+		temp const pixel ref _from_ref = FONT.canvas.pixels + _letter_y * FONT.canvas.size.w + _letter_x;\
+		temp i2 _h = _letter_h;\
+		do\
+		{\
+			temp i2 _w = _letter_w;\
+			do\
+			{\
+				if( _from_ref->a )\
+				{\
+					val_of( _to_ref ) = _color;\
+				}\
+				++_to_ref;\
+				++_from_ref;\
+			}\
+			while( --_w );\
+			_to_ref += _to_step;\
+			_from_ref += _from_step;\
+		}\
+		while( --_h );\
+	}
+
+#define canvas_ref_draw_byte( CANVAS_REF, FONT, BYTE, POS, ANCHOR, COLOR )\
+	START_DEF\
+	{\
+		temp const i2 _letter_w = FONT.letter_size.w;\
+		temp const i2 _letter_h = FONT.letter_size.h;\
+		temp anchor const _anchor = ANCHOR;\
+		temp const i2 _draw_x = POS.x + anchor_get_x( _anchor, 0, _letter_w, 0 );\
+		temp const i2 _draw_y = POS.y + anchor_get_y( _anchor, 0, _letter_h, 0 );\
+		temp const pixel _color = COLOR;\
+		temp const i4 _to_step = CANVAS_REF->size.w - _letter_w;\
+		temp const i4 _from_step = FONT.canvas.size.w - _letter_w;\
+		_canvas_ref_blit_letter( CANVAS_REF, FONT, BYTE )\
+	}\
+	END_DEF
+
+#define canvas_ref_draw_bytes( CANVAS_REF, FONT, BYTES, BYTES_SIZE, POS, ANCHOR, COLOR )\
+	START_DEF\
+	{\
+		temp const n2 _text_len = pick( BYTES_SIZE is 0, bytes_measure( BYTES ), BYTES_SIZE );\
+		temp const i2 _letter_w = FONT.letter_size.w;\
+		temp const i2 _letter_h = FONT.letter_size.h;\
+		temp const i2 _text_width = _text_len * _letter_w;\
+		temp anchor const _anchor = ANCHOR;\
+		temp i2 _draw_x = POS.x + anchor_get_x( _anchor, 0, _text_width, 0 );\
+		temp const i2 _draw_y = POS.y + anchor_get_y( _anchor, 0, _letter_h, 0 );\
+		temp const pixel _color = COLOR;\
+		temp const i4 _to_step = CANVAS_REF->size.w - _letter_w;\
+		temp const i4 _from_step = FONT.canvas.size.w - _letter_w;\
+		iter( _l, _text_len )\
+		{\
+			_canvas_ref_blit_letter( CANVAS_REF, FONT, BYTES[ _l ] ) _draw_x += _letter_w;\
+		}\
+	}\
+	END_DEF
+
+#define draw_byte( FONT_REF, BYTE, POS, ANCHOR, COLOR ) canvas_ref_draw_byte( program.canvas_ref, FONT_REF, BYTE, POS, ANCHOR, COLOR )
+#define draw_bytes( FONT_REF, BYTES, BYTES_SIZE, POS, ANCHOR, COLOR ) canvas_ref_draw_bytes( program.canvas_ref, FONT_REF, BYTES, BYTES_SIZE, POS, ANCHOR, COLOR )
+
+#pragma endregion font
+//
+
+////////////////////////////////////////////////////////////////
+#pragma region view
+
+////////////////////////////////
+// hidden
+
+fn _view_ref_setup( view ref const view_ref )
 {
 	view_ref->update = yes;
 
@@ -999,9 +1083,9 @@ fn _view_setup( view ref const view_ref )
 ////////////////////////////////
 // visible
 
-#define view_get_scaled_size( VIEW_REF ) r4x2( r4( VIEW_REF->canvas.size.w ) * VIEW_REF->scale.w, r4( VIEW_REF->canvas.size.h ) * VIEW_REF->scale.h )
+#define view_ref_get_scaled_size( VIEW_REF ) r4x2( r4( VIEW_REF->canvas.size.w ) * VIEW_REF->scale.w, r4( VIEW_REF->canvas.size.h ) * VIEW_REF->scale.h )
 
-fn view_zoom( view ref const view_ref, i4 const x, i4 const y, r4 const factor )
+fn view_ref_zoom( view ref const view_ref, i4 const x, i4 const y, r4 const factor )
 {
 	temp r4 const new_scale = r4_clamp( view_ref->scale.w * factor, 0.1, 1000.0 );
 	temp r4 const actual_factor = new_scale / view_ref->scale.w;
@@ -1010,17 +1094,17 @@ fn view_zoom( view ref const view_ref, i4 const x, i4 const y, r4 const factor )
 	view_ref->scale = r4x2( new_scale, new_scale );
 }
 
-fn view_resize( view ref const view_ref, n2x2 const size, flag const preserve )
+fn view_ref_resize( view ref const view_ref, n2x2 const size, flag const preserve )
 {
 	out_if_any( view_ref is nothing, size.w is 0, size.h is 0 );
 
 	if( view_ref->canvas.pixels is nothing )
 	{
-		view_ref->canvas = canvas( size.w, size.h );
+		view_ref->canvas = make_canvas( size.w, size.h );
 	}
 	else if( view_ref->canvas.size.w isnt size.w or view_ref->canvas.size.h isnt size.h )
 	{
-		canvas_resize( ref_of( view_ref->canvas ), size.w, size.h, preserve );
+		canvas_ref_resize( ref_of( view_ref->canvas ), size.w, size.h, preserve );
 	}
 
 	#if OS_LINUX
@@ -1031,26 +1115,97 @@ fn view_resize( view ref const view_ref, n2x2 const size, flag const preserve )
 		}
 	#endif
 
-	_view_setup( view_ref );
+	_view_ref_setup( view_ref );
 }
 
-fn view_center( view ref const view_ref, i2x2 const center_position )
+fn view_ref_center( view ref const view_ref, i2x2 const center_position )
 {
 	out_if_nothing( view_ref->canvas.pixels );
 	view_ref->pos.x = r4( center_position.x ) - ( r4( view_ref->canvas.size.w ) * view_ref->scale.w * 0.5 );
 	view_ref->pos.y = r4( center_position.y ) - ( r4( view_ref->canvas.size.h ) * view_ref->scale.h * 0.5 );
 }
 
+#pragma endregion view
 //
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////// window functions
-/// window functions
-//
+////////////////////////////////////////////////////////////////
+#pragma region display
 
 ////////////////////////////////
 // hidden
 
-fn _window_get_mouse_position( window ref const window_ref, i4 ref const out_x, i4 ref const out_y )
+////////////////////////////////
+// visible
+
+embed n2 const display_get_width()
+{
+	#if OS_LINUX
+		out n2( DisplayWidth( program.display, DefaultScreen( program.display ) ) );
+	#elif OS_WINDOWS
+		out n2( GetSystemMetrics( SM_CXSCREEN ) );
+	#endif
+}
+
+embed n2 const display_get_height()
+{
+	#if OS_LINUX
+		out n2( DisplayHeight( program.display, DefaultScreen( program.display ) ) );
+	#elif OS_WINDOWS
+		out n2( GetSystemMetrics( SM_CYSCREEN ) );
+	#endif
+}
+
+fn display_get_mouse_position( i4 ref const out_x, i4 ref const out_y )
+{
+	#if OS_LINUX
+		Window root,
+		child;
+		i4 win_x,
+		win_y;
+		n4 mask;
+		XQueryPointer( program.display, DefaultRootWindow( program.display ), ref_of( root ), ref_of( child ), out_x, out_y, ref_of( win_x ), ref_of( win_y ), ref_of( mask ) );
+	#elif OS_WINDOWS
+		POINT cursor;
+		GetCursorPos( ref_of( cursor ) );
+		val_of( out_x ) = cursor.x;
+		val_of( out_y ) = cursor.y;
+	#endif
+}
+
+#pragma endregion display
+//
+
+////////////////////////////////////////////////////////////////
+#pragma region inputs
+
+////////////////////////////////
+// hidden
+
+////////////////////////////////
+// visible
+
+#define input_to_byte( INPUT ) ( ( INPUT ) - input_a + 'A' )
+
+#define key_pressed( WINDOW_REF, KEY ) ( ( ( WINDOW_REF )->inputs[ input_##KEY ] & INPUT_MASK_PRESSED ) isnt 0 )
+#define key_held( WINDOW_REF, KEY ) ( ( ( WINDOW_REF )->inputs[ input_##KEY ] & INPUT_MASK_HELD ) isnt 0 )
+#define key_released( WINDOW_REF, KEY ) ( ( ( WINDOW_REF )->inputs[ input_##KEY ] & INPUT_MASK_RELEASED ) isnt 0 )
+
+#define mouse_pressed( WINDOW_REF, BUTTON ) key_pressed( WINDOW_REF, mouse_##BUTTON )
+#define mouse_held( WINDOW_REF, BUTTON ) key_held( WINDOW_REF, mouse_##BUTTON )
+#define mouse_released( WINDOW_REF, BUTTON ) key_released( WINDOW_REF, mouse_##BUTTON )
+
+#define mouse_scroll( WINDOW_REF, DIRECTION ) key_pressed( WINDOW_REF, scroll_##DIRECTION )
+
+#pragma endregion inputs
+//
+
+////////////////////////////////////////////////////////////////
+#pragma region window
+
+////////////////////////////////
+// hidden
+
+fn _window_ref_get_mouse_position( window ref const window_ref, i4 ref const out_x, i4 ref const out_y )
 {
 	#if OS_LINUX
 		Window root;
@@ -1068,9 +1223,18 @@ fn _window_get_mouse_position( window ref const window_ref, i4 ref const out_x, 
 	#endif
 }
 
-fn _window_tick( window ref const window_ref )
+fn _window_ref_tick( window ref const window_ref )
 {
-	_window_get_mouse_position( window_ref, ref_of( window_ref->mouse.x ), ref_of( window_ref->mouse.y ) );
+	_window_ref_get_mouse_position( window_ref, ref_of( window_ref->mouse.x ), ref_of( window_ref->mouse.y ) );
+
+	iter( view_index, window_ref->views_count )
+	{
+		temp view ref const this_view = ref_of( window_ref->views[ view_index ] );
+
+		r4x2 new_mouse = r4x2( r4( window_ref->mouse.x - this_view->pos.x ) / this_view->scale.w, r4( window_ref->mouse.y - this_view->pos.y ) / this_view->scale.h );
+		//this_view->mouse_prev = pick( window_ref->tick > 1, this_view->mouse, new_mouse );
+		this_view->mouse = new_mouse;
+	}
 
 	// custom tick
 
@@ -1097,7 +1261,7 @@ fn _window_tick( window ref const window_ref )
 	}
 }
 
-fn _window_draw( window ref const window_ref )
+fn _window_ref_draw( window ref const window_ref )
 {
 	temp n1 count = window_ref->views_count;
 	out_if( count is 0 );
@@ -1134,7 +1298,7 @@ fn _window_draw( window ref const window_ref )
 			view_ref->update = no;
 		}
 
-		temp r4x2 const scaled_size = view_get_scaled_size( view_ref );
+		temp r4x2 const scaled_size = view_ref_get_scaled_size( view_ref );
 		skip_if( scaled_size.w is 0 or scaled_size.h is 0 );
 
 		temp i4 const canvas_w = view_ref->canvas.size.w;
@@ -1299,7 +1463,8 @@ fn _window_draw( window ref const window_ref )
 					XRenderSetPictureClipRectangles( program.display, window_ref->picture, 0, 0, ref_of( full_rect ), 1 );
 				}
 			#elif OS_WINDOWS
-				SetStretchBltMode( wdc, COLORONCOLOR ); //pick( scale_w <= 0.25 or scale_h <= 0.25, HALFTONE, COLORONCOLOR ) );
+				SetStretchBltMode( wdc, COLORONCOLOR ); //pick( scale_w <= 1.0 or scale_h <= 1.0, HALFTONE, COLORONCOLOR ) );
+				SetBrushOrgEx( wdc, 0, 0, NULL );
 				StretchDIBits( wdc, view_l, view_t, view_w, view_h, 0, 0, canvas_w, canvas_h, view_ref->canvas.pixels, ref_of( window_ref->image ), DIB_RGB_COLORS, SRCCOPY );
 			#endif
 		}
@@ -1338,9 +1503,9 @@ fn _window_draw( window ref const window_ref )
 	is_input = yes
 
 #if OS_LINUX
-	embed out_state _window_process_event( window ref const window_ref, i4 const event, window_event const ref e )
+	embed out_state _window_ref_process_event( window ref const window_ref, i4 const event, window_event const ref e )
 #elif OS_WINDOWS
-	embed LRESULT CALLBACK _window_process_event( window_handle const h, i4 const event, WPARAM const wp, LPARAM const lp )
+	embed LRESULT CALLBACK _window_ref_process_event( window_handle const h, i4 const event, WPARAM const wp, LPARAM const lp )
 #endif
 {
 	#if OS_WINDOWS
@@ -1406,7 +1571,7 @@ fn _window_draw( window ref const window_ref )
 		when( _window_event_draw )
 		{
 			WINDOW_DRAW:
-			_window_draw( window_ref );
+			_window_ref_draw( window_ref );
 
 			#if OS_WINDOWS
 				ValidateRect( h, nothing );
@@ -1626,7 +1791,7 @@ fn _window_draw( window ref const window_ref )
 
 	if( is_input )
 	{
-		_window_tick( window_ref );
+		_window_ref_tick( window_ref );
 	}
 
 	exit_events:
@@ -1640,7 +1805,7 @@ fn _window_draw( window ref const window_ref )
 ////////////////////////////////
 // visible
 
-fn window_update( window ref const window_ref )
+fn window_ref_update( window ref const window_ref )
 {
 	#if OS_LINUX
 		XClearArea( program.display, window_ref->handle, 0, 0, 0, 0, yes );
@@ -1649,7 +1814,7 @@ fn window_update( window ref const window_ref )
 	#endif
 }
 
-fn window_show( window ref const window_ref )
+fn window_ref_show( window ref const window_ref )
 {
 	out_if( window_ref->visible is yes );
 
@@ -1665,7 +1830,7 @@ fn window_show( window ref const window_ref )
 	window_ref->visible = yes;
 }
 
-embed view ref const window_make_view_ref( window ref const window_ref, canvas canvas )
+embed view ref const window_ref_make_view_ref( window ref const window_ref, canvas const canvas, view_ref_fn const fn_draw )
 {
 	iter( view_id, window_max_views )
 	{
@@ -1675,7 +1840,8 @@ embed view ref const window_make_view_ref( window ref const window_ref, canvas c
 			view_ref->scale = r4x2( 1.0, 1.0 );
 			view_ref->state = view_state_visible;
 			view_ref->canvas = canvas;
-			_view_setup(view_ref);
+			view_ref->fn_draw = fn_draw;
+			_view_ref_setup( view_ref );
 
 			window_ref->views_count += 1;
 
@@ -1686,7 +1852,7 @@ embed view ref const window_make_view_ref( window ref const window_ref, canvas c
 	out nothing;
 }
 
-fn window_capture_mouse( window ref const window_ref )
+fn window_ref_capture_mouse( window ref const window_ref )
 {
 	#if OS_LINUX
 		XGrabPointer( program.display, window_ref->handle, no, ButtonReleaseMask | PointerMotionMask, GrabModeAsync, GrabModeAsync, None, None, CurrentTime );
@@ -1695,12 +1861,22 @@ fn window_capture_mouse( window ref const window_ref )
 	#endif
 }
 
-fn window_release_mouse()
+fn window_ref_release_mouse()
 {
 	#if OS_LINUX
 		XUngrabPointer( program.display, CurrentTime );
 	#elif OS_WINDOWS
 		ReleaseCapture();
+	#endif
+}
+
+fn window_ref_center( window ref const window_ref )
+{
+	#if OS_LINUX
+		XMoveWindow( windows_display, window_ref->handle, ( display_get_width() - window_ref->size.w ) >> 1, ( display_get_height() - window_ref->size.h ) >> 1 );
+		XSync( windows_display, no );
+	#elif OS_WINDOWS
+		SetWindowPos( window_ref->handle, nothing, ( display_get_width() - window_ref->size.w ) >> 1, ( display_get_height() - window_ref->size.h ) >> 1, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE );
 	#endif
 }
 
@@ -1722,73 +1898,26 @@ group( cursor_type, i4 )
 	cursor_not_allowed = PICK( OS_LINUX, XC_X_cursor, 32648 )
 };
 
-fn window_set_cursor( window ref const window_ref, cursor_type const cursor )
+fn window_ref_set_cursor( window ref const window_ref, cursor_type const cursor )
 {
 	//window_ref->changed_cursor = yes;
 	#if OS_LINUX
 		perm Cursor cache[ 256 ] = { 0 };
 		if( not cache[ cursor ] )
 		{
-			cache[ cursor ] = XCreateFontCursor( program.display, cursor );
+			cache[ cursor ] = XCreateFontCursor( windows_display, cursor );
 		}
-		XDefineCursor( program.display, window_ref->handle, cache[ cursor ] );
-	#else
+		XDefineCursor( windows_display, window_ref->handle, cache[ cursor ] );
+	#elif OS_WINDOWS
 		SetCursor( LoadCursor( NULL, MAKEINTRESOURCE( cursor ) ) );
 	#endif
 }
 
+#pragma endregion window
 //
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////// display functions
-/// display functions
-//
-
-////////////////////////////////
-// hidden
-
-////////////////////////////////
-// visible
-
-embed n2 const display_get_width()
-{
-	#if OS_LINUX
-		out n2( DisplayWidth( program.display, DefaultScreen( program.display ) ) );
-	#elif OS_WINDOWS
-		out n2( GetSystemMetrics( SM_CXSCREEN ) );
-	#endif
-}
-
-embed n2 const display_get_height()
-{
-	#if OS_LINUX
-		out n2( DisplayHeight( program.display, DefaultScreen( program.display ) ) );
-	#elif OS_WINDOWS
-		out n2( GetSystemMetrics( SM_CYSCREEN ) );
-	#endif
-}
-
-fn display_get_mouse_position( i4 ref const out_x, i4 ref const out_y )
-{
-	#if OS_LINUX
-		Window root,
-		child;
-		i4 win_x,
-		win_y;
-		n4 mask;
-		XQueryPointer( program.display, DefaultRootWindow( program.display ), ref_of( root ), ref_of( child ), out_x, out_y, ref_of( win_x ), ref_of( win_y ), ref_of( mask ) );
-	#elif OS_WINDOWS
-		POINT cursor;
-		GetCursorPos( ref_of( cursor ) );
-		val_of( out_x ) = cursor.x;
-		val_of( out_y ) = cursor.y;
-	#endif
-}
-
-//
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////// program functions
-/// program functions
-//
+////////////////////////////////////////////////////////////////
+#pragma region program
 
 ////////////////////////////////
 // hidden
@@ -1816,32 +1945,34 @@ fn _program_loop()
 		temp n1 count = program.windows_count;
 		temp flag ready = yes;
 
-		iter( i, program_max_windows )
+		iter( window_id, program_max_windows )
 		{
-			window ref const w = ref_of( program.windows[ i ] );
+			temp window ref const window_ref = ref_of( program.windows[ window_id ] );
 
-			if( w->state is window_state_unknown ) next;
+			if( window_ref->state is window_state_unknown ) next;
 
-			with( w->state )
+			with( window_ref->state )
 			{
 				when( window_state_preparing )
 				{
-					w->state = window_state_opening;
+					window_ref_center( window_ref );
+					call( window_ref->fn_start, window_ref );
+					window_ref->state = window_state_opening;
 					ready = no;
 					skip;
 				}
 
 				when( window_state_opening )
 				{
-					window_show( w );
-					w->state = window_state_ready;
+					window_ref_show( window_ref );
+					window_ref->state = window_state_ready;
 					skip;
 				}
 
 				when( window_state_closing )
 				{
 					program.windows_count -= 1;
-					w->state = window_state_unknown;
+					window_ref->state = window_state_unknown;
 					skip;
 				}
 
@@ -1907,7 +2038,12 @@ fn _program_close()
 ////////////////////////////////
 // visible
 
-embed window ref const program_create_window( byte const ref const name, n2x2 const size )
+fn program_set_canvas_ref( canvas const ref const canvas_ref )
+{
+	program.canvas_ref = canvas_ref;
+}
+
+embed window ref const program_make_window_ref( byte const ref const name, n2x2 const size, window_ref_fn const fn_start, window_ref_fn const fn_resize, window_ref_fn const fn_tick )
 {
 	temp n2 window_index = 0;
 
@@ -1922,6 +2058,9 @@ embed window ref const program_create_window( byte const ref const name, n2x2 co
 	bytes_paste( window_ref->name, name );
 	window_ref->size = size;
 	window_ref->state = window_state_preparing;
+	window_ref->fn_start = fn_start;
+	window_ref->fn_resize = fn_resize;
+	window_ref->fn_tick = fn_tick;
 
 	#if OS_LINUX
 		temp i4 const screen = DefaultScreen( program.display );
@@ -1941,7 +2080,7 @@ embed window ref const program_create_window( byte const ref const name, n2x2 co
 		window_ref->picture = XRenderCreatePicture( program.display, window_ref->handle, program.format, 0, nothing );
 	#elif OS_WINDOWS
 		WNDCLASS wclass = { 0 };
-		wclass.lpfnWndProc = to( type_of( wclass.lpfnWndProc ), _window_process_event );
+		wclass.lpfnWndProc = to( type_of( wclass.lpfnWndProc ), _window_ref_process_event );
 		wclass.hInstance = program.instance;
 		wclass.lpszClassName = window_ref->name;
 		RegisterClass( ref_of( wclass ) );
@@ -1980,6 +2119,10 @@ embed window ref const program_create_window( byte const ref const name, n2x2 co
 	}\
 	fn _program_start( i4 const start_inputs_count, byte const ref const ref const start_inputs )
 
+#pragma endregion program
 //
+
+#pragma endregion definitions
+///
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
