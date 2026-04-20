@@ -1614,11 +1614,11 @@ fn _window_ref_draw( window ref const window_ref )
 				_window_add_input_pressed( key );
 
 				#if OS_LINUX
-					temp byte char_buffer;
-					if( XLookupString( to( XKeyEvent ref, ref_of( e->xkey ) ), ref_of( char_buffer ), 1, nothing, nothing ) is 1 and char_buffer >= 0x20 and char_buffer < 0x7F and window_ref->input_bytes_count < window_max_input_bytes )
+					byte char_buffer;
+					if( XLookupString( to( XKeyEvent ref, ref_of( e->xkey ) ), ref_of( char_buffer ), 1, nothing, nothing ) is 1 and char_buffer >= 0x20 and char_buffer < 0x7F and window_ref->input_bytes_count < window_max_inputs )
 					{
 						window_ref->input_bytes[ window_ref->input_bytes_count++ ] = char_buffer;
-						is_input = yes;
+						window_ref->call_tick = yes;
 					}
 				#endif
 
