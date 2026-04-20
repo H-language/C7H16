@@ -513,7 +513,7 @@ type_from( OS_PICK( XEvent, MSG ) ) window_event;
 #endif
 
 #ifndef window_max_inputs
-	#define window_max_inputs 16
+	#define window_max_inputs 8
 #endif
 
 type( window );
@@ -550,17 +550,20 @@ type( window )
 	window_ref_fn fn_tick;
 
 	view views[ window_max_views ];
-	n1 views_count;
 
 	n1 inputs[ inputs_count ];
 	n1 inputs_pressed[ window_max_inputs ];
-	n1 inputs_pressed_count;
 	n1 inputs_released[ window_max_inputs ];
-	n1 inputs_released_count;
+	byte input_bytes[ window_max_inputs ];
 	i4x2 mouse;
 
 	window_state state bits( window_states_count );
+	n1 views_count bits( window_max_views );
+	n1 inputs_pressed_count bits( window_max_inputs );
+	n1 inputs_released_count bits( window_max_inputs );
+	n1 input_bytes_count bits( window_max_inputs );
 	flag visible bits_flag;
+	flag call_tick bits_flag;
 };
 
 #pragma endregion window
@@ -1262,6 +1265,8 @@ fn _window_ref_tick( window ref const window_ref )
 		}
 		window_ref->inputs_released_count = 0;
 	}
+
+	window_ref->input_bytes_count = 0;
 }
 
 fn _window_ref_draw( window ref const window_ref )
@@ -1497,13 +1502,13 @@ fn _window_ref_draw( window ref const window_ref )
 	{\
 		window_ref->inputs[ VALUE ] |= INPUT_MASK_PRESSED | INPUT_MASK_HELD;\
 		window_ref->inputs_pressed[ window_ref->inputs_pressed_count++ ] = n1( VALUE );\
-		is_input = yes;\
+		window_ref->call_tick = yes;\
 	}
 
 #define _window_add_input_released( VALUE )\
 	window_ref->inputs[ VALUE ] |= INPUT_MASK_RELEASED;\
 	window_ref->inputs_released[ window_ref->inputs_released_count++ ] = n1( VALUE );\
-	is_input = yes
+	window_ref->call_tick = yes
 
 #if OS_LINUX
 	embed out_state _window_ref_process_event( window ref const window_ref, i4 const event, window_event const ref e )
@@ -1515,8 +1520,6 @@ fn _window_ref_draw( window ref const window_ref )
 		temp window ref const window_ref = to( window ref const, GetWindowLongPtr( h, GWLP_USERDATA ) );
 	#endif
 	jump_if_nothing( window_ref ) exit_events;
-
-	temp flag is_input = no;
 
 	with( event )
 	{
@@ -1609,6 +1612,16 @@ fn _window_ref_draw( window ref const window_ref )
 			{
 				temp byte key = _INPUT_MAP[ PICK( OS_LINUX, XkbKeycodeToKeysym( program.display, e->xkey.keycode, 0, 0 ) & 0x1ff, wp & 0xff ) ];
 				_window_add_input_pressed( key );
+
+				#if OS_LINUX
+					temp byte char_buffer;
+					if( XLookupString( to( XKeyEvent ref, ref_of( e->xkey ) ), ref_of( char_buffer ), 1, nothing, nothing ) is 1 and char_buffer >= 0x20 and char_buffer < 0x7F and window_ref->input_bytes_count < window_max_input_bytes )
+					{
+						window_ref->input_bytes[ window_ref->input_bytes_count++ ] = char_buffer;
+						is_input = yes;
+					}
+				#endif
+
 				skip;
 			}
 
@@ -1618,6 +1631,18 @@ fn _window_ref_draw( window ref const window_ref )
 				_window_add_input_released( key );
 				skip;
 			}
+
+			#if OS_WINDOWS
+				when( WM_CHAR )
+				{
+					if( wp >= 0x20 and wp < 0x7F and window_ref->input_bytes_count < window_max_inputs )
+					{
+						window_ref->input_bytes[ window_ref->input_bytes_count++ ] = to( byte, wp );
+						window_ref->call_tick = yes;
+					}
+					skip;
+				}
+			#endif
 		#endif
 
 		#ifndef C7H16_INPUT_NO_MOUSE
@@ -1627,7 +1652,7 @@ fn _window_ref_draw( window ref const window_ref )
 					window_event next_move;
 					while( XCheckTypedWindowEvent( program.display, window_ref->handle, MotionNotify, ref_of( next_move ) ) );
 				#endif
-				is_input = yes;
+				window_ref->call_tick = yes;
 				skip;
 			}
 
@@ -1790,11 +1815,6 @@ fn _window_ref_draw( window ref const window_ref )
 		}
 
 		other skip;
-	}
-
-	if( is_input )
-	{
-		_window_ref_tick( window_ref );
 	}
 
 	exit_events:
@@ -2007,11 +2027,11 @@ fn _program_loop()
 			{
 				XNextEvent( program.display, ref_of( event ) );
 
-				iter( i, program.windows_count )
+				iter( window_id, program.windows_count )
 				{
-					if( program.windows[ i ].handle is event.xany.window )
+					if( program.windows[ window_id ].handle is event.xany.window )
 					{
-						_window_ref_process_event( ref_of( program.windows[ i ] ), event.type, ref_of( event ) );
+						_window_ref_process_event( ref_of( program.windows[ window_id ] ), event.type, ref_of( event ) );
 						skip;
 					}
 				}
@@ -2029,6 +2049,13 @@ fn _program_loop()
 				DispatchMessage( ref_of( event ) );
 			}
 		#endif
+
+		iter( window_id, program.windows_count )
+		{
+			next_if( program.windows[ window_id ].call_tick isnt yes );
+
+			_window_ref_tick( ref_of( program.windows[ window_id ] ) );
+		}
 	}
 	print( "EXIT" newline );
 }
