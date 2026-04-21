@@ -814,6 +814,86 @@ _fn_rNx( 8 );
 //
 
 ////////////////////////////////////////////////////////////////
+#pragma region bytes
+
+fn bytes_to_h( const byte ref const in_bytes, const n4 in_size, byte ref ref out_ref )
+{
+	bytes_paste_move( val_of( out_ref ), "\"" );
+
+	iter( b, in_size )
+	{
+		temp const byte pbyte = in_bytes[ b ];
+		with( pbyte )
+		{
+			when( '\0' )
+			{
+				if_all( b + 1 < in_size, in_bytes[ b + 1 ] >= '0', in_bytes[ b + 1 ] <= '9' )
+				{
+					bytes_paste_move( val_of( out_ref ), "\\000" );
+				}
+				else
+				{
+					bytes_paste_move( val_of( out_ref ), "\\0" );
+				}
+				skip;
+			}
+
+			when( 0x1A )
+			{
+				if_all( b + 1 < in_size, in_bytes[ b + 1 ] >= '0', in_bytes[ b + 1 ] <= '7' )
+				{
+					bytes_paste_move( val_of( out_ref ), "\\032" );
+				}
+				else
+				{
+					bytes_paste_move( val_of( out_ref ), "\\32" );
+				}
+				skip;
+			}
+
+			when( '"' )
+			{
+				bytes_paste_move( val_of( out_ref ), "\\\"" );
+				skip;
+			}
+
+			when( '\\' )
+			{
+				bytes_paste_move( val_of( out_ref ), "\\\\" );
+				skip;
+			}
+
+			when( '\r' )
+			{
+				bytes_paste_move( val_of( out_ref ), "\\r" );
+				skip;
+			}
+
+			when( '\n' )
+			{
+				bytes_paste_move( val_of( out_ref ), "\\n" );
+				skip;
+			}
+
+			other
+			{
+				bytes_set_move( val_of( out_ref ), pbyte );
+			}
+		}
+
+		if( ( ( b + 1 ) mod 4000 ) is 0 and b + 1 < in_size )
+		{
+			bytes_paste_move( val_of( out_ref ), "\"\n\"" );
+		}
+	}
+
+	bytes_paste_move( val_of( out_ref ), "\"" );
+}
+
+#pragma endregion bytes
+///
+
+////////////////////////////////////////////////////////////////
 #pragma region anchor
 
 ////////////////////////////////
@@ -1615,7 +1695,7 @@ fn _window_ref_draw( window ref const window_ref )
 
 				#if OS_LINUX
 					byte char_buffer;
-					if( XLookupString( to( XKeyEvent ref, ref_of( e->xkey ) ), ref_of( char_buffer ), 1, nothing, nothing ) is 1 and char_buffer >= 0x20 and char_buffer < 0x7F and window_ref->input_bytes_count < window_max_inputs )
+					if( XLookupString( to( XKeyEvent ref, ref_of( e->xkey ) ), ref_of( char_buffer ), 1, nothing, nothing ) is 1 and window_ref->input_bytes_count < window_max_inputs )
 					{
 						window_ref->input_bytes[ window_ref->input_bytes_count++ ] = char_buffer;
 						window_ref->call_tick = yes;
@@ -1635,7 +1715,7 @@ fn _window_ref_draw( window ref const window_ref )
 			#if OS_WINDOWS
 				when( WM_CHAR )
 				{
-					if( wp >= 0x20 and wp < 0x7F and window_ref->input_bytes_count < window_max_inputs )
+					if( wp <= 0xff and window_ref->input_bytes_count < window_max_inputs )
 					{
 						window_ref->input_bytes[ window_ref->input_bytes_count++ ] = to( byte, wp );
 						window_ref->call_tick = yes;
@@ -1949,6 +2029,7 @@ fn _program_setup()
 {
 	#if OS_LINUX
 		program.display = XOpenDisplay( nothing );
+		XkbSetDetectableAutoRepeat( program.display, yes, nothing );
 
 		temp i4 const screen = DefaultScreen( program.display );
 		program.visual = DefaultVisual( program.display, screen );
