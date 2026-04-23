@@ -545,7 +545,6 @@ type( window )
 		HDC window_dc;
 	#endif
 
-	window_ref_fn fn_start;
 	window_ref_fn fn_resize;
 	window_ref_fn fn_tick;
 
@@ -564,6 +563,7 @@ type( window )
 	n1 input_bytes_count bits( window_max_inputs );
 	flag visible bits_flag;
 	flag call_tick bits_flag;
+	flag changed_cursor bits_flag;
 };
 
 #pragma endregion window
@@ -1022,6 +1022,42 @@ fn canvas_ref_fill( canvas const ref const canvas_ref, pixel const color )
 	}
 }
 
+fn canvas_ref_fill_area( canvas const ref const canvas_ref, i2x2 const tl, i2x2 br, pixel const color )
+{
+	temp i4 const width = br.x - tl.x;
+	temp i4 const height = br.y - tl.y;
+	out_if_any( width <= 0, height <= 0 );
+
+	temp i4 const stride = i4( canvas_ref->size.w );
+	temp i4 const row_bytes = width << pixel_bytes_shift;
+	temp pixel ref row = ref_of( canvas_ref->pixels[ tl.y * stride + tl.x ] );
+
+	if_all( color.r is color.g, color.g is color.b, color.b is color.a )
+	{
+		iter( y, height )
+		{
+			bytes_fill( row, color.r, row_bytes );
+			row += stride;
+		}
+	}
+	else
+	{
+		temp pixel ref const first = row;
+		iter( x, width )
+		{
+			first[ x ] = color;
+		}
+
+		row += stride;
+
+		iter( y, height - 1 )
+		{
+			bytes_copy( row, first, row_bytes );
+			row += stride;
+		}
+	}
+}
+
 #define canvas_ref_clear( CANVAS ) bytes_clear( CANVAS->pixels, CANVAS->area << pixel_bytes_shift )
 
 #define canvas_ref_check_pixel( CANVAS_REF, X, Y ) ( point_in_size( X, Y, CANVAS_REF->size.w, CANVAS_REF->size.h ) )
@@ -1043,6 +1079,7 @@ fn canvas_ref_fill( canvas const ref const canvas_ref, pixel const color )
 #define draw_set_canvas_ref( CANVAS_REF ) program.canvas_ref = ( CANVAS_REF )
 
 #define draw_fill( PIXEL ) canvas_ref_fill( program.canvas_ref, PIXEL )
+#define draw_fill_area( TL, BR, PIXEL ) canvas_ref_fill_area( program.canvas_ref, TL, BR, PIXEL )
 #define draw_clear() canvas_ref_clear( program.canvas_ref )
 
 #define check_pixel( X, Y ) canvas_ref_check_pixel( program.canvas_ref, X, Y )
@@ -1078,23 +1115,18 @@ embed font make_font( canvas const canvas )
 	out this;
 }
 
-#define _canvas_ref_blit_letter( CANVAS_REF, FONT, BYTE )\
+#define _canvas_ref_blit_letter( BYTE )\
 	{\
-		temp const byte _letter = ( BYTE ) - ' ';\
-		temp const i2 _letter_x = ( _letter & 0x0F ) * _letter_w;\
-		temp const i2 _letter_y = ( _letter >> 4 ) * _letter_h;\
-		temp pixel ref _to_ref = CANVAS_REF->pixels + _draw_y * CANVAS_REF->size.w + _draw_x;\
-		temp const pixel ref _from_ref = FONT.canvas.pixels + _letter_y * FONT.canvas.size.w + _letter_x;\
+		temp byte const _letter = ( BYTE ) - ' ';\
+		temp pixel ref _to_ref = _to_ref_start;\
+		temp pixel const ref _from_ref = _from_base + ( _letter >> 4 ) * _letter_h * _from_w + ( _letter & 0x0F ) * _letter_w;\
 		temp i2 _h = _letter_h;\
 		do\
 		{\
 			temp i2 _w = _letter_w;\
 			do\
 			{\
-				if( _from_ref->a )\
-				{\
-					val_of( _to_ref ) = _color;\
-				}\
+				if( _from_ref->a ) val_of( _to_ref ) = _color;\
 				++_to_ref;\
 				++_from_ref;\
 			}\
@@ -1105,43 +1137,41 @@ embed font make_font( canvas const canvas )
 		while( --_h );\
 	}
 
+#define _canvas_ref_draw_setup( CANVAS_REF, FONT, POS, ANCHOR, COLOR, ANCHOR_W )\
+	temp i2 const _letter_w = FONT.letter_size.w;\
+	temp i2 const _letter_h = FONT.letter_size.h;\
+	temp anchor const _anchor = ANCHOR;\
+	temp pixel const _color = COLOR;\
+	temp i2x2 const _pos = POS;\
+	temp i4 const _to_w = CANVAS_REF->size.w;\
+	temp i4 const _from_w = FONT.canvas.size.w;\
+	temp i4 const _to_step = _to_w - _letter_w;\
+	temp i4 const _from_step = _from_w - _letter_w;\
+	temp pixel const ref _from_base = FONT.canvas.pixels;\
+	temp pixel ref _to_ref_start = CANVAS_REF->pixels + ( _pos.y + anchor_get_y( _anchor, 0, _letter_h, 0 ) ) * _to_w + _pos.x + anchor_get_x( _anchor, 0, ANCHOR_W, 0 );
+
 #define canvas_ref_draw_byte( CANVAS_REF, FONT, BYTE, POS, ANCHOR, COLOR )\
 	START_DEF\
 	{\
-		temp const i2 _letter_w = FONT.letter_size.w;\
-		temp const i2 _letter_h = FONT.letter_size.h;\
-		temp anchor const _anchor = ANCHOR;\
-		temp const i2 _draw_x = POS.x + anchor_get_x( _anchor, 0, _letter_w, 0 );\
-		temp const i2 _draw_y = POS.y + anchor_get_y( _anchor, 0, _letter_h, 0 );\
-		temp const pixel _color = COLOR;\
-		temp const i4 _to_step = CANVAS_REF->size.w - _letter_w;\
-		temp const i4 _from_step = FONT.canvas.size.w - _letter_w;\
-		_canvas_ref_blit_letter( CANVAS_REF, FONT, BYTE )\
+		_canvas_ref_draw_setup( CANVAS_REF, FONT, POS, ANCHOR, COLOR, _letter_w );\
+		_canvas_ref_blit_letter( BYTE )\
 	}\
 	END_DEF
 
 #define canvas_ref_draw_bytes( CANVAS_REF, FONT, BYTES, BYTES_SIZE, POS, ANCHOR, COLOR )\
 	START_DEF\
 	{\
-		temp const n2 _text_len = pick( BYTES_SIZE is 0, bytes_measure( BYTES ), BYTES_SIZE );\
-		temp const i2 _letter_w = FONT.letter_size.w;\
-		temp const i2 _letter_h = FONT.letter_size.h;\
-		temp const i2 _text_width = _text_len * _letter_w;\
-		temp anchor const _anchor = ANCHOR;\
-		temp i2 _draw_x = POS.x + anchor_get_x( _anchor, 0, _text_width, 0 );\
-		temp const i2 _draw_y = POS.y + anchor_get_y( _anchor, 0, _letter_h, 0 );\
-		temp const pixel _color = COLOR;\
-		temp const i4 _to_step = CANVAS_REF->size.w - _letter_w;\
-		temp const i4 _from_step = FONT.canvas.size.w - _letter_w;\
+		temp n2 const _text_len = pick( BYTES_SIZE is 0, bytes_measure( BYTES ), BYTES_SIZE );\
+		_canvas_ref_draw_setup( CANVAS_REF, FONT, POS, ANCHOR, COLOR, _text_len * _letter_w );\
 		iter( _l, _text_len )\
 		{\
-			_canvas_ref_blit_letter( CANVAS_REF, FONT, BYTES[ _l ] ) _draw_x += _letter_w;\
+			_canvas_ref_blit_letter( BYTES[ _l ] ) _to_ref_start += _letter_w;\
 		}\
 	}\
 	END_DEF
 
-#define draw_byte( FONT_REF, BYTE, POS, ANCHOR, COLOR ) canvas_ref_draw_byte( program.canvas_ref, FONT_REF, BYTE, POS, ANCHOR, COLOR )
-#define draw_bytes( FONT_REF, BYTES, BYTES_SIZE, POS, ANCHOR, COLOR ) canvas_ref_draw_bytes( program.canvas_ref, FONT_REF, BYTES, BYTES_SIZE, POS, ANCHOR, COLOR )
+#define draw_byte( FONT, BYTE, POS, ANCHOR, COLOR ) canvas_ref_draw_byte( program.canvas_ref, FONT, BYTE, POS, ANCHOR, COLOR )
+#define draw_bytes( FONT, BYTES, BYTES_SIZE, POS, ANCHOR, COLOR ) canvas_ref_draw_bytes( program.canvas_ref, FONT, BYTES, BYTES_SIZE, POS, ANCHOR, COLOR )
 
 #pragma endregion font
 //
@@ -1636,7 +1666,14 @@ fn _window_ref_draw( window ref const window_ref )
 			{
 				if( LOWORD( lp ) is HTCLIENT )
 				{
-					SetCursor( LoadCursor( nothing, IDC_ARROW ) );
+					if( window_ref->changed_cursor is no )
+					{
+						SetCursor( LoadCursor( nothing, IDC_ARROW ) );
+					}
+					else
+					{
+						window_ref->changed_cursor = no;
+					}
 					out yes;
 				}
 				skip;
@@ -2003,7 +2040,7 @@ group( cursor_type, i4 )
 
 fn window_ref_set_cursor( window ref const window_ref, cursor_type const cursor )
 {
-	//window_ref->changed_cursor = yes;
+	window_ref->changed_cursor = yes;
 	#if OS_LINUX
 		perm Cursor cache[ 256 ] = { 0 };
 		if( not cache[ cursor ] )
@@ -2060,7 +2097,6 @@ fn _program_loop()
 				when( window_state_preparing )
 				{
 					window_ref_center( window_ref );
-					call( window_ref->fn_start, window_ref );
 					window_ref->state = window_state_opening;
 					ready = no;
 					skip;
@@ -2154,7 +2190,7 @@ fn program_set_canvas_ref( canvas const ref const canvas_ref )
 	program.canvas_ref = canvas_ref;
 }
 
-embed window ref const program_make_window_ref( byte const ref const name, n2x2 const size, window_ref_fn const fn_start, window_ref_fn const fn_resize, window_ref_fn const fn_tick )
+embed window ref const program_make_window_ref( byte const ref const name, n2x2 const size, window_ref_fn const fn_resize, window_ref_fn const fn_tick )
 {
 	temp n2 window_index = 0;
 
@@ -2169,7 +2205,6 @@ embed window ref const program_make_window_ref( byte const ref const name, n2x2 
 	bytes_paste( window_ref->name, name );
 	window_ref->size = size;
 	window_ref->state = window_state_preparing;
-	window_ref->fn_start = fn_start;
 	window_ref->fn_resize = fn_resize;
 	window_ref->fn_tick = fn_tick;
 
