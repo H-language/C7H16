@@ -29,7 +29,7 @@
 	#include <X11/XKBlib.h>
 	#include <X11/cursorfont.h>
 #else
-	__declspec( dllimport ) int __stdcall timeBeginPeriod( int );
+	//__declspec( dllimport ) int __stdcall timeBeginPeriod( int );
 #endif
 
 #include <H.h>
@@ -1954,6 +1954,16 @@ fn window_ref_update( window ref const window_ref )
 	#endif
 }
 
+fn window_ref_update_now( window ref const window_ref )
+{
+	#if OS_LINUX
+		_window_ref_draw( window_ref );
+		XFlush( program.display );
+	#elif OS_WINDOWS
+		RedrawWindow( window_ref->handle, nothing, nothing, RDW_INVALIDATE | RDW_UPDATENOW );
+	#endif
+}
+
 fn window_ref_show( window ref const window_ref )
 {
 	out_if( window_ref->visible is yes );
@@ -2079,6 +2089,34 @@ fn _program_setup()
 	#endif
 }
 
+fn _program_process_events()
+{
+	#if OS_LINUX
+		XFlush( program.display );
+		window_event event;
+		while( XPending( program.display ) )
+		{
+			XNextEvent( program.display, ref_of( event ) );
+
+			iter( window_id, program.windows_count )
+			{
+				if( program.windows[ window_id ].handle is event.xany.window )
+				{
+					_window_ref_process_event( ref_of( program.windows[ window_id ] ), event.type, ref_of( event ) );
+					skip;
+				}
+			}
+		}
+	#elif OS_WINDOWS
+		window_event event;
+		while( PeekMessage( ref_of( event ), 0, 0, 0, PM_REMOVE ) )
+		{
+			TranslateMessage( ref_of( event ) );
+			DispatchMessage( ref_of( event ) );
+		}
+	#endif
+}
+
 fn _program_loop()
 {
 	loop
@@ -2128,44 +2166,22 @@ fn _program_loop()
 		// events
 
 		#if OS_LINUX
-			XFlush( program.display );
+	XFlush( program.display );
+	if( ready and not XPending( program.display ) )
+	{
+		struct pollfd pfd = { 0 };
+		pfd.fd = ConnectionNumber( program.display );
+		pfd.events = POLLIN;
+		while( poll( ref_of( pfd ), 1, -1 ) < 0 and errno is EINTR );
+	}
+#elif OS_WINDOWS
+	if( ready )
+	{
+		MsgWaitForMultipleObjects( 0, nothing, FALSE, INFINITE, QS_ALLINPUT );
+	}
+#endif
 
-			if( ready and not XPending( program.display ) )
-			{
-				struct pollfd pfd = { 0 };
-				pfd.fd = ConnectionNumber( program.display );
-				pfd.events = POLLIN;
-
-				while( poll( ref_of( pfd ), 1, -1 ) < 0 and errno is EINTR );
-			}
-
-			window_event event;
-			while( XPending( program.display ) )
-			{
-				XNextEvent( program.display, ref_of( event ) );
-
-				iter( window_id, program.windows_count )
-				{
-					if( program.windows[ window_id ].handle is event.xany.window )
-					{
-						_window_ref_process_event( ref_of( program.windows[ window_id ] ), event.type, ref_of( event ) );
-						skip;
-					}
-				}
-			}
-		#elif OS_WINDOWS
-			if( ready )
-			{
-				MsgWaitForMultipleObjects( 0, nothing, FALSE, INFINITE, QS_ALLINPUT );
-			}
-
-			window_event event;
-			while( PeekMessage( ref_of( event ), 0, 0, 0, PM_REMOVE ) )
-			{
-				TranslateMessage( ref_of( event ) );
-				DispatchMessage( ref_of( event ) );
-			}
-		#endif
+_program_process_events();
 
 		iter( window_id, program.windows_count )
 		{
@@ -2207,6 +2223,7 @@ embed window ref const program_make_window_ref( byte const ref const name, n2x2 
 	window_ref->state = window_state_preparing;
 	window_ref->fn_resize = fn_resize;
 	window_ref->fn_tick = fn_tick;
+	window_ref->call_tick = yes;
 
 	#if OS_LINUX
 		temp i4 const screen = DefaultScreen( program.display );
