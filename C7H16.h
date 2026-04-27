@@ -28,11 +28,17 @@
 	#include <X11/extensions/Xpresent.h>
 	#include <X11/XKBlib.h>
 	#include <X11/cursorfont.h>
-#else
-	//__declspec( dllimport ) int __stdcall timeBeginPeriod( int );
 #endif
 
 #include <H.h>
+
+#if OS_WINDOWS
+	#if COMPILER_TCC
+		__declspec( dllimport ) i4 __stdcall timeBeginPeriod( i4 );
+	#else
+		#include <timeapi.h>
+	#endif
+#endif
 
 #pragma endregion dependencies
 ///
@@ -135,6 +141,85 @@ _TYPEx( i8 );
 _TYPEx( r8 );
 
 #pragma endregion dimensional
+//
+
+////////////////////////////////////////////////////////////////
+#pragma region anchor
+
+#define nano_per_micro 1000
+#define nano_per_milli 1000000
+#define nano_per_sec 1000000000
+#define nano_per_min 60000000000
+#define nano_per_hour 3600000000000
+#define micro_per_milli 1000
+#define micro_per_sec 1000000
+#define micro_per_min 60000000
+#define micro_per_hour 3600000000
+#define milli_per_sec 1000
+#define milli_per_min 60000
+#define milli_per_hour 3600000
+#define sec_per_min 60
+#define sec_per_hour 3600
+#define min_per_hour 60
+
+type_from( n8 ) nano;
+#define nano( VAL ) n8( VAL )
+
+embed nano _get_nano()
+{
+	#if OS_WINDOWS
+		perm LARGE_INTEGER frequency;
+		perm LARGE_INTEGER freq_start;
+		LARGE_INTEGER current;
+
+		once
+		{
+			QueryPerformanceFrequency( ref_of( frequency ) );
+			QueryPerformanceCounter( ref_of( freq_start ) );
+		}
+
+		QueryPerformanceCounter( ref_of( current ) );
+
+		out( ( current.QuadPart - freq_start.QuadPart ) * 1000000000ULL ) / frequency.QuadPart;
+	#else
+		struct timespec ts;
+		clock_gettime( CLOCK_MONOTONIC, ref_of( ts ) );
+		out to( nano, ts.tv_sec * nano_per_sec + ts.tv_nsec );
+	#endif
+}
+
+embed nano get_nano()
+{
+	perm nano epoch = 0;
+	once
+	{
+		epoch = _get_nano();
+	}
+	out _get_nano() - epoch;
+}
+
+fn nano_sleep( nano const time )
+{
+	#if OS_WINDOWS
+		static flag timer_init = no;
+		static HANDLE timer = nothing;
+		if( not timer_init )
+		{
+			timer_init = yes;
+			timeBeginPeriod( 1 );
+			timer = CreateWaitableTimer( nothing, TRUE, nothing );
+		}
+
+		LARGE_INTEGER li = { .QuadPart = -( time / 100 ) };
+		SetWaitableTimer( timer, ref_of( li ), 0, nothing, nothing, FALSE );
+		WaitForSingleObject( timer, INFINITE );
+	#else
+		struct timespec ts = { time / nano_per_sec, time mod nano_per_sec };
+		nanosleep( ref_of( ts ), nothing );
+	#endif
+}
+
+#pragma endregion anchor
 //
 
 ////////////////////////////////////////////////////////////////
@@ -505,7 +590,7 @@ type_from( OS_PICK( XImage ref, BITMAPINFO ) ) window_image;
 type_from( OS_PICK( XEvent, MSG ) ) window_event;
 
 #ifndef window_max_name_size
-	#define window_max_name_size 16
+	#define window_max_name_size path_max_size
 #endif
 
 #ifndef window_max_views
@@ -1583,7 +1668,7 @@ fn _window_ref_draw( window ref const window_ref )
 			#elif OS_WINDOWS
 				SetStretchBltMode( wdc, COLORONCOLOR ); //pick( scale_w <= 1.0 or scale_h <= 1.0, HALFTONE, COLORONCOLOR ) );
 				SetBrushOrgEx( wdc, 0, 0, NULL );
-				StretchDIBits( wdc, view_l, view_t, view_w, view_h, 0, 0, canvas_w, canvas_h, view_ref->canvas.pixels, ref_of( window_ref->image ), DIB_RGB_COLORS, SRCCOPY );
+				StretchDIBits( wdc, view_l, view_t, view_w, view_h, 0, 0, canvas_w, canvas_h, view_ref->canvas.pixels, ref_of( window_ref->image ), DIB_RGB_COLORS, to( DWORD, 0x00CC0020 ) );
 			#endif
 		}
 
@@ -2082,6 +2167,7 @@ fn _program_setup()
 		program.visual = DefaultVisual( program.display, screen );
 		program.format = XRenderFindVisualFormat( program.display, program.visual );
 	#elif OS_WINDOWS
+		program.icon = LoadIcon( GetModuleHandle( nothing ), MAKEINTRESOURCE( 1 ) );
 		#if DEBUG
 			AllocConsole();
 			freopen( "CONOUT$", "w", stdout );
@@ -2166,22 +2252,22 @@ fn _program_loop()
 		// events
 
 		#if OS_LINUX
-	XFlush( program.display );
-	if( ready and not XPending( program.display ) )
-	{
-		struct pollfd pfd = { 0 };
-		pfd.fd = ConnectionNumber( program.display );
-		pfd.events = POLLIN;
-		while( poll( ref_of( pfd ), 1, -1 ) < 0 and errno is EINTR );
-	}
-#elif OS_WINDOWS
-	if( ready )
-	{
-		MsgWaitForMultipleObjects( 0, nothing, FALSE, INFINITE, QS_ALLINPUT );
-	}
-#endif
+			XFlush( program.display );
+			if( ready and not XPending( program.display ) )
+			{
+				struct pollfd pfd = { 0 };
+				pfd.fd = ConnectionNumber( program.display );
+				pfd.events = POLLIN;
+				while( poll( ref_of( pfd ), 1, -1 ) < 0 and errno is EINTR );
+			}
+		#elif OS_WINDOWS
+			if( ready )
+			{
+				MsgWaitForMultipleObjects( 0, nothing, FALSE, INFINITE, QS_ALLINPUT );
+			}
+		#endif
 
-_program_process_events();
+		_program_process_events();
 
 		iter( window_id, program.windows_count )
 		{
@@ -2246,6 +2332,7 @@ embed window ref const program_make_window_ref( byte const ref const name, n2x2 
 		wclass.lpfnWndProc = to( type_of( wclass.lpfnWndProc ), _window_ref_process_event );
 		wclass.hInstance = program.instance;
 		wclass.lpszClassName = window_ref->name;
+		wclass.hIcon = program.icon;
 		RegisterClass( ref_of( wclass ) );
 
 		RECT rect = { 0, 0, window_ref->size.w, window_ref->size.h };
@@ -2260,8 +2347,8 @@ embed window ref const program_make_window_ref( byte const ref const name, n2x2 
 		window_ref->image.bmiHeader.biBitCount = 32;
 		window_ref->image.bmiHeader.biCompression = BI_RGB;
 
-		SendMessage( window_ref->handle, WM_SETICON, ICON_SMALL, to( LPARAM, program.icon ) );
-		SendMessage( window_ref->handle, WM_SETICON, ICON_BIG, to( LPARAM, program.icon ) );
+		//SendMessage( window_ref->handle, WM_SETICON, ICON_SMALL, to( LPARAM, program.icon ) );
+		//SendMessage( window_ref->handle, WM_SETICON, ICON_BIG, to( LPARAM, program.icon ) );
 
 		SetWindowLongPtr( window_ref->handle, GWLP_USERDATA, to( LONG_PTR, window_ref ) );
 	#endif
