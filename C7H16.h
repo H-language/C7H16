@@ -94,6 +94,10 @@
 		};\
 		variant\
 		{\
+			TYPE##x2 xy;\
+		};\
+		variant\
+		{\
 			TYPE w;\
 			TYPE h;\
 			TYPE d;\
@@ -112,15 +116,19 @@
 		};\
 		variant\
 		{\
+			TYPE##x3 xyz;\
+		};\
+		variant\
+		{\
+			TYPE##x2 xy;\
+			TYPE##x2 zw;\
+		};\
+		variant\
+		{\
 			TYPE r;\
 			TYPE g;\
 			TYPE b;\
 			TYPE a;\
-		};\
-		variant\
-		{\
-			TYPE##x2 axy;\
-			TYPE##x2 bxy;\
 		};\
 	}
 
@@ -1516,10 +1524,10 @@ fn _window_ref_draw( window ref const window_ref )
 
 		if( clipped is yes )
 		{
-			clip_l = i4( view_ref->clip_region.axy.x );
-			clip_t = i4( view_ref->clip_region.axy.y );
-			clip_r = i4( view_ref->clip_region.bxy.x );
-			clip_b = i4( view_ref->clip_region.bxy.y );
+			clip_l = i4( view_ref->clip_region.xy.x );
+			clip_t = i4( view_ref->clip_region.xy.y );
+			clip_r = i4( view_ref->clip_region.zw.x );
+			clip_b = i4( view_ref->clip_region.zw.y );
 
 			skip_if( clip_r <= clip_l or clip_b <= clip_t );
 		}
@@ -2358,7 +2366,7 @@ embed window ref const program_make_window_ref( byte const ref const name, n2x2 
 
 #undef start
 #define start\
-	fn _program_start( i4 const start_inputs_count, byte const ref const ref const start_inputs );\
+	fn _program_start( i4 start_inputs_count, byte const ref const ref start_inputs );\
 	_main_fn\
 	{\
 		_program_setup();\
@@ -2367,7 +2375,7 @@ embed window ref const program_make_window_ref( byte const ref const name, n2x2 
 		_program_close();\
 		out success;\
 	}\
-	fn _program_start( i4 const start_inputs_count, byte const ref const ref const start_inputs )
+	fn _program_start( i4 start_inputs_count, byte const ref const ref start_inputs )
 
 #pragma endregion program
 //
