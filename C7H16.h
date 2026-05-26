@@ -561,7 +561,6 @@ global
 	n1 windows_count bits( program_max_windows );
 	n1 resizing bits( 3 );
 	flag tick_events bits_flag;
-	flag cli bits_flag;
 }
 program;
 
@@ -2260,8 +2259,6 @@ fn _window_ref_get_mouse_position( window ref const window_ref, i4 ref const out
 
 fn _window_ref_update( window ref const window_ref )
 {
-	out_if( program.cli is yes );
-
 	#if OS_LINUX
 		XClearArea( program.display, window_ref->handle, 0, 0, 0, 0, yes );
 	#elif OS_WINDOWS
@@ -2935,8 +2932,6 @@ fn _window_ref_draw( window ref const window_ref )
 
 fn window_ref_update_now( window ref const window_ref )
 {
-	out_if( program.cli is yes );
-
 	#if OS_LINUX
 		_window_ref_draw( window_ref );
 		XFlush( program.display );
@@ -3093,17 +3088,10 @@ fn _program_setup()
 		chdir( parent_path );
 
 		program.display = XOpenDisplay( nothing );
-		if_nothing( program.display )
-		{
-			program.cli = yes;
-		}
-		else
-		{
-			XkbSetDetectableAutoRepeat( program.display, yes, nothing );
-			i4 const screen = DefaultScreen( program.display );
-			program.visual = DefaultVisual( program.display, screen );
-			program.format = XRenderFindVisualFormat( program.display, program.visual );
-		}
+		XkbSetDetectableAutoRepeat( program.display, yes, nothing );
+		i4 const screen = DefaultScreen( program.display );
+		program.visual = DefaultVisual( program.display, screen );
+		program.format = XRenderFindVisualFormat( program.display, program.visual );
 	#elif OS_WINDOWS
 		SetCurrentDirectoryA( parent_path );
 
@@ -3146,8 +3134,6 @@ fn _program_process_events()
 
 fn _program_wait_until( nano const deadline )
 {
-	out_if( program.cli is yes );
-	
 	#define _program_wait_max_drift nano_per_milli
 	#define _program_wait_spin_headroom ( 100 * nano_per_micro )
 	#define _program_wait_chunk ( 2 * nano_per_milli )
@@ -3207,8 +3193,6 @@ fn _program_wait_until( nano const deadline )
 
 fn _program_loop()
 {
-	out_if( program.cli is yes );
-
 	loop
 	{
 		_program_process_events();
@@ -3354,8 +3338,6 @@ fn _program_close()
 
 embed window ref const program_make_window_ref( byte const ref const name, n2x2 const size, window_ref_fn const fn_resize, window_ref_fn const fn_tick )
 {
-	out_if( program.cli is yes ) nothing;
-
 	n2 window_index = 0;
 
 	while( program.windows[ window_index ].state isnt window_state_unknown )
