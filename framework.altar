@@ -1,0 +1,70 @@
+properties
+	H-language/C7H16
+	0.1.0
+
+libraries
+	H-language/H
+
+Linux
+	-lm
+	-lX11
+	-lXrender
+
+Windows
+	-luser32
+	-lgdi32
+	-lwinmm
+	-mwindows
+
+example
+`
+#include <C7H16.h>
+
+global
+{
+	window ref window_ref;
+	view ref view_ref;
+
+	pixel color;
+}
+test;
+
+fn test_tick( window ref const window_ref )
+{
+	temp flag update = no;
+
+	if( mouse_pressed( left ) )
+	{
+		test.color = pixel_cyan;
+		update = yes;
+	}
+	else if( mouse_released( left ) )
+	{
+		test.color = pixel_magenta;
+		update = yes;
+	}
+
+	if( update is yes )
+	{
+		test.view_ref->update = yes;
+		window_ref_update( window_ref );
+	}
+}
+
+fn test_view_draw( view ref const view_ref )
+{
+	program.current_canvas_ref = ref_of( view_ref->canvas );
+
+	fill( test.color );
+}
+
+start
+{
+	print( "hello C7H16!" newline );
+
+	test.window_ref = program_make_window_ref( "test", n2x2( 640, 480 ), nothing, test_tick );
+	test.view_ref = window_ref_make_view_ref( test.window_ref, make_canvas( 64, 64 ), test_view_draw );
+	test.view_ref->clear = yes;
+	test.color = pixel_yellow;
+}
+`
