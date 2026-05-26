@@ -3088,10 +3088,13 @@ fn _program_setup()
 		chdir( parent_path );
 
 		program.display = XOpenDisplay( nothing );
-		XkbSetDetectableAutoRepeat( program.display, yes, nothing );
-		i4 const screen = DefaultScreen( program.display );
-		program.visual = DefaultVisual( program.display, screen );
-		program.format = XRenderFindVisualFormat( program.display, program.visual );
+		if_something( program.display )
+		{
+			XkbSetDetectableAutoRepeat( program.display, yes, nothing );
+			i4 const screen = DefaultScreen( program.display );
+			program.visual = DefaultVisual( program.display, screen );
+			program.format = XRenderFindVisualFormat( program.display, program.visual );
+		}
 	#elif OS_WINDOWS
 		SetCurrentDirectoryA( parent_path );
 
