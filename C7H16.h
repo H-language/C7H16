@@ -1137,22 +1137,40 @@ fn _canvas_ref_resize( canvas ref const canvas_ref, n2 const width, n2 const hei
 ////////////////
 #pragma region | - set canvas
 
+#define _canvas_ref_to_setup( TO_REF, TLx, TLy, W, H )\
+	i2 const _to_x = ( TLx );\
+	i2 const _to_y = ( TLy );\
+	i2 const _W = ( W );\
+	i2 const _H = ( H );\
+	pixel ref _to_ref = TO_REF->pixels + _to_y * TO_REF->size.w + _to_x
+
+#define _canvas_ref_copy_loop( TO_REF, FROM_STEP, COUNT )\
+	n4 const _bytes_per_row = _W << pixel_bytes_shift;\
+	i4 const _to_step = TO_REF->size.w;\
+	i4 const _from_step = ( FROM_STEP );\
+	i2 _h = ( COUNT );\
+	if( _h ) do\
+	{\
+		bytes_copy( _to_ref, _from_ref, _bytes_per_row );\
+		_to_ref += _to_step;\
+		_from_ref += _from_step;\
+	}\
+	while( --_h )
+
 #define _canvas_ref_set_canvas_setup( TO_REF, FROM, TLx, TLy, PART_TLx, PART_TLy, PART_SIZEw, PART_SIZEh )\
 	i4 const _from_w = FROM.size.w;\
-	i2 const _W = ( PART_SIZEw );\
-	i2 const _H = ( PART_SIZEh );\
-	pixel ref _to_ref = TO_REF->pixels + ( TLy ) * TO_REF->size.w + ( TLx );\
+	_canvas_ref_to_setup( TO_REF, TLx, TLy, PART_SIZEw, PART_SIZEh );\
 	pixel const ref _from_ref = FROM.pixels + ( PART_TLy ) * _from_w + ( PART_TLx )
 
 #define _canvas_ref_set_canvas_setup_safe( TO_REF, FROM, TLx, TLy, PART_TLx, PART_TLy, PART_SIZEw, PART_SIZEh )\
 	i4 const _from_w = FROM.size.w;\
-	i2 const _TLx = TLx;\
+	i2 const _TLx = ( TLx );\
 	i2 const _to_x = MAX( 0, _TLx );\
 	i2 const _offset_x = _to_x - _TLx;\
 	i2 const _from_x = ( PART_TLx ) + _offset_x;\
 	i2 const _W = i2_min3( TO_REF->size.w - _to_x, _from_w - _from_x, ( PART_SIZEw ) - _offset_x );\
 	skip_if( _W <= 0 );\
-	i2 const _TLy = TLy;\
+	i2 const _TLy = ( TLy );\
 	i2 const _to_y = MAX( 0, _TLy );\
 	i2 const _offset_y = _to_y - _TLy;\
 	i2 const _from_y = ( PART_TLy ) + _offset_y;\
@@ -1160,19 +1178,6 @@ fn _canvas_ref_resize( canvas ref const canvas_ref, n2 const width, n2 const hei
 	skip_if( _H <= 0 );\
 	pixel ref _to_ref = TO_REF->pixels + _to_y * TO_REF->size.w + _to_x;\
 	pixel const ref _from_ref = FROM.pixels + _from_y * _from_w + _from_x
-
-#define _canvas_ref_set_canvas_loop( TO_REF )\
-	n4 const _bytes_per_row = _W << pixel_bytes_shift;\
-	i4 const _to_step = TO_REF->size.w;\
-	i4 const _from_step = _from_w;\
-	i2 _h = _H;\
-	do\
-	{\
-		bytes_copy( _to_ref, _from_ref, _bytes_per_row );\
-		_to_ref += _to_step;\
-		_from_ref += _from_step;\
-	}\
-	while( --_h )
 
 #define _canvas_ref_set_canvas_loop_per( TO_REF, CODE... )\
 	i4 const _to_step = TO_REF->size.w - _W;\
@@ -1194,6 +1199,48 @@ fn _canvas_ref_resize( canvas ref const canvas_ref, n2 const width, n2 const hei
 	while( --_h )
 
 #define _canvas_ref_set_canvas_loop_trans( TO_REF ) _canvas_ref_set_canvas_loop_per( TO_REF, if( _from_ref->a ) val_of( _to_ref ) = val_of( _from_ref ); )
+
+#pragma endregion
+
+////////////////
+#pragma region | - fill canvas
+
+#define _canvas_ref_fill_area_setup( TO_REF, TLx, TLy, BRx, BRy )\
+	_canvas_ref_to_setup( TO_REF, TLx, TLy, ( BRx ) - ( TLx ) + 1, ( BRy ) - ( TLy ) + 1 )
+
+#define _canvas_ref_fill_area_setup_safe( TO_REF, TLx, TLy, BRx, BRy )\
+	i2 const _to_x = MAX( 0, ( TLx ) );\
+	i2 const _W = i2_min2( TO_REF->size.w - _to_x, ( BRx ) - _to_x + 1 );\
+	skip_if( _W <= 0 );\
+	i2 const _to_y = MAX( 0, ( TLy ) );\
+	i2 const _H = i2_min2( TO_REF->size.h - _to_y, ( BRy ) - _to_y + 1 );\
+	skip_if( _H <= 0 );\
+	pixel ref _to_ref = TO_REF->pixels + _to_y * TO_REF->size.w + _to_x
+
+#define _canvas_ref_fill_area_loop( TO_REF, COLOR )\
+	pixel const _color = ( COLOR );\
+	if_all( _color.r is _color.g, _color.g is _color.b, _color.b is _color.a )\
+	{\
+		n4 const _bytes_per_row = _W << pixel_bytes_shift;\
+		i4 const _to_step = TO_REF->size.w;\
+		i2 _h = _H;\
+		do\
+		{\
+			bytes_fill( _to_ref, _color.r, _bytes_per_row );\
+			_to_ref += _to_step;\
+		}\
+		while( --_h );\
+	}\
+	else\
+	{\
+		pixel const ref _from_ref = _to_ref;\
+		iter( _x, _W )\
+		{\
+			_to_ref[ _x ] = _color;\
+		}\
+		_to_ref += TO_REF->size.w;\
+		_canvas_ref_copy_loop( TO_REF, 0, _H - 1 );\
+	}
 
 #pragma endregion
 
@@ -1439,90 +1486,6 @@ fn canvas_ref_wipe( canvas ref const canvas_ref )
 #pragma endregion
 
 ////////////////
-#pragma region | - fill
-
-// canvas ref
-
-fn canvas_ref_fill( canvas const ref const canvas_ref, pixel const color )
-{
-	if_all( color.r is color.g, color.g is color.b, color.b is color.a )
-	{
-		bytes_fill( canvas_ref->pixels, color.r, canvas_ref->area << pixel_bytes_shift );
-	}
-	else
-	{
-		i4 filled = i4( canvas_ref->size.w );
-		iter( first_row_index, filled )
-		{
-			canvas_ref->pixels[ first_row_index ] = color;
-		}
-
-		i4 remaining = canvas_ref->area - filled;
-		do
-		{
-			i4 const count = pick( remaining < filled, remaining, filled );
-			bytes_copy( ref_of( canvas_ref->pixels[ filled ] ), ref_of( canvas_ref->pixels[ 0 ] ), count << pixel_bytes_shift );
-			filled += count;
-			remaining -= count;
-		}
-		while( remaining );
-	}
-}
-
-// current
-
-#define fill( PIXEL ) canvas_ref_fill( program.current_canvas_ref, PIXEL )
-
-#pragma endregion
-
-////////////////
-#pragma region | - fill area
-
-// canvas ref
-
-fn canvas_ref_fill_area( canvas const ref const canvas_ref, i2x2 const tl, i2x2 const br, pixel const color )
-{
-	i4 const width = br.x - tl.x + 1;
-	i4 const height = br.y - tl.y + 1;
-	out_if_any( width <= 0, height <= 0 );
-
-	i4 const stride = i4( canvas_ref->size.w );
-	i4 const row_bytes = width << pixel_bytes_shift;
-	pixel ref row = ref_of( canvas_ref->pixels[ tl.y * stride + tl.x ] );
-
-	if_all( color.r is color.g, color.g is color.b, color.b is color.a )
-	{
-		iter( y, height )
-		{
-			bytes_fill( row, color.r, row_bytes );
-			row += stride;
-		}
-	}
-	else
-	{
-		pixel ref const first = row;
-		iter( x, width )
-		{
-			first[ x ] = color;
-		}
-
-		row += stride;
-
-		iter( y, height - 1 )
-		{
-			bytes_copy( row, first, row_bytes );
-			row += stride;
-		}
-	}
-}
-
-// current
-
-#define fill_area( TL, BR, PIXEL ) canvas_ref_fill_area( program.current_canvas_ref, TL, BR, PIXEL )
-
-#pragma endregion
-
-////////////////
 #pragma region | - check pixel
 
 // canvas ref
@@ -1603,7 +1566,7 @@ fn canvas_ref_fill_area( canvas const ref const canvas_ref, i2x2 const tl, i2x2 
 	START_DEF\
 	{\
 		_canvas_ref_set_canvas_setup( TO_REF, FROM, TLx, TLy, PART_TLx, PART_TLy, PART_SIZEw, PART_SIZEh );\
-		_canvas_ref_set_canvas_loop( TO_REF );\
+		_canvas_ref_copy_loop( TO_REF, _from_w, _H );\
 	}\
 	END_DEF
 
@@ -1611,7 +1574,7 @@ fn canvas_ref_fill_area( canvas const ref const canvas_ref, i2x2 const tl, i2x2 
 	START_DEF\
 	{\
 		_canvas_ref_set_canvas_setup_safe( TO_REF, FROM, TLx, TLy, PART_TLx, PART_TLy, PART_SIZEw, PART_SIZEh );\
-		_canvas_ref_set_canvas_loop( TO_REF );\
+		_canvas_ref_copy_loop( TO_REF, _from_w, _H );\
 	}\
 	END_DEF
 
@@ -1647,6 +1610,67 @@ fn canvas_ref_fill_area( canvas const ref const canvas_ref, i2x2 const tl, i2x2 
 #define set_canvas_safe( FROM_CANVAS, TLx, TLy ) canvas_ref_set_canvas_safe( program.current_canvas_ref, FROM_CANVAS, TLx, TLy )
 #define set_canvas_trans( FROM_CANVAS, TLx, TLy ) canvas_ref_set_canvas_trans( program.current_canvas_ref, FROM_CANVAS, TLx, TLy )
 #define set_canvas_trans_safe( FROM_CANVAS, TLx, TLy ) canvas_ref_set_canvas_trans_safe( program.current_canvas_ref, FROM_CANVAS, TLx, TLy )
+
+#pragma endregion
+
+////////////////
+#pragma region | - fill canvas
+
+// canvas ref
+
+#define canvas_ref_fill( TO_REF, COLOR )\
+	START_DEF\
+	{\
+		pixel const _color = ( COLOR );\
+		if_all( _color.r is _color.g, _color.g is _color.b, _color.b is _color.a )\
+		{\
+			bytes_fill( TO_REF->pixels, _color.r, TO_REF->area << pixel_bytes_shift );\
+		}\
+		else\
+		{\
+			pixel ref const _to_ref = TO_REF->pixels;\
+			i4 const _W = i4( TO_REF->size.w );\
+			iter( _i, _W )\
+			{\
+				_to_ref[ _i ] = _color;\
+			}\
+			i4 _filled = _W;\
+			i4 _remaining = TO_REF->area - _W;\
+			do\
+			{\
+				i4 const _count = pick( _remaining < _filled, _remaining, _filled );\
+				bytes_copy( ref_of( _to_ref[ _filled ] ), _to_ref, _count << pixel_bytes_shift );\
+				_filled += _count;\
+				_remaining -= _count;\
+			}\
+			while( _remaining );\
+		}\
+	}\
+	END_DEF
+
+#define canvas_ref_fill_area( TO_REF, TLx, TLy, BRx, BRy, COLOR )\
+	START_DEF\
+	{\
+		_canvas_ref_fill_area_setup( TO_REF, TLx, TLy, BRx, BRy );\
+		out_if_any( _W <= 0, _H <= 0 );\
+		_canvas_ref_fill_area_loop( TO_REF, COLOR );\
+	}\
+	END_DEF
+
+#define canvas_ref_fill_area_safe( TO_REF, TLx, TLy, BRx, BRy, COLOR )\
+	START_DEF\
+	{\
+		_canvas_ref_fill_area_setup_safe( TO_REF, TLx, TLy, BRx, BRy );\
+		_canvas_ref_fill_area_loop( TO_REF, COLOR );\
+	}\
+	END_DEF
+
+// current
+
+#define fill( PIXEL ) canvas_ref_fill( program.current_canvas_ref, PIXEL )
+
+#define fill_area( TLx, TLy, BRx, BRy, PIXEL ) canvas_ref_fill_area( program.current_canvas_ref, TLx, TLy, BRx, BRy, PIXEL )
+#define fill_area_safe( TLx, TLy, BRx, BRy, PIXEL ) canvas_ref_fill_area_safe( program.current_canvas_ref, TLx, TLy, BRx, BRy, PIXEL )
 
 #pragma endregion
 
@@ -2665,7 +2689,10 @@ fn _window_ref_draw( window ref const window_ref )
 
 			if( program.resizing > 0 )
 			{
-				if( program.resizing < 3 ) program.resizing -= 1;
+				if( program.resizing < 3 )
+				{
+					program.resizing -= 1;
+				}
 
 				if( _windows_consume_tick() )
 				{
