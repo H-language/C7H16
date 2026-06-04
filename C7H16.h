@@ -1808,18 +1808,19 @@ fn canvas_ref_wipe( canvas ref const canvas_ref )
 		while( --_h );\
 	}
 
-#define _canvas_ref_set_setup( CANVAS_REF, FONT, POS, ANCHOR, COLOR, ANCHOR_W )\
+#define _canvas_ref_set_setup( CANVAS_REF, FONT, POS_X, POS_Y, ANCHOR, COLOR, ANCHOR_W )\
 	i2 const _letter_w = FONT.letter_size.w;\
 	i2 const _letter_h = FONT.letter_size.h;\
-	anchor const _anchor = ANCHOR;\
-	pixel const _color = COLOR;\
-	i2x2 const _pos = POS;\
+	anchor const _anchor = ( ANCHOR );\
+	pixel const _color = ( COLOR );\
+	i2 const _pos_x = ( POS_X );\
+	i2 const _pos_y = ( POS_Y );\
 	i4 const _to_w = CANVAS_REF->size.w;\
 	i4 const _from_w = FONT.canvas.size.w;\
 	i4 const _to_step = _to_w - _letter_w;\
 	i4 const _from_step = _from_w - _letter_w;\
 	pixel const ref _from_base = FONT.canvas.pixels;\
-	pixel ref _to_ref_start = ref_of( CANVAS_REF->pixels[ array_index( _pos.x + anchor_get_x( _anchor, 0, ANCHOR_W, 0 ), _pos.y + anchor_get_y( _anchor, 0, _letter_h, 0 ), _to_w ) ] );
+	pixel ref _to_ref_start = ref_of( CANVAS_REF->pixels[ array_index( _pos_x + anchor_get_x( _anchor, 0, ANCHOR_W, 0 ), _pos_y + anchor_get_y( _anchor, 0, _letter_h, 0 ), _to_w ) ] );
 
 #pragma endregion
 
@@ -1846,19 +1847,19 @@ embed font make_font( canvas const canvas )
 
 // canvas ref
 
-#define canvas_ref_set_byte( CANVAS_REF, FONT, BYTE, POS, ANCHOR, COLOR )\
+#define canvas_ref_set_byte( CANVAS_REF, FONT, BYTE, POS_X, POS_Y, ANCHOR, COLOR )\
 	START_DEF\
 	{\
-		_canvas_ref_set_setup( CANVAS_REF, FONT, POS, ANCHOR, COLOR, _letter_w );\
+		_canvas_ref_set_setup( CANVAS_REF, FONT, POS_X, POS_Y, ANCHOR, COLOR, _letter_w );\
 		_canvas_ref_draw_byte( BYTE, set )\
 	}\
 	END_DEF
 
-#define canvas_ref_set_bytes( CANVAS_REF, FONT, BYTES, BYTES_SIZE, POS, ANCHOR, COLOR )\
+#define canvas_ref_set_bytes( CANVAS_REF, FONT, BYTES, BYTES_SIZE, POS_X, POS_Y, ANCHOR, COLOR )\
 	START_DEF\
 	{\
 		n2 const _text_len = pick( BYTES_SIZE is 0, bytes_measure( BYTES ), BYTES_SIZE );\
-		_canvas_ref_set_setup( CANVAS_REF, FONT, POS, ANCHOR, COLOR, _text_len * _letter_w );\
+		_canvas_ref_set_setup( CANVAS_REF, FONT, POS_X, POS_Y, ANCHOR, COLOR, _text_len * _letter_w );\
 		iter( _l, _text_len )\
 		{\
 			_canvas_ref_draw_byte( BYTES[ _l ], set ) _to_ref_start += _letter_w;\
@@ -1868,8 +1869,8 @@ embed font make_font( canvas const canvas )
 
 // current
 
-#define set_byte( FONT, BYTE, POS, ANCHOR, COLOR ) canvas_ref_set_byte( program.current_canvas_ref, FONT, BYTE, POS, ANCHOR, COLOR )
-#define set_bytes( FONT, BYTES, BYTES_SIZE, POS, ANCHOR, COLOR ) canvas_ref_set_bytes( program.current_canvas_ref, FONT, BYTES, BYTES_SIZE, POS, ANCHOR, COLOR )
+#define set_byte( FONT, BYTE, POS_X, POS_Y, ANCHOR, COLOR ) canvas_ref_set_byte( program.current_canvas_ref, FONT, BYTE, POS_X, POS_Y, ANCHOR, COLOR )
+#define set_bytes( FONT, BYTES, BYTES_SIZE, POS_X, POS_Y, ANCHOR, COLOR ) canvas_ref_set_bytes( program.current_canvas_ref, FONT, BYTES, BYTES_SIZE, POS_X, POS_Y, ANCHOR, COLOR )
 
 #pragma endregion
 
@@ -1878,19 +1879,19 @@ embed font make_font( canvas const canvas )
 
 // canvas ref
 
-#define canvas_ref_draw_byte( CANVAS_REF, FONT, BYTE, POS, ANCHOR, COLOR, MODE... )\
+#define canvas_ref_draw_byte( CANVAS_REF, FONT, BYTE, POS_X, POS_Y, ANCHOR, COLOR, MODE... )\
 	START_DEF\
 	{\
-		_canvas_ref_set_setup( CANVAS_REF, FONT, POS, ANCHOR, COLOR, _letter_w );\
+		_canvas_ref_set_setup( CANVAS_REF, FONT, POS_X, POS_Y, ANCHOR, COLOR, _letter_w );\
 		_canvas_ref_draw_byte( BYTE, MODE )\
 	}\
 	END_DEF
 
-#define canvas_ref_draw_bytes( CANVAS_REF, FONT, BYTES, BYTES_SIZE, POS, ANCHOR, COLOR, MODE... )\
+#define canvas_ref_draw_bytes( CANVAS_REF, FONT, BYTES, BYTES_SIZE, POS_X, POS_Y, ANCHOR, COLOR, MODE... )\
 	START_DEF\
 	{\
 		n2 const _text_len = pick( BYTES_SIZE is 0, bytes_measure( BYTES ), BYTES_SIZE );\
-		_canvas_ref_set_setup( CANVAS_REF, FONT, POS, ANCHOR, COLOR, _text_len * _letter_w );\
+		_canvas_ref_set_setup( CANVAS_REF, FONT, POS_X, POS_Y, ANCHOR, COLOR, _text_len * _letter_w );\
 		iter( _l, _text_len )\
 		{\
 			_canvas_ref_draw_byte( BYTES[ _l ], MODE ) _to_ref_start += _letter_w;\
@@ -1900,8 +1901,8 @@ embed font make_font( canvas const canvas )
 
 // current
 
-#define draw_byte( FONT, BYTE, POS, ANCHOR, COLOR, MODE... ) canvas_ref_draw_byte( program.current_canvas_ref, FONT, BYTE, POS, ANCHOR, COLOR, DEFAULT( blend, MODE ) )
-#define draw_bytes( FONT, BYTES, BYTES_SIZE, POS, ANCHOR, COLOR, MODE... ) canvas_ref_draw_bytes( program.current_canvas_ref, FONT, BYTES, BYTES_SIZE, POS, ANCHOR, COLOR, DEFAULT( blend, MODE ) )
+#define draw_byte( FONT, BYTE, POS_X, POS_Y, ANCHOR, COLOR, MODE... ) canvas_ref_draw_byte( program.current_canvas_ref, FONT, BYTE, POS_X, POS_Y, ANCHOR, COLOR, DEFAULT( blend, MODE ) )
+#define draw_bytes( FONT, BYTES, BYTES_SIZE, POS_X, POS_Y, ANCHOR, COLOR, MODE... ) canvas_ref_draw_bytes( program.current_canvas_ref, FONT, BYTES, BYTES_SIZE, POS_X, POS_Y, ANCHOR, COLOR, DEFAULT( blend, MODE ) )
 
 #pragma endregion
 
@@ -2290,6 +2291,16 @@ fn _window_ref_update( window ref const window_ref )
 	#endif
 }
 
+fn _window_ref_update_now( window ref const window_ref )
+{
+	#if OS_LINUX
+		_window_ref_draw( window_ref );
+		XFlush( program.display );
+	#elif OS_WINDOWS
+		RedrawWindow( window_ref->handle, nothing, nothing, RDW_INVALIDATE | RDW_UPDATENOW );
+	#endif
+}
+
 fn _window_ref_tick( window ref const window_ref )
 {
 	program.current_window_ref = window_ref;
@@ -2633,7 +2644,7 @@ fn _window_ref_draw( window ref const window_ref )
 				skip;
 			}
 
-			when( WM_EXITSIZEMOVE ) when( WM_EXITMENULOOP )
+			when( WM_EXITSIZEMOVE, WM_EXITMENULOOP )
 			{
 				program.resizing = 2;
 				//jump _WINDOW_EVENT_DRAW;
@@ -2956,16 +2967,7 @@ fn _window_ref_draw( window ref const window_ref )
 #pragma region | window / visible
 
 #define window_ref_update( WINDOW_REF ) _window_ref_update( WINDOW_REF )
-
-fn window_ref_update_now( window ref const window_ref )
-{
-	#if OS_LINUX
-		_window_ref_draw( window_ref );
-		XFlush( program.display );
-	#elif OS_WINDOWS
-		RedrawWindow( window_ref->handle, nothing, nothing, RDW_INVALIDATE | RDW_UPDATENOW );
-	#endif
-}
+#define window_ref_update_now( WINDOW_REF ) _window_ref_update_now( WINDOW_REF )
 
 fn window_ref_show( window ref const window_ref )
 {
