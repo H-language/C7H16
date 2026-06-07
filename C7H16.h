@@ -2284,106 +2284,6 @@ fn _window_ref_get_mouse_position( window ref const window_ref, i4 ref const out
 }
 
 ////////////////
-#pragma region | - tick
-
-fn _window_ref_update( window ref const window_ref )
-{
-	#if OS_LINUX
-		XClearArea( program.display, window_ref->handle, 0, 0, 0, 0, yes );
-	#elif OS_WINDOWS
-		InvalidateRect( window_ref->handle, nothing, no );
-	#endif
-}
-
-fn _window_ref_update_now( window ref const window_ref )
-{
-	#if OS_LINUX
-		_window_ref_draw( window_ref );
-		XFlush( program.display );
-	#elif OS_WINDOWS
-		RedrawWindow( window_ref->handle, nothing, nothing, RDW_INVALIDATE | RDW_UPDATENOW );
-	#endif
-}
-
-fn _window_ref_tick( window ref const window_ref )
-{
-	program.current_window_ref = window_ref;
-
-	if( program.fps > 0.0 )
-	{
-		program.delta_time = 1.0 / program.fps;
-	}
-	else
-	{
-		nano const t = nano_now();
-		nano const delta = MAX( 1, t - program.prev_tick_time );
-		program.delta_time = pick( program.prev_tick_time is 0, 0.0, r8( delta ) / r8( nano_per_sec ) );
-		program.prev_tick_time = t;
-	}
-
-	_window_ref_get_mouse_position( window_ref, ref_of( window_ref->mouse.x ), ref_of( window_ref->mouse.y ) );
-
-	iter( view_index, window_ref->views_count )
-	{
-		view ref const this_view = ref_of( window_ref->views[ view_index ] );
-
-		r4 const epsilon_w = 1.0 / this_view->scale.w;
-		r4 const epsilon_h = 1.0 / this_view->scale.h;
-
-		this_view->mouse = r4x2( ( ( r4( window_ref->mouse.x ) - this_view->pos.x ) / this_view->scale.w ) + epsilon_w, ( ( r4( window_ref->mouse.y ) - this_view->pos.y ) / this_view->scale.h ) + epsilon_h );
-	}
-
-	// window tick
-
-	call( window_ref->fn_tick, window_ref );
-
-	// input reset
-
-	if( window_ref->inputs_pressed_count > 0 )
-	{
-		iter( input_index, window_ref->inputs_pressed_count )
-		{
-			window_ref->inputs[ window_ref->inputs_pressed[ input_index ] ] &= ~ INPUT_MASK_PRESSED;
-		}
-		window_ref->inputs_pressed_count = 0;
-	}
-
-	if( window_ref->inputs_released_count > 0 )
-	{
-		iter( input_index, window_ref->inputs_released_count )
-		{
-			window_ref->inputs[ window_ref->inputs_released[ input_index ] ] = 0;
-		}
-		window_ref->inputs_released_count = 0;
-	}
-
-	window_ref->input_bytes_count = 0;
-
-	// update
-
-	if( program.fps > 0 )
-	{
-		_window_ref_update( window_ref );
-	}
-}
-
-embed flag _windows_consume_tick()
-{
-	out_if( program.fps <= 0.0 ) no;
-
-	nano const t = nano_now();
-
-	out_if( t < program.next_tick ) no;
-
-	program.tick_count += 1;
-	program.next_tick = program.epoch + n8( ( r8( program.tick_count ) * r8( nano_per_sec ) ) / program.fps );
-
-	out yes;
-}
-
-#pragma endregion
-
-////////////////
 #pragma region | - draw
 
 fn _window_ref_draw( window ref const window_ref )
@@ -2605,6 +2505,106 @@ fn _window_ref_draw( window ref const window_ref )
 		count -= 1;
 		skip_if( count <= 0 );
 	}
+}
+
+#pragma endregion
+
+////////////////
+#pragma region | - tick
+
+fn _window_ref_update( window ref const window_ref )
+{
+	#if OS_LINUX
+		XClearArea( program.display, window_ref->handle, 0, 0, 0, 0, yes );
+	#elif OS_WINDOWS
+		InvalidateRect( window_ref->handle, nothing, no );
+	#endif
+}
+
+fn _window_ref_update_now( window ref const window_ref )
+{
+	#if OS_LINUX
+		_window_ref_draw( window_ref );
+		XFlush( program.display );
+	#elif OS_WINDOWS
+		RedrawWindow( window_ref->handle, nothing, nothing, RDW_INVALIDATE | RDW_UPDATENOW );
+	#endif
+}
+
+fn _window_ref_tick( window ref const window_ref )
+{
+	program.current_window_ref = window_ref;
+
+	if( program.fps > 0.0 )
+	{
+		program.delta_time = 1.0 / program.fps;
+	}
+	else
+	{
+		nano const t = nano_now();
+		nano const delta = MAX( 1, t - program.prev_tick_time );
+		program.delta_time = pick( program.prev_tick_time is 0, 0.0, r8( delta ) / r8( nano_per_sec ) );
+		program.prev_tick_time = t;
+	}
+
+	_window_ref_get_mouse_position( window_ref, ref_of( window_ref->mouse.x ), ref_of( window_ref->mouse.y ) );
+
+	iter( view_index, window_ref->views_count )
+	{
+		view ref const this_view = ref_of( window_ref->views[ view_index ] );
+
+		r4 const epsilon_w = 1.0 / this_view->scale.w;
+		r4 const epsilon_h = 1.0 / this_view->scale.h;
+
+		this_view->mouse = r4x2( ( ( r4( window_ref->mouse.x ) - this_view->pos.x ) / this_view->scale.w ) + epsilon_w, ( ( r4( window_ref->mouse.y ) - this_view->pos.y ) / this_view->scale.h ) + epsilon_h );
+	}
+
+	// window tick
+
+	call( window_ref->fn_tick, window_ref );
+
+	// input reset
+
+	if( window_ref->inputs_pressed_count > 0 )
+	{
+		iter( input_index, window_ref->inputs_pressed_count )
+		{
+			window_ref->inputs[ window_ref->inputs_pressed[ input_index ] ] &= ~ INPUT_MASK_PRESSED;
+		}
+		window_ref->inputs_pressed_count = 0;
+	}
+
+	if( window_ref->inputs_released_count > 0 )
+	{
+		iter( input_index, window_ref->inputs_released_count )
+		{
+			window_ref->inputs[ window_ref->inputs_released[ input_index ] ] = 0;
+		}
+		window_ref->inputs_released_count = 0;
+	}
+
+	window_ref->input_bytes_count = 0;
+
+	// update
+
+	if( program.fps > 0 )
+	{
+		_window_ref_update( window_ref );
+	}
+}
+
+embed flag _windows_consume_tick()
+{
+	out_if( program.fps <= 0.0 ) no;
+
+	nano const t = nano_now();
+
+	out_if( t < program.next_tick ) no;
+
+	program.tick_count += 1;
+	program.next_tick = program.epoch + n8( ( r8( program.tick_count ) * r8( nano_per_sec ) ) / program.fps );
+
+	out yes;
 }
 
 #pragma endregion
