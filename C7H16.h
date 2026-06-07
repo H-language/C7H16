@@ -2906,9 +2906,9 @@ fn _window_ref_apply_decorations( window ref const window_ref, flag const border
 		}
 		hints = { 2, 0, bordered, 0, 0 };
 
-		Atom prop = XInternAtom( windows_display, "_MOTIF_WM_HINTS", False );
-		XChangeProperty( windows_display, window_ref->handle, prop, prop, 32, PropModeReplace, to( n1 ref, ref_of( hints ) ), 5 );
-		XFlush( windows_display );
+		Atom prop = XInternAtom( program.display, "_MOTIF_WM_HINTS", False );
+		XChangeProperty( program.display, window_ref->handle, prop, prop, 32, PropModeReplace, to( n1 ref, ref_of( hints ) ), 5 );
+		XFlush( program.display );
 	#elif OS_WINDOWS
 		LONG_PTR style = GetWindowLongPtr( window_ref->handle, GWL_STYLE );
 		style = pick( bordered, style | WS_OVERLAPPEDWINDOW, style & ~ ( WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU ) );
