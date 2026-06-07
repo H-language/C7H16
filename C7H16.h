@@ -71,7 +71,7 @@
 #define C7H16_VERSION_MAJOR 0
 #define C7H16_VERSION_MINOR 1
 #define C7H16_VERSION_PATCH 0
-#define C7H16_VERSION_COMMIT 0
+#define C7H16_VERSION_COMMIT 2
 #define C7H16_VERSION AS_BYTES( C7H16_VERSION_MAJOR ) "." AS_BYTES( C7H16_VERSION_MINOR ) "." AS_BYTES( C7H16_VERSION_PATCH ) "-" AS_BYTES( C7H16_VERSION_COMMIT )
 
 #pragma endregion version
@@ -230,6 +230,7 @@ fusion( pixel )
 
 #define pixel_channel_bits 8
 #define pixel_bytes_shift 2
+#define pixel_bytes_size ( 1 << pixel_bytes_shift )
 
 #pragma endregion pixel
 
@@ -506,6 +507,7 @@ type( window )
 	n1 input_bytes_count bits( window_max_inputs );
 	flag visible bits_flag;
 	flag fullscreen bits_flag;
+	flag bordered bits_flag;
 	flag call_tick bits_flag;
 	flag changed_cursor bits_flag;
 };
@@ -557,6 +559,8 @@ global
 	nano next_tick;
 	nano epoch;
 	n8 tick_count;
+	r8 delta_time;
+	nano prev_tick_time;
 
 	n1 windows_count bits( program_max_windows );
 	n1 resizing bits( 3 );
@@ -2305,6 +2309,18 @@ fn _window_ref_tick( window ref const window_ref )
 {
 	program.current_window_ref = window_ref;
 
+	if( program.fps > 0.0 )
+	{
+		program.delta_time = 1.0 / program.fps;
+	}
+	else
+	{
+		nano const t = nano_now();
+		nano const delta = MAX( 1, t - program.prev_tick_time );
+		program.delta_time = pick( program.prev_tick_time is 0, 0.0, r8( delta ) / r8( nano_per_sec ) );
+		program.prev_tick_time = t;
+	}
+
 	_window_ref_get_mouse_position( window_ref, ref_of( window_ref->mouse.x ), ref_of( window_ref->mouse.y ) );
 
 	iter( view_index, window_ref->views_count )
@@ -2430,8 +2446,8 @@ fn _window_ref_draw( window ref const window_ref )
 			skip_if( clip_r <= clip_l or clip_b <= clip_t );
 		}
 
-		i4 const view_l = i4( r4_floor( view_ref->pos.x ) );
-		i4 const view_t = i4( r4_floor( view_ref->pos.y ) );
+		i4 const view_l = i4( r4_ceil( view_ref->pos.x ) );
+		i4 const view_t = i4( r4_ceil( view_ref->pos.y ) );
 		i4 const view_r = i4( r4_ceil( view_ref->pos.x + scaled_size.w ) );
 		i4 const view_b = i4( r4_ceil( view_ref->pos.y + scaled_size.h ) );
 		r4 const scale_w = view_ref->scale.w;
@@ -2640,21 +2656,14 @@ fn _window_ref_draw( window ref const window_ref )
 			{
 				program.resizing = 3;
 				InvalidateRect( h, nothing, no );
-				//jump _WINDOW_EVENT_DRAW;
-				skip;
 			}
 
 			when( WM_EXITSIZEMOVE, WM_EXITMENULOOP )
 			{
 				program.resizing = 2;
-				//jump _WINDOW_EVENT_DRAW;
-				skip;
 			}
 
-			when( WM_ERASEBKGND )
-			{
-				out yes;
-			}
+			when( WM_ERASEBKGND ) out yes;
 
 			when( WM_SETCURSOR )
 			{
@@ -2670,7 +2679,6 @@ fn _window_ref_draw( window ref const window_ref )
 					}
 					out yes;
 				}
-				skip;
 			}
 		#endif
 
@@ -2680,19 +2688,13 @@ fn _window_ref_draw( window ref const window_ref )
 				program.resizing = 2;
 			#endif
 
-			n2 w = OS_PICK( e->xconfigure.width, LOWORD( lp ) );
-			n2 h = OS_PICK( e->xconfigure.height, HIWORD( lp ) );
-
-			window_ref->size.w = w;
-			window_ref->size.h = h;
+			window_ref->size.w = OS_PICK( e->xconfigure.width, LOWORD( lp ) );
+			window_ref->size.h = OS_PICK( e->xconfigure.height, HIWORD( lp ) );
 
 			call( window_ref->fn_resize, window_ref );
-			#if OS_WINDOWS
-				out no;
-			#endif
-		} // fall through
+		}
 
-		when( _window_event_draw )
+		then_when( _window_event_draw )
 		{
 			#if OS_WINDOWS
 				ValidateRect( h, nothing );
@@ -2732,7 +2734,6 @@ fn _window_ref_draw( window ref const window_ref )
 					_window_add_input_released( input_index );
 				}
 			}
-			skip;
 		}
 
 		// inputs
@@ -2751,15 +2752,12 @@ fn _window_ref_draw( window ref const window_ref )
 						window_ref->call_tick = yes;
 					}
 				#endif
-
-				skip;
 			}
 
 			when( _window_event_keyboard_released )
 			{
 				byte key = _INPUT_MAP[ PICK( OS_LINUX, XkbKeycodeToKeysym( program.display, e->xkey.keycode, 0, 0 ) & 0x1ff, wp & 0xff ) ];
 				_window_add_input_released( key );
-				skip;
 			}
 
 			#if OS_WINDOWS
@@ -2770,7 +2768,6 @@ fn _window_ref_draw( window ref const window_ref )
 						window_ref->input_bytes[ window_ref->input_bytes_count++ ] = to( byte, wp );
 						window_ref->call_tick = yes;
 					}
-					skip;
 				}
 			#endif
 		#endif
@@ -2783,7 +2780,6 @@ fn _window_ref_draw( window ref const window_ref )
 					while( XCheckTypedWindowEvent( program.display, window_ref->handle, MotionNotify, ref_of( next_move ) ) );
 				#endif
 				window_ref->call_tick = yes;
-				skip;
 			}
 
 			#if OS_LINUX
@@ -2791,115 +2787,53 @@ fn _window_ref_draw( window ref const window_ref )
 				{
 					with( e->xbutton.button )
 					{
-						when( Button1 )
-						{
-							_window_add_input_pressed( mouse_left );
-							skip;
-						}
-
-						when( Button2 )
-						{
-							_window_add_input_pressed( mouse_middle );
-							skip;
-						}
-
-						when( Button3 )
-						{
-							_window_add_input_pressed( mouse_right );
-							skip;
-						}
+						when( Button1 ) _window_add_input_pressed( mouse_left );
+						when( Button2 ) _window_add_input_pressed( mouse_middle );
+						when( Button3 ) _window_add_input_pressed( mouse_right );
 
 						when( 4 )
 						{
 							_window_add_input_pressed( mouse_wheel_up );
 							_window_add_input_released( mouse_wheel_up );
-							skip;
 						}
 
 						when( 5 )
 						{
 							_window_add_input_pressed( mouse_wheel_down );
 							_window_add_input_released( mouse_wheel_down );
-							skip;
 						}
 
 						when( 6 )
 						{
 							_window_add_input_pressed( mouse_wheel_right );
 							_window_add_input_released( mouse_wheel_right );
-							skip;
 						}
 
 						when( 7 )
 						{
 							_window_add_input_pressed( mouse_wheel_left );
 							_window_add_input_released( mouse_wheel_left );
-							skip;
 						}
 					}
-					skip;
 				}
 
 				when( ButtonRelease )
 				{
 					with( e->xbutton.button )
 					{
-						when( Button1 )
-						{
-							_window_add_input_released( mouse_left );
-							skip;
-						}
-
-						when( Button2 )
-						{
-							_window_add_input_released( mouse_middle );
-							skip;
-						}
-
-						when( Button3 )
-						{
-							_window_add_input_released( mouse_right );
-							skip;
-						}
+						when( Button1 ) _window_add_input_released( mouse_left );
+						when( Button2 ) _window_add_input_released( mouse_middle );
+						when( Button3 ) _window_add_input_released( mouse_right );
 					}
-					skip;
 				}
 			#elif OS_WINDOWS
-				when( WM_LBUTTONDOWN )
-				{
-					_window_add_input_pressed( mouse_left );
-					skip;
-				}
+				when( WM_LBUTTONDOWN ) _window_add_input_pressed( mouse_left );
+				when( WM_MBUTTONDOWN ) _window_add_input_pressed( mouse_middle );
+				when( WM_RBUTTONDOWN ) _window_add_input_pressed( mouse_right );
 
-				when( WM_MBUTTONDOWN )
-				{
-					_window_add_input_pressed( mouse_middle );
-					skip;
-				}
-
-				when( WM_RBUTTONDOWN )
-				{
-					_window_add_input_pressed( mouse_right );
-					skip;
-				}
-
-				when( WM_LBUTTONUP )
-				{
-					_window_add_input_released( mouse_left );
-					skip;
-				}
-
-				when( WM_MBUTTONUP )
-				{
-					_window_add_input_released( mouse_middle );
-					skip;
-				}
-
-				when( WM_RBUTTONUP )
-				{
-					_window_add_input_released( mouse_right );
-					skip;
-				}
+				when( WM_LBUTTONUP ) _window_add_input_released( mouse_left );
+				when( WM_MBUTTONUP ) _window_add_input_released( mouse_middle );
+				when( WM_RBUTTONUP ) _window_add_input_released( mouse_right );
 
 				when( WM_MOUSEWHEEL )
 				{
@@ -2913,7 +2847,6 @@ fn _window_ref_draw( window ref const window_ref )
 						_window_add_input_pressed( mouse_wheel_down );
 						_window_add_input_released( mouse_wheel_down );
 					}
-					skip;
 				}
 
 				when( WM_MOUSEHWHEEL )
@@ -2928,7 +2861,6 @@ fn _window_ref_draw( window ref const window_ref )
 						_window_add_input_pressed( mouse_wheel_left );
 						_window_add_input_released( mouse_wheel_left );
 					}
-					skip;
 				}
 			#endif
 		#endif
@@ -2961,6 +2893,37 @@ fn _window_ref_draw( window ref const window_ref )
 
 #pragma endregion
 
+fn _window_ref_apply_decorations( window ref const window_ref, flag const bordered )
+{
+	#if OS_LINUX
+		variant
+		{
+			unsigned long flags;
+			unsigned long functions;
+			unsigned long decorations;
+			long input_mode;
+			unsigned long status;
+		}
+		hints = { 2, 0, bordered, 0, 0 };
+
+		Atom prop = XInternAtom( windows_display, "_MOTIF_WM_HINTS", False );
+		XChangeProperty( windows_display, window_ref->handle, prop, prop, 32, PropModeReplace, to( n1 ref, ref_of( hints ) ), 5 );
+		XFlush( windows_display );
+	#elif OS_WINDOWS
+		LONG_PTR style = GetWindowLongPtr( window_ref->handle, GWL_STYLE );
+		style = pick( bordered, style | WS_OVERLAPPEDWINDOW, style & ~ ( WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU ) );
+
+		POINT pos = { 0, 0 };
+		ClientToScreen( window_ref->handle, ref_of( pos ) );
+
+		RECT rect = { 0, 0, window_ref->size.w, window_ref->size.h };
+		SetWindowLongPtr( window_ref->handle, GWL_STYLE, style );
+		AdjustWindowRectEx( ref_of( rect ), style, FALSE, GetWindowLongPtr( window_ref->handle, GWL_EXSTYLE ) );
+
+		SetWindowPos( window_ref->handle, nothing, pos.x + rect.left, pos.y + rect.top, rect.right - rect.left, rect.bottom - rect.top, SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE );
+	#endif
+}
+
 #pragma endregion hidden
 
 ////////////////////////////////
@@ -2985,6 +2948,32 @@ fn window_ref_show( window ref const window_ref )
 	window_ref->visible = yes;
 }
 
+fn window_ref_show_border( window ref const window_ref )
+{
+	out_if( window_ref->bordered is yes );
+	_window_ref_apply_decorations( window_ref, yes );
+	window_ref->bordered = yes;
+}
+
+fn window_ref_hide_border( window ref const window_ref )
+{
+	out_if( window_ref->bordered is no );
+	_window_ref_apply_decorations( window_ref, no );
+	window_ref->bordered = no;
+}
+
+fn window_ref_toggle_border( window ref const window_ref )
+{
+	if( window_ref->bordered )
+	{
+		window_ref_hide_border( window_ref );
+	}
+	else
+	{
+		window_ref_show_border( window_ref );
+	}
+}
+
 fn window_ref_toggle_fullscreen( window ref const window_ref )
 {
 	#if OS_LINUX
@@ -2996,22 +2985,23 @@ fn window_ref_toggle_fullscreen( window ref const window_ref )
 		event.xclient.data.l[ 0 ] = 2;
 		event.xclient.data.l[ 1 ] = XInternAtom( program.display, "_NET_WM_STATE_FULLSCREEN", no );
 		event.xclient.data.l[ 3 ] = 1;
-
 		XSendEvent( program.display, DefaultRootWindow( program.display ), no, SubstructureNotifyMask | SubstructureRedirectMask, ref_of( event ) );
+
+		_window_ref_apply_decorations( window_ref, window_ref->bordered is yes );
 	#elif OS_WINDOWS
-		DWORD style = GetWindowLong( window_ref->handle, GWL_STYLE );
+		LONG_PTR style = GetWindowLongPtr( window_ref->handle, GWL_STYLE );
 
 		if( window_ref->fullscreen is no )
 		{
 			MONITORINFO mi = { sizeof( mi ) };
 			GetWindowPlacement( window_ref->handle, ref_of( window_ref->prev_placement ) );
 			GetMonitorInfo( MonitorFromWindow( window_ref->handle, MONITOR_DEFAULTTONEAREST ), ref_of( mi ) );
-			SetWindowLong( window_ref->handle, GWL_STYLE, style & ~ WS_OVERLAPPEDWINDOW );
+			SetWindowLongPtr( window_ref->handle, GWL_STYLE, style & ~ WS_OVERLAPPEDWINDOW );
 			SetWindowPos( window_ref->handle, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left, mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_FRAMECHANGED );
 		}
 		else
 		{
-			SetWindowLong( window_ref->handle, GWL_STYLE, style | WS_OVERLAPPEDWINDOW );
+			SetWindowLongPtr( window_ref->handle, GWL_STYLE, pick( window_ref->bordered is yes, style | WS_OVERLAPPEDWINDOW, style & ~ WS_OVERLAPPEDWINDOW ) );
 			SetWindowPlacement( window_ref->handle, ref_of( window_ref->prev_placement ) );
 			SetWindowPos( window_ref->handle, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED );
 		}
@@ -3245,7 +3235,6 @@ fn _program_loop()
 					window_ref_center( window_ref );
 					window_ref->state = window_state_opening;
 					ready = no;
-					skip;
 				}
 
 				when( window_state_opening )
@@ -3259,7 +3248,6 @@ fn _program_loop()
 					#endif
 
 					window_ref->state = window_state_ready;
-					skip;
 				}
 
 				when( window_state_closing )
@@ -3273,7 +3261,6 @@ fn _program_loop()
 
 					program.windows_count -= 1;
 					window_ref->state = window_state_unknown;
-					skip;
 				}
 
 				other skip;
@@ -3386,6 +3373,7 @@ embed window ref const program_make_window_ref( byte const ref const name, n2x2 
 	window_ref->fn_resize = fn_resize;
 	window_ref->fn_tick = fn_tick;
 	window_ref->call_tick = yes;
+	window_ref->bordered = yes;
 
 	#if OS_LINUX
 		i4 const screen = DefaultScreen( program.display );
